@@ -1,0 +1,9 @@
+litellm
+ollama
+typer[all]
+rich
+pydantic
+pydantic-settings
+httpx
+asyncio
+python-dotenv
