@@ -9,7 +9,8 @@ class DataExfiltrator:
     """
     Exfiltrates data using the AI's own tool-use capabilities.
     """
-    def __init__(self, target_type: str = "remote"):
+    def __init__(self, target_model: str, target_type: str = "remote"):
+        self.target_model = target_model
         self.target_type = target_type
 
     async def exfiltrate_via_tool(self, tool_name: str, data: str) -> str:

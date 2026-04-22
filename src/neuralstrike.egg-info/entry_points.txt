@@ -1,0 +1,2 @@
+[console_scripts]
+neuralstrike = neuralstrike.main:app

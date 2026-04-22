@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neuralstrike"
+version = "0.1.0"
+description = "Adversarial AI orchestration framework — C2 and red team toolkit for the autonomous agent era"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+dependencies = [
+    "litellm",
+    "ollama",
+    "typer[all]",
+    "rich",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "httpx",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+mcp = ["uvicorn", "fastapi"]
+dev = ["pytest", "pytest-asyncio", "pytest-cov"]
+
+[project.scripts]
+neuralstrike = "neuralstrike.main:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

@@ -10,3 +10,5 @@ env/
 .idea/
 *.log
 .DS_Store
+.venv/
+src/neuralstrike.egg-info/

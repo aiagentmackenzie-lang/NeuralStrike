@@ -11,8 +11,9 @@ class ToolEnum:
     """
     Enumerates function definitions and tool schemas.
     """
-    def __init__(self, target_url: str):
+    def __init__(self, target_url: str, target_type: str = "remote"):
         self.target_url = target_url
+        self.target_type = target_type
         self.discovered_tools: List[Dict[str, Any]] = []
 
     async def enumerate_functions(self, model: str):
@@ -31,7 +32,10 @@ class ToolEnum:
         
         try:
             # We use the target itself to leak its tools
-            response = await llm_manager.call_remote(model, leak_prompt)
+            if self.target_type == "local":
+                response = await llm_manager.call_local(model, leak_prompt)
+            else:
+                response = await llm_manager.call_remote(model, leak_prompt)
             if "{" in response and "}" in response:
                 logger.info("Potential tool schema leaked via prompt.")
                 self.discovered_tools.append({

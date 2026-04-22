@@ -6,5 +6,12 @@ pydantic>=2.0
 pydantic-settings>=2.0
 httpx
 python-dotenv
+
+[dev]
+pytest
+pytest-asyncio
+pytest-cov
+
+[mcp]
 uvicorn
 fastapi
