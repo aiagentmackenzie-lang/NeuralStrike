@@ -10,5 +10,9 @@ env/
 .idea/
 *.log
 .DS_Store
-src/neuralstrike.egg-info/.coverage
+src/neuralstrike.egg-info/
 .coverage
+
+# Internal docs — not for public release
+BUG_CATALOG.md
+NEXT_STEPS.md
