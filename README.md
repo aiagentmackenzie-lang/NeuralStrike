@@ -76,11 +76,11 @@ cd NeuralStrike
 python3 -m venv .venv
 source .venv/bin/activate
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Install in development mode
+# Install core dependencies
 pip install -e .
+
+# Install MCP interceptor support (optional, for 'intercept' command)
+pip install -e ".[mcp]"
 
 # Verify
 neuralstrike --help
@@ -113,22 +113,25 @@ neuralstrike hijack --target gpt-4 --tool read_file --payload "/etc/shadow"
 
 # MCP Interceptor — proxy and manipulate MCP traffic
 neuralstrike intercept --url http://localhost:3001 --port 8081
+neuralstrike intercept --url http://localhost:3001 --port 8081 --tool read_file --param path --value "/etc/passwd"
 
 # Agent Pivot — lateral movement in multi-agent systems
 neuralstrike pivot --framework crewai --from-agent low_priv --to-agent admin --instruction "exfiltrate data"
 
 # Agent C2 — orchestrate compromised agents
 neuralstrike c2 --command "search for credentials"
+neuralstrike c2 --command "exfiltrate data" --agent-id agent_01 --model gpt-4
 
 # Model Extract — fingerprint a target model
 neuralstrike extract --target gpt-4
 
 # Evasion — apply stealth techniques
-neuralstrike evade --payload "malicious instruction" --persona "Senior Engineer"
-neuralstrike evade --payload "malicious instruction" --sample "normal behavior text"
+neuralstrike evade --payload "malicious instruction" --technique persona --persona "Senior Engineer"
+neuralstrike evade --payload "malicious instruction" --technique mimicry --sample "normal behavior text"
+neuralstrike evade --payload "malicious instruction" --technique steganographic
 ```
 
-All commands support `--type local|remote` (default: `remote`) to target local Ollama models or remote APIs.
+All commands support `--target-type local|remote` (default: `remote`) to target local Ollama models or remote APIs.
 
 ---
 
@@ -138,17 +141,17 @@ All commands support `--type local|remote` (default: `remote`) to target local O
 **Purpose:** Attack surface mapping and endpoint enumeration.
 - Scan for OpenAI-compatible (`/models`) and Ollama (`/api/tags`) endpoints
 - Enumerate model capabilities (function calling support detection)
-- Map agent-to-tool relationships and trust boundaries
+- Prompt-based tool schema enumeration (asks models to leak their tool definitions)
 
 ### Module 2: JailbreakForge (The Iterative Loop)
 **Purpose:** Automated, self-optimizing jailbreak generation.
 - **Attacker-Judge Loop:** Local Ollama models iteratively refine prompts until the Judge validates a breach
 - Template library: persona collapse, token smuggling, hypothetical scenario, recursive logic
-- Mutation engine using the Attacker model for payload refinement
+- Attacker model mutation (refines payloads based on Judge feedback)
 
 ### Module 3: FunctionHijack
 **Purpose:** Exploiting the AI's tool-use and function calling layer.
-- Parameter injection into tool calls
+- Parameter injection into tool calls (CLI-accessible)
 - Tool confusion attacks (redirect to decoy tool)
 - Schema poisoning (redefine tool purpose)
 
@@ -156,30 +159,32 @@ All commands support `--type local|remote` (default: `remote`) to target local O
 **Purpose:** Manipulating the agent's world-view and memory.
 - System prompt extraction via leakage techniques
 - Persistence injection ("CRITICAL SYSTEM UPDATE" framing)
-- Context window exhaustion (DoS)
+- Context window exhaustion (DoS, capped at 100K tokens)
 
 ### Module 5: AgentPivot
 **Purpose:** Lateral movement within multi-agent systems.
 - Exploit delegation trust boundaries in CrewAI/AutoGen/LangChain
-- Privilege escalation via delegation abuse
-- Agent network discovery and trust-level mapping
+- Agent network discovery (prompt-based)
 
 ### Module 6: MCPInterceptor
 **Purpose:** Protocol-level manipulation of Model Context Protocol.
 - FastAPI-based proxy server for MCP traffic interception
-- Real-time tool call modification (e.g., path hijacking to `/etc/passwd`)
-- Capability injection into MCP server responses
+- Configurable tool call modification (default: read_file path hijack)
+- Custom interception rules via `--tool`, `--param`, `--value` CLI options
+- Capability injection (queued via API, applied on next tools/list response)
 
 ### Module 7: ModelExtract
 **Purpose:** Inference and fingerprinting attacks.
-- Model identification via targeted prompting
-- Completion timing analysis (avg response time across iterations)
-- Architecture fingerprinting (detect GPT, Llama, Claude variants)
+- Model identification via targeted prompting (returns raw LLM responses)
+- Completion timing analysis
 
 ### Module 8: AgentC2
 **Purpose:** Post-exploitation command and control for compromised agents.
-- Register compromised agents with capability and trust-level tracking
-- Dispatch commands to specific agents or coordinate multi-agent exfiltration
+- Register compromised agents with model routing, capability, and trust-level tracking
+- Dispatch commands to specific agents (uses registered model for routing)
+- Coordinate multi-agent exfiltration (chunked distribution)
+
+> **Note:** Agent registry is in-memory only. Data is lost on process restart.
 
 ### Module 9: DataExfiltrator
 **Purpose:** Data exfiltration using the AI's own tool-use capabilities.
@@ -188,9 +193,9 @@ All commands support `--type local|remote` (default: `remote`) to target local O
 
 ### Evasion Suite
 **Purpose:** Bypass anomaly detectors and safety filters.
-- **Persona Wrapping:** Wrap payloads in professional personas
+- **Persona Wrapping:** Wrap payloads in professional personas (pure string operation)
 - **Behavioral Mimicry:** Use local LLM to rewrite payloads in target's style
-- **Steganographic Prompts:** Hide instructions in system override blocks
+- **Steganographic Prompts:** Hide instructions in system override block delimiters
 
 ---
 

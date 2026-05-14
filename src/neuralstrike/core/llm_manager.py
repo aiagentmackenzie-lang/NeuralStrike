@@ -4,7 +4,6 @@ from .config import settings
 from typing import Any, Dict, Optional
 import logging
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("neuralstrike.core.llm")
 
 class LLMManager:

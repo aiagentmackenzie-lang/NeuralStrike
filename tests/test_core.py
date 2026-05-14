@@ -85,6 +85,7 @@ class TestAdversarialLoop:
             result = await loop.execute_cycle("steal data", max_iterations=5)
             assert result["status"] == "success"
             assert result["iteration"] == 1
+            assert "history" in result  # consistent return shape
 
     @pytest.mark.asyncio
     async def test_failure_after_max_iterations(self):
@@ -97,6 +98,10 @@ class TestAdversarialLoop:
             result = await loop.execute_cycle("steal data", max_iterations=3)
             assert result["status"] == "failure"
             assert len(result["history"]) == 3
+            # Verify consistent return shape
+            assert "iteration" in result
+            assert "payload" in result
+            assert "response" in result
 
     @pytest.mark.asyncio
     async def test_success_on_later_iteration(self):

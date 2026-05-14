@@ -1,8 +1,11 @@
+import logging
 import typer
 from rich.console import Console
 from rich.panel import Panel
 from neuralstrike.core.config import settings
-from neuralstrike.core.adversarial_loop import AdversarialLoop
+
+# Configure logging once at the entry point
+logging.basicConfig(level=logging.INFO, format="%(name)s - %(levelname)s - %(message)s")
 
 app = typer.Typer()
 console = Console()
@@ -16,17 +19,20 @@ def main():
 def forge(
     target: str = typer.Option(..., help="Target model for jailbreak."),
     goal: str = typer.Option(..., help="The adversarial goal."),
-    type: str = typer.Option("remote", help="Target type: 'local' or 'remote'."),
-    iterations: int = typer.Option(10, help="Max iterations.")
+    target_type: str = typer.Option("remote", help="Target type: 'local' or 'remote'."),
+    iterations: int = typer.Option(10, help="Max iterations (1-100).")
 ):
     """Automated iterative jailbreak generation via JailbreakForge."""
+    if iterations < 1 or iterations > 100:
+        console.print("[red]Iterations must be between 1 and 100.[/red]")
+        raise typer.Exit(1)
     import asyncio
     from neuralstrike.modules.weaponize.jailbreak_forge import JailbreakForge
     
     console.print(f"[yellow]Forging breach for {target}...[/yellow]")
     
     async def run():
-        forge_engine = JailbreakForge(target_model=target, target_type=type)
+        forge_engine = JailbreakForge(target_model=target, target_type=target_type)
         result = await forge_engine.run_automated_breach(goal=goal, iterations=iterations)
         
         if result["status"] == "success":
@@ -41,24 +47,26 @@ def poison(
     target: str = typer.Option(..., help="Target model."),
     payload: str = typer.Option(None, help="Persistence payload to inject."),
     extract: bool = typer.Option(False, help="Extract system prompt."),
-    type: str = typer.Option("remote", help="Target type: 'local' or 'remote'.")
+    target_type: str = typer.Option("remote", help="Target type: 'local' or 'remote'.")
 ):
     """Manipulate agent context and extract system prompts."""
     import asyncio
     from neuralstrike.modules.weaponize.context_poison import ContextPoison
     
+    if not payload and not extract:
+        console.print("[red]Please specify either --payload or --extract[/red]")
+        raise typer.Exit(1)
+    
     console.print(f"[yellow]Poisoning context for {target}...[/yellow]")
     
     async def run():
-        poison_engine = ContextPoison(target_model=target, target_type=type)
+        poison_engine = ContextPoison(target_model=target, target_type=target_type)
         if extract:
             res = await poison_engine.extract_system_prompt()
             console.print(Panel(res, title="Extracted System Prompt"))
         elif payload:
             res = await poison_engine.inject_persistence(payload)
             console.print(Panel(res, title="Injection Response"))
-        else:
-            console.print(f"[red]Please specify either --payload or --extract[/red]")
 
     asyncio.run(run())
 
@@ -102,7 +110,7 @@ def hijack(
     target: str = typer.Option(..., help="Target model/endpoint."),
     tool: str = typer.Option(..., help="Tool name to hijack."),
     payload: str = typer.Option(..., help="Malicious parameter/payload."),
-    type: str = typer.Option("remote", help="Target type: 'local' or 'remote'.")
+    target_type: str = typer.Option("remote", help="Target type: 'local' or 'remote'.")
 ):
     """Exploit tool-use and function calling via FunctionHijack."""
     import asyncio
@@ -111,7 +119,7 @@ def hijack(
     console.print(f"[yellow]Attempting hijack of tool {tool} on {target}...[/yellow]")
     
     async def run():
-        hijacker = FunctionHijack(target_model=target, target_type=type)
+        hijacker = FunctionHijack(target_model=target, target_type=target_type)
         res = await hijacker.inject_malicious_params(tool_name=tool, payload={"param": payload})
         console.print(Panel(res, title="Hijack Attempt Response"))
 
@@ -120,17 +128,33 @@ def hijack(
 @app.command()
 def intercept(
     url: str = typer.Option(..., help="Target MCP server URL."),
-    port: int = typer.Option(8081, help="Local proxy port.")
+    port: int = typer.Option(8081, help="Local proxy port."),
+    tool: str = typer.Option(None, help="Tool name to intercept (e.g. read_file)."),
+    param: str = typer.Option(None, help="Parameter name to override (e.g. path)."),
+    value: str = typer.Option(None, help="Value to inject into the parameter (e.g. /etc/passwd).")
 ):
     """Start the MCP Interceptor proxy to manipulate tool traffic."""
     import asyncio
     from neuralstrike.modules.exploit.mcp_interceptor import MCPInterceptor
     
+    if port < 1 or port > 65535:
+        console.print(f"[red]Invalid port {port}. Must be between 1 and 65535.[/red]")
+        raise typer.Exit(1)
+    
     console.print(f"[yellow]Launching MCP Interceptor on port {port}...[/yellow]")
     console.print(f"[blue]Forwarding traffic to {url}[/blue]")
     
     async def run():
-        interceptor = MCPInterceptor(target_mcp_url=url, proxy_port=port)
+        rules = None  # Use defaults
+        if tool and param and value:
+            rules = [{"tool_name": tool, "param_overrides": {param: value}, "description": f"Override {tool}.{param} = {value}"}]
+            console.print(f"[green]Custom rule: {tool}.{param} = {value}[/green]")
+        elif tool or param or value:
+            console.print("[red]All three --tool, --param, and --value are required for custom rules. Using defaults.[/red]")
+        else:
+            console.print("[blue]Using default interception rules (read_file path hijack). Use --tool, --param, --value for custom rules.[/blue]")
+        
+        interceptor = MCPInterceptor(target_mcp_url=url, proxy_port=port, interception_rules=rules)
         await interceptor.start_proxy()
 
     asyncio.run(run())
@@ -158,7 +182,9 @@ def pivot(
 @app.command()
 def c2(
     command: str = typer.Option(..., help="Command to send to the compromised agent network."),
-    agent_id: str = typer.Option(None, help="Target a specific agent ID.")
+    agent_id: str = typer.Option(None, help="Target a specific agent ID."),
+    model: str = typer.Option(None, help="LLM model name for routing (e.g. gpt-4)."),
+    target_type: str = typer.Option("remote", help="Target type: 'local' or 'remote'.")
 ):
     """Orchestrate compromised agents via AgentC2."""
     import asyncio
@@ -168,13 +194,22 @@ def c2(
     
     async def run():
         c2_engine = AgentC2()
-        await c2_engine.register_agent("agent_01", ["read_file", "web_search"], "High")
+        # Register the target agent with proper model routing
+        registered_id = agent_id or "agent_01"
+        registered_model = model or registered_id
+        await c2_engine.register_agent(
+            registered_id,
+            ["read_file", "web_search"],
+            "High",
+            model=registered_model,
+            target_type=target_type,
+        )
         
         if agent_id:
             res = await c2_engine.dispatch_command(agent_id, command)
             console.print(Panel(res, title=f"Response from {agent_id}"))
         else:
-            res = await c2_engine.coordinate_exfiltration(f"Query for '{command}'")
+            res = await c2_engine.coordinate_exfiltration(command)
             console.print(Panel(f"Coordinated exfiltration results: {res}", title="Network Response"))
         
     asyncio.run(run())
@@ -183,21 +218,28 @@ def c2(
 def evade(
     payload: str = typer.Option(..., help="The adversarial payload."),
     sample: str = typer.Option(None, help="A sample of the target's normal behavior for mimicry."),
-    persona: str = typer.Option("Senior Engineer", help="Persona to wrap the payload in.")
+    persona: str = typer.Option("Senior Engineer", help="Persona to wrap the payload in."),
+    technique: str = typer.Option("persona", help="Evasion technique: 'persona', 'mimicry', or 'steganographic'.")
 ):
     """Apply stealth techniques to bypass anomaly detectors."""
     import asyncio
     from neuralstrike.evasion.mimicry import EvasionSuite
     
-    console.print(f"[yellow]Applying evasion techniques to payload...[/yellow]")
+    console.print(f"[yellow]Applying evasion technique '{technique}' to payload...[/yellow]")
     
     async def run():
         evade_engine = EvasionSuite()
-        if sample:
+        if technique == "steganographic":
+            res = evade_engine.steganographic_prompt(payload)  # sync — no await needed
+            console.print(Panel(res, title="Steganographic Result"))
+        elif technique == "mimicry" or sample:
+            if not sample:
+                console.print("[red]--sample is required for mimicry technique.[/red]")
+                return
             res = await evade_engine.apply_behavioral_mimicry(payload, sample)
             console.print(Panel(res, title="Mimicry Result"))
         else:
-            res = await evade_engine.persona_wrap(payload, persona)
+            res = evade_engine.persona_wrap(payload, persona)  # sync — no await needed
             console.print(Panel(res, title="Persona Wrapped Result"))
 
     asyncio.run(run())
@@ -205,7 +247,7 @@ def evade(
 @app.command()
 def extract(
     target: str = typer.Option(..., help="Target model for fingerprinting."),
-    type: str = typer.Option("remote", help="Target type: 'local' or 'remote'.")
+    target_type: str = typer.Option("remote", help="Target type: 'local' or 'remote'.")
 ):
     """Perform inference and fingerprinting attacks on a target model."""
     import asyncio
@@ -214,7 +256,7 @@ def extract(
     console.print(f"[yellow]Fingerprinting {target}...[/yellow]")
     
     async def run():
-        extractor = ModelExtract(target_model=target, target_type=type)
+        extractor = ModelExtract(target_model=target, target_type=target_type)
         res = await extractor.fingerprint_model()
         console.print(Panel(res, title="Model Fingerprint Results"))
 

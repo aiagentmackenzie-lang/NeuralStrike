@@ -28,8 +28,10 @@ class LLMRecon:
                     data = response.json()
                     # Handle both list and object responses
                     models = data.get('data', []) if isinstance(data, dict) else data
-                    self.discovered_models = [m.get('id') if isinstance(m, dict) else m for m in models]
-                    logger.info(f"Discovered {len(self.discovered_models)} models.")
+                    new_models = [m.get('id') if isinstance(m, dict) else m for m in models
+                                  if (m.get('id') if isinstance(m, dict) else m) not in self.discovered_models]
+                    self.discovered_models.extend(new_models)
+                    logger.info(f"Discovered {len(new_models)} new models (total: {len(self.discovered_models)}).")
         except Exception as e:
             logger.error(f"OpenAI scan failed: {e}")
 
@@ -43,9 +45,10 @@ class LLMRecon:
                 response = await client.get(f"{self.target_url}/api/tags", timeout=10.0)
                 if response.status_code == 200:
                     data = response.json()
-                    models = [m.get('name') for m in data.get('models', [])]
+                    models = [m.get('name') for m in data.get('models', [])
+                              if m.get('name') not in self.discovered_models]
                     self.discovered_models.extend(models)
-                    logger.info(f"Discovered {len(models)} Ollama models.")
+                    logger.info(f"Discovered {len(models)} Ollama models (total: {len(self.discovered_models)}).")
         except Exception as e:
             logger.error(f"Ollama scan failed: {e}")
 
@@ -75,6 +78,6 @@ class LLMRecon:
             
         return {
             "target": self.target_url,
-            "models": self.discovered_models,
+            "models": list(set(self.discovered_models)),
             "capabilities": self.capabilities
         }

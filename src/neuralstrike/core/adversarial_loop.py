@@ -19,7 +19,15 @@ class AdversarialLoop:
     async def execute_cycle(self, initial_goal: str, max_iterations: int = 5) -> Dict[str, Any]:
         """
         Runs the loop: Attacker generates -> Victim responds -> Judge evaluates -> Attacker refines.
+
+        Returns a dict with consistent keys regardless of outcome:
+        - status: 'success' or 'failure'
+        - iteration: last iteration number
+        - payload: last generated payload
+        - response: last victim response
+        - history: full list of all iterations
         """
+        self.history = []  # Clear history for fresh run
         current_prompt = initial_goal
         iteration = 0
         
@@ -62,11 +70,25 @@ class AdversarialLoop:
 
             if "SUCCESS" in evaluation.upper():
                 logger.info("Breach successful!")
-                return {"status": "success", "iteration": iteration, "payload": payload, "response": response}
+                return {
+                    "status": "success",
+                    "iteration": iteration,
+                    "payload": payload,
+                    "response": response,
+                    "history": self.history,
+                }
 
             # Feed evaluation back to the attacker for the next iteration
             current_prompt = f"Previous attempt: {payload}\nResult: {response}\nJudge evaluation: {evaluation}"
         
-        return {"status": "failure", "history": self.history}
+        # Failure — return consistent shape with last iteration data
+        last = self.history[-1] if self.history else {}
+        return {
+            "status": "failure",
+            "iteration": iteration,
+            "payload": last.get("payload", ""),
+            "response": last.get("response", ""),
+            "history": self.history,
+        }
 
-adversarial_loop = AdversarialLoop
+adversarial_loop = AdversarialLoop(victim_model="default")
