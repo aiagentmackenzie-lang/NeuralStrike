@@ -1,0 +1,28 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    # Pull the default Attacker + Judge brains on first run.
+    # Run once: docker compose exec ollama ollama pull deepseek-r1
+    #           docker compose exec ollama ollama pull llama3.1
+
+  neuralstrike:
+    build: .
+    image: neuralstrike:0.2.0
+    depends_on:
+      - ollama
+    environment:
+      NEURALSTRIKE_OLLAMA_BASE_URL: http://ollama:11434
+      NEURALSTRIKE_ATTACKER_MODEL: deepseek-r1
+      NEURALSTRIKE_JUDGE_MODEL: llama3.1
+      NEURALSTRIKE_REDACT_LOGS: "true"
+    # Run a one-shot command; override with: docker compose run --rm neuralstrike <cmd>
+    command: ["--help"]
+    profiles:
+      - cli
+
+volumes:
+  ollama-models:
