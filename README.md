@@ -4,6 +4,8 @@
 > Offensive security toolkit for testing AI/LLM systems and autonomous agents.
 > **Authorized testing only.** See [Ethical Use](#ethical-use) and [SECURITY.md](SECURITY.md).
 
+📖 **[Operator's Guide (USAGE.md)](USAGE.md)** — thorough, end-to-end walkthroughs, every command, kill chains, C2 lifecycle, MCP interceptor, troubleshooting.
+
 [![CI](https://github.com/aiagentmackenzie-lang/NeuralStrike/actions/workflows/ci.yml/badge.svg)](https://github.com/aiagentmackenzie-lang/NeuralStrike/actions/workflows/ci.yml)
 [Python 3.10–3.14] · [MIT License](LICENSE)
 
