@@ -1,18 +1,35 @@
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
-.env
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtualenvs
 .venv/
 venv/
 ENV/
 env/
+
+# Tooling caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editors / OS
 .vscode/
 .idea/
 *.log
 .DS_Store
-src/neuralstrike.egg-info/
-.coverage
 
-# Internal docs — not for public release
-BUG_CATALOG.md
-NEXT_STEPS.md
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Local state
+.neuralstrike/
