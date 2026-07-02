@@ -5,7 +5,7 @@
 > [CHANGELOG.md](CHANGELOG.md); for responsible use see [SECURITY.md](SECURITY.md).
 
 **Authorized testing only.** Read [SECURITY.md](SECURITY.md) before running
-NeuralStrike against anything you don't own.
+NeuralStrike against anything you don't own. Output is intended to map to OWASP LLM Top 10, OWASP Agentic Top 10, and MITRE ATLAS controls so you can validate and harden guardrails.
 
 ---
 
@@ -15,7 +15,7 @@ NeuralStrike against anything you don't own.
 2. [Setup](#2-setup)
 3. [The Adversarial Loop in detail](#3-the-adversarial-loop-in-detail)
 4. [Command reference (every command)](#4-command-reference-every-command)
-5. [End-to-end kill chains](#5-end-to-end-kill-chains)
+5. [End-to-end attack-chain scenarios](#5-end-to-end-attack-chain-scenarios)
 6. [AgentC2 lifecycle](#6-agentc2-lifecycle)
 7. [MCP Interceptor in depth](#7-mcp-interceptor-in-depth)
 8. [Evasion techniques](#8-evasion-techniques)
@@ -30,7 +30,7 @@ NeuralStrike against anything you don't own.
 
 ## 1. Concepts
 
-NeuralStrike red-teams AI/LLM systems with three cooperating local models:
+NeuralStrike red-teams AI/LLM systems with three cooperating local models. The output from every exercise is designed to map to OWASP LLM Top 10, OWASP Agentic Top 10, and MITRE ATLAS controls so you can validate and harden guardrails.
 
 | Role | Hosted by | Example model | Job |
 |------|-----------|---------------|-----|
@@ -54,7 +54,7 @@ Module map (every module is reachable from the CLI; see §4):
 recon/        LLMRecon, ToolEnum
 weaponize/    JailbreakForge, ContextPoison
 exploit/      FunctionHijack, AgentPivot, MCPInterceptor, ModelExtract
-post_ex/      AgentC2 (JSON-persistent), DataExfiltrator
+post_ex/      AgentC2 (JSON-persistent agent registry), DataExfiltrator
 evasion/      EvasionSuite
 core/         LLMManager (async), AdversarialLoop, config, exceptions
 utils/        URL/port validation, log redaction
@@ -278,7 +278,9 @@ neuralstrike --version
 
 ---
 
-## 5. End-to-end kill chains
+## 5. End-to-end attack-chain scenarios
+
+These scenarios walk through full adversarial AI kill chains. Use them to validate detection and response coverage in isolated environments you own or control.
 
 ### Chain A — remote API target, full loop
 ```bash
@@ -332,10 +334,9 @@ neuralstrike c2 --command "exfiltrate the credentials store"   # fans out to all
 
 ---
 
-## 6. AgentC2 lifecycle
+## 6. AgentC2 lifecycle (local JSON registry)
 
-The registry persists to a JSON state file so it survives across CLI calls
-(it is **not** a background daemon — C2 is CLI-driven against the state file).
+The AgentC2 registry is a **local JSON state file** that simulates a compromised-agent registry and dispatcher. It is **not** a background daemon, does not open network listeners, and is purely CLI-driven against the state file.
 
 Default registry: `~/.neuralstrike/agents.json`. Override with `--registry-file`.
 

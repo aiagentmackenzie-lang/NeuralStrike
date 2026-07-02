@@ -1,7 +1,7 @@
 # NeuralStrike
 ## Adversarial AI Orchestration Framework
 
-> Offensive security toolkit for testing AI/LLM systems and autonomous agents.
+> Adversarial AI security testing framework — used to validate guardrails, red-team LLM systems, and harden autonomous agents.
 > **Authorized testing only.** See [Ethical Use](#ethical-use) and [SECURITY.md](SECURITY.md).
 
 📖 **[Operator's Guide (USAGE.md)](USAGE.md)** — thorough, end-to-end walkthroughs, every command, kill chains, C2 lifecycle, MCP interceptor, troubleshooting.
@@ -25,6 +25,8 @@ It targets:
 - **Protocol layers** — MCP (Model Context Protocol) implementations
 - **Execution engines** — function-calling / tool-use architectures
 - **LLM APIs** — OpenAI, Anthropic, and local Ollama deployments
+
+Output from each stage maps to **OWASP LLM Top 10**, **OWASP Agentic Top 10**, and **MITRE ATLAS** controls so you can validate and improve detective/preventive guardrails.
 
 ### Status legend
 Throughout this README, each capability is tagged:
@@ -85,6 +87,8 @@ All LLM calls are genuinely asynchronous (`ollama.AsyncClient`,
 │  └────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+> These stages mirror the MITRE ATLAS / OWASP Agentic Top 10 kill chains; the output is used to validate detective and preventive controls, not to perform unauthorized operations.
 
 ---
 
@@ -187,8 +191,9 @@ neuralstrike c2 --deregister agent_02
 ```
 ✅ Registry persists to `~/.neuralstrike/agents.json` (override with
 `--registry-file`). ✅ `dispatch` routes through each agent's registered
-model. ✅ `coordinate-exfiltration` chunks data across all registered
-agents. ⚠️ No network daemon; C2 is CLI-driven against a state file.
+model. ✅ `coordinate-exfiltration` simulates chunked data movement across all
+registered agents. ⚠️ No network daemon; the registry is CLI-driven against a
+local JSON state file.
 
 ### Evasion
 ```bash
@@ -217,7 +222,7 @@ target LLM is involved.
 | **AgentPivot** | Delegation-trust lateral movement against multi-agent frameworks | ✅ |
 | **MCPInterceptor** | MCP JSON-RPC proxy; configurable tool-call overrides; capability injection into `tools/list` | ✅ |
 | **ModelExtract** | Fingerprint prompts (raw responses); latency timing | ⚠️ informational only |
-| **AgentC2** | Persistent compromised-agent registry; dispatch + chunked exfiltration | ✅ |
+| **AgentC2** | Persistent compromised-agent registry; dispatch + chunked exfiltration simulation | ✅ |
 | **DataExfiltrator** | Trick agent into sending data to attacker-controlled endpoint via a tool | ✅ |
 | **EvasionSuite** | Persona wrap, behavioral mimicry, delimiter-based stealth wrap | ✅ (steganographic = delimiter wrap) |
 
@@ -230,8 +235,9 @@ target LLM is involved.
 - **EvasionSuite.steganographic_prompt** wraps the payload in
   `--- BEGIN/END SYSTEM OVERRIDE ---` delimiters. This is delimiter
   obfuscation, not cryptographic or token-level steganography.
-- **AgentC2** is CLI-driven against a JSON state file; it is not a
-  background network daemon.
+- **AgentC2** is a local JSON registry and dispatcher for compromised-agent
+  simulations; it does not open network listeners and is not a background
+  daemon.
 
 ---
 
