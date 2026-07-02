@@ -28,6 +28,8 @@ It targets:
 
 Output from each stage maps to **OWASP LLM Top 10**, **OWASP Agentic Top 10**, and **MITRE ATLAS** controls so you can validate and improve detective/preventive guardrails.
 
+It pairs with **[NeuralGuard-AI-Firewall](https://github.com/aiagentmackenzie-lang/NeuralGuard-AI-Firewall)** as the adversarial half of an attack/defend AI-security story: NeuralStrike generates the attacks, NeuralGuard validates the defensive controls, and NeuralGuard's deterministic benchmark harness lets you measure blocked/detection rates against live NeuralStrike payloads.
+
 ### Status legend
 Throughout this README, each capability is tagged:
 
