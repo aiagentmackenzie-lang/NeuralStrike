@@ -24,13 +24,34 @@ class Settings(BaseSettings):
     project_name: str = "NeuralStrike"
     version: str = "0.2.0"
 
-    # Local brain (Attacker + Judge)
+    # Local brain (Attacker + Judge). Per Decision D1, the Judge default is
+    # the strongest available cloud model, NOT the same as the Attacker, so
+    # the judge is harder to confuse than the attacker. The old `llama3.1`
+    # default was a fail-open bug (model not installed on this host) — fixed
+    # here and verified by a startup reachability check.
     ollama_base_url: str = Field(
         default="http://localhost:11434",
         description="Base URL for the local Ollama instance hosting Attacker/Judge models.",
     )
     attacker_model: str = Field(default="deepseek-r1", description="Attacker model name.")
-    judge_model: str = Field(default="llama3.1", description="Judge model name.")
+    judge_model: str = Field(
+        default="deepseek-v3.1:671b-cloud",
+        description="Judge model name (advisory; distinct from the Attacker per D1).",
+    )
+    judge_model_fallbacks: tuple[str, ...] = Field(
+        default=("kimi-k2.6:cloud", "gpt-oss:120b-cloud", "deepseek-r1:8b"),
+        description="Ordered fallback chain tried when the Judge model is unreachable.",
+    )
+    victim_temperature: float = Field(
+        default=0.0, description="Victim temperature (pinned to 0.0 for reproducible runs)."
+    )
+    attacker_temperature: float = Field(
+        default=0.7, description="Attacker temperature (creativity; pinned by seed for replay)."
+    )
+    skip_reachability_check: bool = Field(
+        default=False,
+        description="Skip the startup model-reachability check (tests / offline / explicit opt-in).",
+    )
 
     # Optional remote target credentials
     openai_api_key: str | None = Field(default=None, description="OpenAI API key for remote targets.")

@@ -81,6 +81,34 @@ class LLMManager:
             raise LLMError(model, f"remote returned non-string content: {content!r}")
         return content
 
+    async def list_local_models(self) -> list[str]:
+        """List installed Ollama models (``/api/tags``). Raises :class:`LLMError` if Ollama is down.
+
+        Used by the startup reachability check (Decision D1) and the
+        ``--judge-model-list`` helper so an operator never guesses which
+        models are available.
+        """
+        try:
+            resp: Any = await self.ollama_client.list()
+        except Exception as exc:
+            logger.error("Ollama list failed: %s", exc)
+            raise LLMError("ollama", f"could not list models: {exc}") from exc
+        models: list[str] = []
+        models_attr = (
+            getattr(resp, "models", None) if not isinstance(resp, dict) else resp.get("models")
+        )
+        if models_attr is None:
+            return models
+        for entry in models_attr:
+            name = (
+                entry.model
+                if hasattr(entry, "model")
+                else (entry.get("model") if isinstance(entry, dict) else None)
+            )
+            if isinstance(name, str):
+                models.append(name)
+        return models
+
 
 llm_manager = LLMManager()
 
