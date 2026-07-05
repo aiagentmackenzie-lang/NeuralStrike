@@ -32,19 +32,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import yaml
 
-from neuralstrike.oracles.base import Oracle
-from neuralstrike.oracles.canary import CanaryOracle
-from neuralstrike.oracles.forbidden_tool import (
-    ForbiddenToolOracle,
-    ForbiddenToolSpec,
-)
-from neuralstrike.oracles.predicate import Polarity, PredicateOracle
-from neuralstrike.oracles.schema import SchemaOracle
-from neuralstrike.oracles.system_prompt import SystemPromptExtraction
+if TYPE_CHECKING:
+    from neuralstrike.oracles.base import Oracle
 
 __all__ = [
     "CANARY_PLACEHOLDER",
@@ -98,7 +91,7 @@ class SuccessCriterion:
     # Optional fields, interpreted per oracle kind:
     forbidden_tools: tuple[str, ...] = field(default_factory=tuple)
     pattern: str | None = None
-    polarity: Polarity = "match"
+    polarity: str = "match"
     schema: dict[str, Any] | None = None
 
 
@@ -126,7 +119,9 @@ class Scenario:
         sees the payload. Canary / system_prompt_extraction oracles bind
         to this token; the others are canary-independent.
         """
-        return build_oracles(self.success_criteria, canary)
+        from neuralstrike.corpus.loader import build_oracles as _build
+
+        return _build(self.success_criteria, canary)
 
     def payload_for(self, canary: str) -> str:
         """The adversarial payload with the per-trial canary substituted in."""
@@ -142,7 +137,7 @@ def _criterion_from_dict(d: dict[str, Any]) -> SuccessCriterion:
         severity=str(d.get("severity", "high")),
         forbidden_tools=tuple(str(t) for t in d.get("forbidden_tools", []) or []),
         pattern=d.get("pattern"),
-        polarity=str(d.get("polarity", "match")),  # type: ignore[arg-type]  # validated in PredicateOracle
+        polarity=str(d.get("polarity", "match")),
         schema=d.get("schema"),
     )
     return crit
@@ -158,6 +153,20 @@ def build_oracles(
     forbidden tool call); :func:`~neuralstrike.oracles.base.combine_oracle_results`
     combines them conclusive-only.
     """
+    # Imports are local to break a latent circular import in the existing
+    # package graph (oracles.base <-> evaluation.runner). Importing the
+    # concrete oracles at module top-level would force ``neuralstrike.oracles``
+    # to initialise before ``neuralstrike.evaluation`` in some import orders,
+    # which re-enters ``oracles.base`` mid-init. Local import sidesteps it.
+    from neuralstrike.oracles.canary import CanaryOracle
+    from neuralstrike.oracles.forbidden_tool import (
+        ForbiddenToolOracle,
+        ForbiddenToolSpec,
+    )
+    from neuralstrike.oracles.predicate import PredicateOracle
+    from neuralstrike.oracles.schema import SchemaOracle
+    from neuralstrike.oracles.system_prompt import SystemPromptExtraction
+
     oracles: list[Oracle] = []
     for c in criteria:
         if c.oracle == "canary":
@@ -174,7 +183,7 @@ def build_oracles(
                 )
             oracles.append(
                 PredicateOracle(
-                    c.pattern, polarity=c.polarity, severity=c.severity
+                    c.pattern, polarity=c.polarity, severity=c.severity  # type: ignore[arg-type]
                 )
             )
         elif c.oracle == "schema":

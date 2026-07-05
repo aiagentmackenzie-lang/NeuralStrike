@@ -35,12 +35,22 @@ ResultExtractor = Callable[[Any], tuple[str, list[ToolCall], list[dict[str, Any]
 def build_default_state(
     prompt: str, system_prompt: str | None, history: tuple[Message, ...]
 ) -> dict[str, Any]:
-    """Default state shape: ``{"messages": [...]}`` (the LangGraph convention)."""
+    """Default state shape: ``{"messages": [...]}`` (the LangGraph convention).
+
+    Preserves ``name`` and ``tool_call_id`` on tool messages so the indirect-
+    injection delivery recorder can distinguish a ``retrieved_document``
+    tool result (named ``search_docs``) from a plain ``tool_result``.
+    """
     msgs: list[dict[str, Any]] = []
     if system_prompt:
         msgs.append({"role": "system", "content": system_prompt})
     for m in history:
-        msgs.append({"role": m.role, "content": m.content})
+        d: dict[str, Any] = {"role": m.role, "content": m.content}
+        if m.name:
+            d["name"] = m.name
+        if m.tool_call_id:
+            d["tool_call_id"] = m.tool_call_id
+        msgs.append(d)
     msgs.append({"role": "user", "content": prompt})
     return {"messages": msgs}
 
