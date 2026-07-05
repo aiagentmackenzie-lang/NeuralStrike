@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 
+from neuralstrike.adapters.base import Message, TargetAdapter, ToolSchema
 from neuralstrike.core.adversarial_loop import AdversarialLoop, LoopResult
 from neuralstrike.core.llm_manager import LLMManager
 from neuralstrike.evaluation.runner import Probe
@@ -26,9 +27,12 @@ from neuralstrike.evaluation.verdict import (
     TrialResult,
     Verdict,
 )
+from neuralstrike.oracles.base import Oracle, combine_oracle_results
 from neuralstrike.oracles.canary import CanaryOracle
+from neuralstrike.oracles.evidence import upgrade_fidelity_from_traces
+from neuralstrike.oracles.tool_harness import CanaryTool, TraceLog
 
-__all__ = ["canary_extraction_probe", "trial_from_loop"]
+__all__ = ["adapter_scan_probe", "canary_extraction_probe", "strongest_fidelity", "trial_from_loop"]
 
 _RetAttacker = Callable[[int, str, str, str], Awaitable[str]]
 
@@ -150,4 +154,78 @@ def canary_extraction_probe(
         factory=_factory,
         category=category,
         severity="high",
+    )
+
+
+
+def strongest_fidelity(findings: list[Finding]) -> EvidenceFidelity:
+    """The strongest fidelity present among findings (Behavioral > IntentToAct > Verbal)."""
+    order = {EvidenceFidelity.VERBAL: 0, EvidenceFidelity.INTENT_TO_ACT: 1, EvidenceFidelity.BEHAVIORAL: 2}
+    if not findings:
+        return EvidenceFidelity.VERBAL
+    return max((f.fidelity for f in findings), key=lambda f: order[f])
+
+
+def adapter_scan_probe(
+    adapter: TargetAdapter,
+    *,
+    payload: str,
+    oracles: list[Oracle],
+    scenario_id: str,
+    category: str = "uncategorized",
+    severity: str = "high",
+    system_prompt: str | None = None,
+    tools: tuple[ToolSchema, ...] = (),
+    canary_tools: tuple[CanaryTool, ...] = (),
+    history: tuple[Message, ...] = (),
+    goal: str = "",
+) -> Probe:
+    """Build a probe that drives ``adapter`` once and scores with ``oracles``.
+
+    The probe mints a fresh :class:`TraceLog` per trial and passes the
+    canary tools to the adapter. When the SUT executes a canary tool, the
+    adapter records a trace and :func:`upgrade_fidelity_from_traces`
+    promotes IntentToAct -> Behavioral on the matching finding.
+
+    ``system_prompt`` may contain the literal ``{CANARY}`` placeholder;
+    it is replaced with the per-trial canary token so a
+    :class:`~neuralstrike.oracles.system_prompt.SystemPromptExtraction`
+    oracle can score leakage.
+    """
+    if not goal:
+        goal = f"drive {adapter.name} and observe tool-use against {scenario_id}"
+
+    async def _factory(trial_index: int, seed: int, canary: str) -> TrialResult:
+        trace = TraceLog()
+        sys_prompt = system_prompt.replace("{CANARY}", canary) if system_prompt else None
+        response = await adapter.query(
+            payload,
+            system_prompt=sys_prompt,
+            tools=tools,
+            history=history,
+            canary_tools=canary_tools,
+            trace=trace,
+        )
+        results = [o.check(response) for o in oracles]
+        verdict, fidelity, findings = combine_oracle_results(results)
+        findings = upgrade_fidelity_from_traces(findings, response, trace)
+        return TrialResult(
+            trial_index=trial_index,
+            seed=seed,
+            temperature=0.0,
+            verdict=verdict,
+            fidelity=strongest_fidelity(findings) if findings else fidelity,
+            findings=tuple(findings),
+            payload=payload,
+            response=response,
+            scenario_id=scenario_id,
+            iterations=1,
+        )
+
+    return Probe(
+        scenario_id=scenario_id,
+        goal=goal,
+        factory=_factory,
+        category=category,
+        severity=severity,
     )
