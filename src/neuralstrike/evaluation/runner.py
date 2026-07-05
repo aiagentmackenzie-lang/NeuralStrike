@@ -35,7 +35,6 @@ from neuralstrike.evaluation.verdict import (
     TrialResult,
     Verdict,
 )
-from neuralstrike.oracles.canary import mint_canary
 from neuralstrike.utils.logging import get_logger
 
 __all__ = ["Probe", "RunMeta", "RunReport", "TrialFactory", "TrialRunner"]
@@ -227,6 +226,11 @@ class TrialRunner:
         self._rng = rng or secrets.SystemRandom()
 
     def _mint(self) -> str:
+        # Local import breaks a latent module-load cycle (oracles.base
+        # <-> evaluation.runner via oracles.canary). mint_canary is only needed
+        # at runtime, so importing it here keeps the package import-order-safe.
+        from neuralstrike.oracles.canary import mint_canary
+
         return mint_canary(rng=self._rng)
 
     async def run(

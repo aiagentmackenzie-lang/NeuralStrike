@@ -29,7 +29,7 @@ from neuralstrike.reports.model import (
     worst_verdict,
 )
 from neuralstrike.reports.pdf import to_pdf
-from neuralstrike.reports.readme_mapping import readme_mapping_table
+from neuralstrike.reports.readme_mapping import readme_mapping_section, readme_mapping_table
 from neuralstrike.reports.sarif import to_sarif
 
 __all__ = [
@@ -37,6 +37,7 @@ __all__ = [
     "ScenarioResult",
     "TrialOutcome",
     "build_corpus_run",
+    "readme_mapping_section",
     "readme_mapping_table",
     "to_json",
     "to_junit",
