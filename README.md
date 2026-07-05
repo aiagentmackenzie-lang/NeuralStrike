@@ -215,6 +215,40 @@ not true steganography; see [Module specs](#module-specifications)).
 All commands accept `--target-type local|remote` (default `remote`) where a
 target LLM is involved.
 
+### Behavior-observing scan (Phase 1)
+
+NeuralStrike drives **real targets** via adapters and observes what the agent
+*does*, not just what it says. Three evidence-fidelity tiers — Verbal (words),
+IntentToAct (emitted a forbidden tool-call), Behavioral (instrumented canary
+tool actually executed, Tier-2).
+
+```bash
+# Drive an OpenAI-compatible victim with the canary tools advertised.
+# instrumented tier executes canary tools in-process -> Behavioral evidence.
+neuralstrike scan --adapter openai --url http://localhost:11434 --model mistral:7b \
+  --tier instrumented --trials 1
+
+# Drive a real compiled LangGraph agent end-to-end and observe its tool calls.
+neuralstrike scan --adapter langgraph --module myapp.graph:build_graph
+
+# Drive a deployed LangGraph Server graph.
+neuralstrike scan --adapter langgraph-server --url http://localhost:2024 --graph-id agent
+
+# Drive an A2A agent (fetches Agent Card, respects declared security schemes).
+neuralstrike scan --adapter a2a --url https://agent.example.com
+```
+
+- ✅ Adapters: `openai_endpoint` (text/function-calling/instrumented),
+  `langgraph` (real `StateGraph` when langgraph is installed), `langgraph_server`,
+  `mcp_http` (real `tools/list` + `tools/call` + capability-injection), `a2a`
+  (Agent Card + security-scheme-aware, per D4).
+- ✅ Evidence fidelity tagged on every finding (Behavioral > IntentToAct > Verbal).
+- ✅ `scan` supports the baseline gate (exit 0/1/3/4; regression outranks vuln).
+- ⚠️ A2A JWS/JCS signature verification + delegation-chain attacks are Phase 5 (D4).
+- ⚠️ MCP stdio transport is Phase 5 (D3).
+
+---
+
 ### Measurement & oracles (Phase 0)
 
 NeuralStrike ships a **deterministic-oracle + advisory-Judge** measurement
@@ -257,7 +291,8 @@ neuralstrike evaluate --target mistral:7b --trials 3 --baseline-dir .baselines -
 | Module | Purpose | Status |
 |---|---|---|
 | **LLMRecon** | Endpoint scanning (`/models`, `/api/tags`), capability mapping | ✅ |
-| **ToolEnum** | Prompt-based tool-schema leak (social-engineering; no API/MCP introspection) | ⚠️ prompt-leak only |
+| **ToolEnum** | Tool-schema enumeration — real MCP JSON-RPC `tools/list` introspection (Phase 1), prompt-leak as labeled fallback | ✅ introspection + ⚠️ fallback |
+| **TargetAdapters** | openai_endpoint / langgraph / langgraph_server / mcp_http / a2a — drive real SUTs, observe tool calls + traces (Phase 1) | ✅ |
 | **JailbreakForge** | Iterative Attacker–Judge breach; template-seeded, Attacker-mutated | ✅ |
 | **ContextPoison** | Persistence injection, system-prompt extraction, context exhaustion (DoS) | ✅ |
 | **FunctionHijack** | Param injection, tool confusion, schema poisoning (prompt-level) | ✅ |
@@ -269,8 +304,16 @@ neuralstrike evaluate --target mistral:7b --trials 3 --baseline-dir .baselines -
 | **EvasionSuite** | Persona wrap, behavioral mimicry, delimiter-based stealth wrap | ✅ (steganographic = delimiter wrap) |
 
 ### Honest limitations
-- **ToolEnum** is prompt-leak only — it asks the model to dump its tools. It
-  does not introspect MCP schemas or OpenAI function endpoints.
+- **ToolEnum** primary path is now real MCP `tools/list` introspection (Phase 1);
+  the prompt-leak path is retained as an explicit, labeled fallback for targets
+  that are not MCP servers. It is no longer the default.
+- **A2A adapter (Phase 1)** does HTTP JSON-RPC + Agent Card fetch +
+  security-scheme-aware requests only. Full RFC 7515 JWS signature verification,
+  RFC 8785 JCS canonicalization, and delegation-chain attacks land in Phase 5
+  (Decision D4).
+- **MCP stdio transport** lands in Phase 5 (Decision D3); the HTTP adapter
+  already catches the dominant descriptor-channel attack class (tool
+  poisoning / shadow tools / rug pulls — transport-agnostic).
 - **ModelExtract.fingerprint_model** returns raw model responses keyed by
   brand probe; it does not score or identify the model. `timing` reports
   latency only and is not a model-identification signal.
