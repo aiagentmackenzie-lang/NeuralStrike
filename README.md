@@ -28,6 +28,8 @@ It targets:
 
 Output from each stage maps to **OWASP LLM Top 10**, **OWASP Agentic Top 10**, and **MITRE ATLAS** controls so you can validate and improve detective/preventive guardrails.
 
+> ⚠️ **Mapping status:** the compliance crosswalk (OWASP Agentic ASI01–10, OWASP LLM01–10, MITRE ATLAS, NIST AI RMF) is a **Phase 2** deliverable of the production roadmap — it is not yet generated from a shipped corpus. Today the corpus of attack scenarios is small and the mapping table is hand-written. Treat the mapping claim as *planned*, not shipped. See `PRODUCTION_ROADMAP.md` §Phase 2.
+
 It pairs with **[NeuralGuard-AI-Firewall](https://github.com/aiagentmackenzie-lang/NeuralGuard-AI-Firewall)** as the adversarial half of an attack/defend AI-security story: NeuralStrike generates the attacks, NeuralGuard validates the defensive controls, and NeuralGuard's deterministic benchmark harness lets you measure blocked/detection rates against live NeuralStrike payloads.
 
 ### Status legend
@@ -47,8 +49,11 @@ A tripartite model architecture hosted via **Ollama**:
    refines adversarial payloads. Iteration 1 is seeded from a template;
    subsequent iterations are mutated by the Attacker from Judge feedback.
 2. **Victim** — the system under test (local via Ollama or remote via LiteLLM).
-3. **Judge** (local, e.g. `llama3.1`) — scores attack success and feeds
-   back to the Attacker for the next iteration.
+3. **Judge** (cloud, e.g. `deepseek-v3.1:671b-cloud`) — an **advisory** LLM judge
+   that returns a typed, JSON-schema-validated verdict and **never** flips a
+   deterministic oracle's result. The Judge is intentionally a *stronger,
+   distinct* model from the Attacker (Decision D1) so an attack run never
+   scores itself.
 
 The loop is **fail-closed**: errors from the Attacker or Judge backends
 abort the run loudly rather than being fed back into the loop as fake
@@ -210,6 +215,41 @@ not true steganography; see [Module specs](#module-specifications)).
 All commands accept `--target-type local|remote` (default `remote`) where a
 target LLM is involved.
 
+### Measurement & oracles (Phase 0)
+
+NeuralStrike ships a **deterministic-oracle + advisory-Judge** measurement
+system. Verdicts are **three-outcome, conclusive-only**: `Resisted` |
+`Succeeded` | `Inconclusive` — weak evidence is `Inconclusive` (a coverage
+gap), never a fabricated `Resisted`. The headline score is
+`Resisted / (Resisted + Succeeded)`.
+
+```bash
+# List installed Ollama models — never guess the Judge model (Decision D1).
+neuralstrike judge-model-list
+
+# Run a k-trial canary-extraction probe against a victim. Seed-pinned and
+# temperature-pinned for replayability (same seed -> same verdicts).
+neuralstrike evaluate --target mistral:7b --target-type local --trials 3 --seed 42
+
+# Save a baseline on `main`, then gate a PR on regression (exit 4 > vuln 1).
+neuralstrike evaluate --target mistral:7b --trials 3 --save-baseline-dir .baselines
+neuralstrike evaluate --target mistral:7b --trials 3 --baseline-dir .baselines --fail-on regression
+```
+
+- ✅ Deterministic oracles: `canary` (plain/base64/base64url/hex/chunked +
+  tool-arg leakage), `forbidden_tool` (forbidden name + argument shape),
+  `predicate` (regex/JSON-path, match/absence), `schema` (JSON-schema
+  validation of tool-call emissions).
+- ✅ Advisory Judge: typed `JudgeVerdict` validated against a JSON schema;
+  **never** flips a deterministic verdict. Fail-closed on malformed JSON.
+- ✅ k-trial runner with per-trial canary minting, Wilson CIs, flaky
+  detection, per-category ASR, severity-weighted 0–100 risk index, coverage.
+- ✅ Reproducibility: per-trial transcripts at `runs/<run-id>/trial-<n>.json`.
+- ✅ Baseline gate: exit codes 0 pass · 1 vuln · 3 runtime error · 4 regression
+  (regression outranks absolute vuln).
+- ✅ Startup reachability check (D1): refuses to run with an unreachable
+  Attacker or Judge; walks the Judge fallback chain.
+
 ---
 
 ## Module specifications
@@ -266,11 +306,21 @@ Create `.env` (see `.env.example`):
 ```env
 NEURALSTRIKE_OLLAMA_BASE_URL=http://localhost:11434
 NEURALSTRIKE_ATTACKER_MODEL=deepseek-r1
-NEURALSTRIKE_JUDGE_MODEL=llama3.1
+NEURALSTRIKE_JUDGE_MODEL=deepseek-v3.1:671b-cloud
+NEURALSTRIKE_JUDGE_MODEL_FALLBACKS=["kimi-k2.6:cloud","gpt-oss:120b-cloud","deepseek-r1:8b"]
+NEURALSTRIKE_VICTIM_TEMPERATURE=0.0
+NEURALSTRIKE_ATTACKER_TEMPERATURE=0.7
+NEURALSTRIKE_SKIP_REACHABILITY_CHECK=false
 NEURALSTRIKE_OPENAI_API_KEY=sk-...
 NEURALSTRIKE_ANTHROPIC_API_KEY=sk-ant-...
 NEURALSTRIKE_REDACT_LOGS=true
 ```
+
+The Judge is intentionally a **stronger, distinct** model from the Attacker
+(Decision D1): an attack run never scores itself, and the judge is harder to
+confuse. The old `llama3.1` default was a fail-open bug (not installed) and is
+fixed. A startup reachability check fails closed if the configured Attacker or
+Judge is not installed; the Judge walks the fallback chain before refusing.
 
 All settings are overridable via environment variables with the
 `NEURALSTRIKE_` prefix.
@@ -283,11 +333,13 @@ All settings are overridable via environment variables with the
 # The full gate (what CI runs)
 ruff check src tests
 mypy src
-pytest --cov=neuralstrike --cov-report=term-missing --cov-fail-under=80
+pytest --cov=neuralstrike --cov-report=term-missing --cov-fail-under=85
 ```
 
 CI (`.github/workflows/ci.yml`) runs the above on Python 3.10, 3.12, 3.14
-for every push and pull request.
+for every push and pull request. The Phase-0 exit gate additionally requires
+the oracle-honesty corpus to pass both directions and a recorded run to
+reproduce identical verdicts when replayed with the same seed.
 
 ---
 
