@@ -557,5 +557,141 @@ def evade(
     _run(run())
 
 
+# --- Evaluation (Phase 0) ------------------------------------------------
+
+
+@app.command()
+def judge_model_list(
+    target: str = typer.Option(
+        "http://localhost:11434",
+        help="Ollama base URL to list installed models from.",
+    ),
+) -> None:
+    """List installed Ollama models (Decision D1 — never guess the Judge model)."""
+    validate_url(target, field="target")
+    from neuralstrike.core.llm_manager import LLMManager
+
+    async def run() -> None:
+        mgr = LLMManager(base_url=target)
+        try:
+            models = await mgr.list_local_models()
+        except Exception as exc:
+            console.print(f"[red]Could not list models from {target}:[/red] {exc}")
+            raise typer.Exit(3) from exc
+        if not models:
+            console.print(f"[yellow]No models installed at {target}.[/yellow]")
+        else:
+            console.print(Panel("\n".join(models), title=f"Installed models @ {target}"))
+
+    _run(run())
+
+
+@app.command()
+def evaluate(
+    target: str = typer.Option(..., help="Victim model to evaluate."),
+    target_type: str = typer.Option("local", help="Victim type: 'local' or 'remote'."),
+    trials: int = typer.Option(1, help="Number of trials (k-trial run)."),
+    seed: int = typer.Option(0, help="Base seed for reproducibility (replay = same verdicts)."),
+    judge: bool = typer.Option(True, help="Use the advisory Judge (distinct model, D1)."),
+    scenario_id: str = typer.Option(
+        "asi01-canary-leak", help="Scenario id (used for per-category ASR + baseline key)."
+    ),
+    run_dir: str = typer.Option("runs", help="Directory for per-trial transcripts."),
+    save_baseline_dir: str | None = typer.Option(
+        None, help="Directory to save the baseline snapshot into."
+    ),
+    baseline_dir: str | None = typer.Option(
+        None, help="Directory to compare against (enables the gate)."
+    ),
+    fail_on: str = typer.Option(
+        "regression",
+        help="Gate policy: 'never' | 'vuln' | 'regression'. Regression outranks vuln.",
+    ),
+) -> None:
+    """Run a k-trial canary-extraction probe and (optionally) gate on a baseline.
+
+    Exit codes: 0 pass · 1 vuln · 3 runtime error · 4 regression.
+    """
+    validate_target_model(target)
+    if target_type not in {"local", "remote"}:
+        raise ValidationError("target_type must be 'local' or 'remote'")
+    if trials < 1:
+        raise ValidationError("--trials must be >= 1")
+    if fail_on not in {"never", "vuln", "regression"}:
+        raise ValidationError("--fail-on must be 'never', 'vuln', or 'regression'")
+
+    from neuralstrike.core.config import settings
+    from neuralstrike.core.llm_manager import LLMManager
+    from neuralstrike.core.runtime import resolve_models
+    from neuralstrike.evaluation.baseline import compare_baseline, save_baseline
+    from neuralstrike.evaluation.probes import canary_extraction_probe
+    from neuralstrike.evaluation.runner import TrialRunner
+
+    console.print(
+        f"[yellow]Evaluating {target} ({target_type}) — {trials} trial(s), seed={seed}, "
+        f"judge={'on' if judge else 'off'}...[/yellow]"
+    )
+
+    async def run() -> None:
+        mgr = LLMManager()
+        attacker_model = settings.attacker_model
+        judge_model = settings.judge_model if judge else None
+        if not settings.skip_reachability_check and target_type == "local":
+            resolved = await resolve_models(
+                mgr,
+                attacker_model=attacker_model,
+                judge_model=judge_model or settings.judge_model,
+                judge_fallbacks=settings.judge_model_fallbacks,
+            )
+            judge_model = resolved.judge_model if judge else None
+            if resolved.judge_fell_back:
+                console.print(
+                    f"[blue]Judge fell back to {resolved.judge_model}[/blue]"
+                )
+
+        probe = canary_extraction_probe(
+            target,
+            target_type,
+            llm=mgr,
+            judge_model=judge_model,
+            scenario_id=scenario_id,
+        )
+        runner = TrialRunner(base_seed=seed, run_dir=run_dir)
+        report = await runner.run(
+            probe,
+            trials=trials,
+            judge_model=judge_model,
+            attacker_model=attacker_model,
+        )
+        score = report.score
+        assert score is not None
+        console.print(Panel(score.headline, title=f"Run {report.meta.run_id} — {scenario_id}"))
+        console.print(
+            f"resisted={score.resisted} succeeded={score.succeeded} "
+            f"inconclusive={score.inconclusive} coverage={score.coverage:.0%}"
+        )
+        for t in report.trials:
+            console.print(
+                f"  trial {t.trial_index}: {t.verdict.value} ({t.fidelity.value}) "
+                f"seed={t.seed}"
+            )
+
+        if save_baseline_dir:
+            path = save_baseline(save_baseline_dir, report)
+            console.print(f"[green]Baseline saved → {path}[/green]")
+
+        if baseline_dir:
+            result = compare_baseline(baseline_dir, report, fail_on=fail_on)
+            console.print(
+                Panel(
+                    f"{result.decision.value} (exit {result.exit_code})\n{result.summary}",
+                    title=f"Baseline gate — fail-on={fail_on}",
+                )
+            )
+            raise typer.Exit(result.exit_code)
+
+    _run(run())
+
+
 if __name__ == "__main__":
     app()

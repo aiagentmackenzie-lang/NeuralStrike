@@ -34,6 +34,7 @@ dependencies = [
     "pydantic-settings>=2.0",
     "httpx",
     "python-dotenv",
+    "jsonschema>=4",
 ]
 
 [project.optional-dependencies]
@@ -85,7 +86,7 @@ no_implicit_optional = true
 files = ["src/neuralstrike"]
 
 [[tool.mypy.overrides]]
-module = ["litellm", "ollama"]
+module = ["litellm", "ollama", "jsonschema"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

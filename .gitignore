@@ -33,3 +33,6 @@ htmlcov/
 
 # Local state
 .neuralstrike/
+
+# Run transcripts (seed/temperature-pinned trial records)
+runs/
