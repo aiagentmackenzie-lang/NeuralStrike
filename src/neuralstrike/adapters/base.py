@@ -85,13 +85,42 @@ class TargetAdapter(ABC):
         history: tuple[Message, ...] = (),
         canary_tools: tuple[CanaryTool, ...] = (),
         trace: TraceLog | None = None,
+        delivery_channel: str | None = None,
+        delivery_marker: str | None = None,
     ) -> SutResponse:
-        """Drive one turn against the SUT; return observed behaviour."""
+        """Drive one turn against the SUT; return observed behaviour.
+
+        ``delivery_channel`` / ``delivery_marker`` (Phase 2): when both are
+        set, the adapter inspects the messages it is about to send, scans
+        each channel for ``delivery_marker``, and records a
+        :class:`~neuralstrike.oracles.tool_harness.DeliveryRecord` on
+        ``trace``. The exit gate verifies indirect-injection vectors by this
+        adapter trace, never by reading the prompt.
+        """
         raise NotImplementedError
 
     async def close(self) -> None:
         """Release transport resources. Override if the adapter holds a client."""
         return None
+
+    @staticmethod
+    def record_delivery_trace(
+        trace: TraceLog | None,
+        *,
+        channel: str,
+        marker: str,
+        content: str,
+    ) -> None:
+        """Record a delivery record iff the marker is (not) present in ``content``.
+
+        Helpers used by adapters that build role-tagged messages: after the
+        adapter constructs a channel's content, it calls this to confirm the
+        injection marker landed there. The Phase 2 contract: the adapter
+        surfaces the channel distinctly; the test reads the trace.
+        """
+        if trace is None or not marker:
+            return
+        trace.record_delivery(channel, marker, present=marker in content)
 
     @staticmethod
     def canary_tools_as_schemas(canary_tools: tuple[CanaryTool, ...]) -> tuple[ToolSchema, ...]:

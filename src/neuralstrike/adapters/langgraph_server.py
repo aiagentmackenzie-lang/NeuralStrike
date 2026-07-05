@@ -78,8 +78,11 @@ class LangGraphServerAdapter(TargetAdapter):
         history: tuple[Message, ...] = (),
         canary_tools: tuple[Any, ...] = (),
         trace: Any = None,
+        delivery_channel: str | None = None,
+        delivery_marker: str | None = None,
     ) -> SutResponse:
         _ = tools, canary_tools, trace
+        _ = delivery_channel, delivery_marker  # Phase 2 delivery trace recorded by OpenAI/LangGraph adapters.
         try:
             thread_id = await self._create_thread()
         except httpx.HTTPError as exc:

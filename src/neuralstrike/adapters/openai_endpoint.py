@@ -164,8 +164,17 @@ class OpenAIEndpointAdapter(TargetAdapter):
         history: tuple[Message, ...] = (),
         canary_tools: tuple[CanaryTool, ...] = (),
         trace: TraceLog | None = None,
+        delivery_channel: str | None = None,
+        delivery_marker: str | None = None,
     ) -> SutResponse:
         messages = self._messages(prompt, system_prompt, history)
+        # Phase 2: surface the indirect-injection channel via adapter trace.
+        # The adapter scans each role-tagged message for the marker and records
+        # a DeliveryRecord. The exit gate asserts the marker is present in the
+        # declared channel (and absent elsewhere) by reading this trace — never
+        # by reading the prompt.
+        if delivery_channel is not None and delivery_marker:
+            self._record_delivery(messages, trace, delivery_channel, delivery_marker)
         tools_payload = self._build_tools_payload(tools, canary_tools)
         canary_by_name = {ct.name: ct for ct in canary_tools}
         all_tool_calls: list[ToolCall] = []
@@ -225,6 +234,47 @@ class OpenAIEndpointAdapter(TargetAdapter):
             traces=tuple(trace.to_list()) if trace is not None else (),
             error=error,
         )
+
+    @staticmethod
+    def _record_delivery(
+        messages: list[dict[str, Any]],
+        trace: TraceLog | None,
+        declared_channel: str,
+        marker: str,
+    ) -> None:
+        """Scan role-tagged messages for the marker; record one DeliveryRecord
+        per channel so the trace shows where the marker landed.
+
+        Role -> channel mapping:
+          system -> system_prompt
+          user   -> user_message
+          tool   -> tool_result  (a tool-result channel; the adapter also
+                    distinguishes a retrieved_document tool-result by the
+                    tool ``name`` when the message carries one)
+          assistant (with tool_calls) -> memory (assistant-stored context)
+        """
+        if trace is None:
+            return
+        for m in messages:
+            role = m.get("role", "")
+            content = m.get("content") or ""
+            if not isinstance(content, str):
+                content = str(content)
+            channel = {
+                "system": "system_prompt",
+                "user": "user_message",
+                "tool": "tool_result",
+                "assistant": "memory",
+            }.get(role, role)
+            # Distinguish a retrieved_document tool-result from a plain one
+            # by the tool name carried on the message (the indirect harness
+            # names the retrieval tool ``search_docs``).
+            if role == "tool":
+                name = m.get("name", "")
+                if name == "search_docs":
+                    channel = "retrieved_document"
+            present = marker in content
+            trace.record_delivery(channel, marker, present=present)
 
 
 class AdapterTransportError(Exception):

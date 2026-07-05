@@ -169,9 +169,14 @@ class LangGraphAdapter(TargetAdapter):
         history: tuple[Message, ...] = (),
         canary_tools: tuple[Any, ...] = (),
         trace: Any = None,
+        delivery_channel: str | None = None,
+        delivery_marker: str | None = None,
     ) -> SutResponse:
         _ = tools, canary_tools, trace  # LangGraph owns its own tool wiring.
         state = self.state_builder(prompt, system_prompt, history)
+        # Phase 2: surface the indirect-injection channel via adapter trace.
+        if delivery_channel is not None and delivery_marker and trace is not None:
+            self._record_delivery(state.get("messages", []), trace, delivery_channel, delivery_marker)
         try:
             graph = self.graph
             if hasattr(graph, "ainvoke"):
@@ -192,3 +197,29 @@ class LangGraphAdapter(TargetAdapter):
             tool_calls=tuple(tool_calls),
             traces=tuple(traces),
         )
+
+    @staticmethod
+    def _record_delivery(
+        messages: list[Any],
+        trace: Any,
+        declared_channel: str,
+        marker: str,
+    ) -> None:
+        """Scan state messages for the marker; record one DeliveryRecord per channel."""
+        for m in messages:
+            role = m.get("role", "") if isinstance(m, dict) else getattr(m, "role", "")
+            content = (m.get("content") or "") if isinstance(m, dict) else (getattr(m, "content", "") or "")
+            if not isinstance(content, str):
+                content = str(content)
+            channel = {
+                "system": "system_prompt",
+                "user": "user_message",
+                "tool": "tool_result",
+                "assistant": "memory",
+            }.get(role, role)
+            if role == "tool":
+                name = m.get("name", "") if isinstance(m, dict) else getattr(m, "name", "")
+                if name == "search_docs":
+                    channel = "retrieved_document"
+            present = marker in content
+            trace.record_delivery(channel, marker, present=present)

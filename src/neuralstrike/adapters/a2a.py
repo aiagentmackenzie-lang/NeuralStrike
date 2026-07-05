@@ -221,8 +221,11 @@ class A2AAdapter(TargetAdapter):
         history: tuple[Message, ...] = (),
         canary_tools: tuple[Any, ...] = (),
         trace: Any = None,
+        delivery_channel: str | None = None,
+        delivery_marker: str | None = None,
     ) -> SutResponse:
         _ = tools, canary_tools, trace, system_prompt, history  # A2A carries text only in Phase 1.
+        _ = (delivery_channel, delivery_marker)  # Phase 2 delivery trace recorded by OpenAI/LangGraph.
         try:
             result = await self.send_message(prompt)
         except A2AError as exc:
