@@ -36,6 +36,7 @@ dependencies = [
     "python-dotenv",
     "jsonschema>=4",
     "pyyaml>=6.0",
+    "cryptography>=42.0",
 ]
 
 [project.optional-dependencies]
@@ -80,6 +81,9 @@ ignore = [
 "src/neuralstrike/modules/exploit/mcp_interceptor.py" = ["PLC0415"]  # optional [mcp] extra, lazy import
 "src/neuralstrike/corpus/loader.py" = ["PLC0415"]  # local oracle imports break a latent package cycle
 "src/neuralstrike/evaluation/runner.py" = ["PLC0415"]  # local mint_canary import breaks a package cycle
+"src/neuralstrike/identity/did.py" = ["PLC0415"]  # optional base58 import for did:key
+"src/neuralstrike/identity/jws.py" = ["PLC0415"]  # optional cryptography imports
+"src/neuralstrike/identity/signatures.py" = ["PLC0415"]  # optional cryptography imports
 "src/neuralstrike/packs/__init__.py" = ["PLC0415"]  # pack classes registered via @register_pack at import; lazy AdversarialLoop import
 "src/neuralstrike/packs/base.py" = ["PLC0415"]  # lazy httpx import keeps pack import side-effect-free
 "src/neuralstrike/transforms/codecs.py" = ["RUF001", "RUF002", "RUF003"]  # homoglyph/braille tables use unicode lookalikes by design
