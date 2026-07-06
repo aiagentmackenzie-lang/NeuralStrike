@@ -114,7 +114,7 @@ class TestEvaluateCommand:
     def test_runs_and_saves_baseline(self, runner: CliRunner, tmp_path: Path) -> None:
         report = _report(_resisted_trial())
 
-        async def fake_run(self, probe, *, trials=1, judge_model=None, attacker_model=None, persist=True):
+        async def fake_run(self, probe, *, trials=1, judge_model=None, attacker_model=None, persist=True, intensity="standard"):
             return report
 
         from neuralstrike.core.runtime import ResolvedModels
@@ -148,7 +148,7 @@ class TestEvaluateCommand:
         save_baseline(tmp_path / "bl", _report(_resisted_trial()))
         report = _report(_succeeded_trial())
 
-        async def fake_run(self, probe, *, trials=1, judge_model=None, attacker_model=None, persist=True):
+        async def fake_run(self, probe, *, trials=1, judge_model=None, attacker_model=None, persist=True, intensity="standard"):
             return report
 
         from neuralstrike.core.runtime import ResolvedModels
@@ -180,7 +180,7 @@ class TestEvaluateCommand:
         save_baseline(tmp_path / "bl", _report(_succeeded_trial()))
         report = _report(_succeeded_trial())
 
-        async def fake_run(self, probe, *, trials=1, judge_model=None, attacker_model=None, persist=True):
+        async def fake_run(self, probe, *, trials=1, judge_model=None, attacker_model=None, persist=True, intensity="standard"):
             return report
 
         from neuralstrike.core.runtime import ResolvedModels
@@ -212,7 +212,7 @@ class TestEvaluateCommand:
         save_baseline(tmp_path / "bl", _report(_resisted_trial()))
         report = _report(_resisted_trial())
 
-        async def fake_run(self, probe, *, trials=1, judge_model=None, attacker_model=None, persist=True):
+        async def fake_run(self, probe, *, trials=1, judge_model=None, attacker_model=None, persist=True, intensity="standard"):
             return report
 
         from neuralstrike.core.runtime import ResolvedModels
@@ -237,6 +237,49 @@ class TestEvaluateCommand:
                 ],
             )
         assert result.exit_code == 0, result.stdout
+
+
+class TestEvaluateIntensityGate:
+    def test_intensity_mismatch_exits_3(self, runner: CliRunner, tmp_path: Path) -> None:
+        """--intensity pins the profile; a mismatched baseline is not comparable (exit 3)."""
+        from neuralstrike.evaluation.baseline import save_baseline
+        from neuralstrike.evaluation.runner import RunMeta, RunReport
+
+        # Baseline pinned at intensity='adaptive'.
+        bl_meta = RunMeta("r", "asi01-canary-leak", 0, 1, 0.0, 0.7, "t", intensity="adaptive")
+        save_baseline(
+            tmp_path / "bl",
+            RunReport(meta=bl_meta, trials=(_resisted_trial(),), score=None),
+        )
+
+        report = _report(_resisted_trial())  # default intensity='standard'
+
+        async def fake_run(self, probe, *, trials=1, judge_model=None, attacker_model=None, persist=True, intensity="standard"):
+            return report
+
+        from neuralstrike.core.runtime import ResolvedModels
+
+        fake_resolved = ResolvedModels(
+            attacker_model="deepseek-r1",
+            judge_model="deepseek-v3.1:671b-cloud",
+            judge_fell_back=False,
+            available=("deepseek-r1", "deepseek-v3.1:671b-cloud"),
+        )
+        with patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=fake_resolved)), \
+             patch("neuralstrike.evaluation.runner.TrialRunner.run", fake_run), \
+             patch("neuralstrike.evaluation.probes.canary_extraction_probe"):
+            result = runner.invoke(
+                app,
+                [
+                    "evaluate", "--target", "victim", "--trials", "1",
+                    "--baseline-dir", str(tmp_path / "bl"),
+                    "--fail-on", "regression",
+                    "--intensity", "standard",
+                    "--run-dir", str(tmp_path / "runs"),
+                ],
+            )
+        assert result.exit_code == 3, result.stdout
+        assert "intensity mismatch" in result.stdout
 
 
 class TestRuntimeReachability:

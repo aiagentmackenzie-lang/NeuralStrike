@@ -132,6 +132,7 @@ def save_baseline(directory: str | Path, report: RunReport) -> Path:
         "scenario_id": report.meta.scenario_id,
         "base_seed": report.meta.base_seed,
         "trials": report.meta.trials,
+        "intensity": report.meta.intensity,
         "verdicts": sigs,
         "succeeded_severities": severities,
         "score": {
@@ -187,6 +188,27 @@ def compare_baseline(
             summary=(
                 f"current run has {report.meta.trials} trials but baseline pinned at "
                 f"{baseline_trials}; refusing to compare a truncated scan"
+            ),
+        )
+
+    # Intensity mismatch refusal: a baseline pinned at one probe profile
+    # (e.g. 'adaptive') is not comparable to a run at a different profile
+    # ('standard') — the ASR means different things. Backward compatible:
+    # a baseline with no recorded intensity skips the check.
+    baseline_intensity = baseline.get("intensity")
+    if (
+        isinstance(baseline_intensity, str)
+        and baseline_intensity
+        and report.meta.intensity
+        and report.meta.intensity != baseline_intensity
+    ):
+        return CompareResult(
+            decision=CompareDecision.NOT_COMPARABLE,
+            exit_code=3,
+            summary=(
+                f"intensity mismatch: baseline pinned at {baseline_intensity!r}, "
+                f"current run is {report.meta.intensity!r}; refusing to compare "
+                f"runs at different probe profiles"
             ),
         )
 

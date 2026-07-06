@@ -183,7 +183,7 @@ class TestCalibrationCLIInformational:
         runner = CliRunner()
         report = self._report()
 
-        async def fake_run(self, probe, *, trials=1, judge_model=None, attacker_model=None, persist=True):
+        async def fake_run(self, probe, *, trials=1, judge_model=None, attacker_model=None, persist=True, intensity="standard"):
             return report
 
         from neuralstrike.core.runtime import ResolvedModels
@@ -212,7 +212,7 @@ class TestCalibrationCLIInformational:
         runner = CliRunner()
         report = self._report()
 
-        async def fake_run(self, probe, *, trials=1, judge_model=None, attacker_model=None, persist=True):
+        async def fake_run(self, probe, *, trials=1, judge_model=None, attacker_model=None, persist=True, intensity="standard"):
             return report
 
         from neuralstrike.core.runtime import ResolvedModels

@@ -611,6 +611,10 @@ def evaluate(
         None,
         help="Cohort JSON for a relative z-score (informational; never changes exit code).",
     ),
+    intensity: str = typer.Option(
+        "standard",
+        help="Probe profile label pinned into the baseline (e.g. standard|adaptive|k3-instrumented).",
+    ),
 ) -> None:
     """Run a k-trial canary-extraction probe and (optionally) gate on a baseline.
 
@@ -666,6 +670,7 @@ def evaluate(
             trials=trials,
             judge_model=judge_model,
             attacker_model=attacker_model,
+            intensity=intensity,
         )
         score = report.score
         assert score is not None
@@ -742,6 +747,10 @@ def scan(
     save_baseline_dir: str | None = typer.Option(None, help="Directory to save the baseline into."),
     baseline_dir: str | None = typer.Option(None, help="Directory to compare against (gate)."),
     fail_on: str = typer.Option("regression", help="Gate policy: never|vuln|regression."),
+    intensity: str = typer.Option(
+        "standard",
+        help="Probe profile label pinned into the baseline (gates intensity-mismatch refusal).",
+    ),
 ) -> None:
     """Drive a real target via an adapter and score behaviour (Phase 1).
 
@@ -807,7 +816,7 @@ def scan(
             category="asi05-tool-poisoning",
         )
         runner = TrialRunner(base_seed=seed, run_dir=run_dir)
-        report = await runner.run(probe_obj, trials=trials)
+        report = await runner.run(probe_obj, trials=trials, intensity=intensity)
         score = report.score
         assert score is not None
         console.print(Panel(score.headline, title=f"Scan {report.meta.run_id} — {scenario_id}"))
@@ -1060,6 +1069,10 @@ def pack(
     save_baseline_dir: str | None = typer.Option(None, help="Directory to save the baseline into."),
     baseline_dir: str | None = typer.Option(None, help="Directory to compare against (gate)."),
     fail_on: str = typer.Option("regression", help="Gate policy: never|vuln|regression."),
+    intensity: str = typer.Option(
+        "standard",
+        help="Probe profile label pinned into the baseline (gates intensity-mismatch refusal).",
+    ),
 ) -> None:
     """Run a benchmark pack (HarmBench/JailbreakBench/CyberSecEval/local) against a SUT.
 
@@ -1140,7 +1153,11 @@ def pack(
                 p, target, target_type, llm=mgr, judge_model=judge_model
             )
             r = await runner.run(
-                probe_obj, trials=trials, judge_model=judge_model, attacker_model=attacker_model
+                probe_obj,
+                trials=trials,
+                judge_model=judge_model,
+                attacker_model=attacker_model,
+                intensity=intensity,
             )
             reports.append(r)
 

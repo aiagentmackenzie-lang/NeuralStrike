@@ -274,6 +274,74 @@ class TestBaseline:
         assert result.exit_code == 3
         assert result.decision.value == "not_comparable"
 
+    def test_intensity_mismatch_refused(self, tmp_path: Path) -> None:
+        from neuralstrike.evaluation.runner import RunMeta
+
+        # Baseline pinned at intensity='adaptive'.
+        meta_base = RunMeta("r", "s1", 0, 1, 0.0, 0.7, "t", intensity="adaptive")
+        save_baseline(
+            tmp_path / "b",
+            RunReport(meta=meta_base, trials=(_trial(scenario_id="s1", verdict=Verdict.RESISTED),), score=None),
+        )
+        # Current run at intensity='standard' -> not comparable, exit 3.
+        meta_now = RunMeta("r", "s1", 0, 1, 0.0, 0.7, "t", intensity="standard")
+        report = RunReport(
+            meta=meta_now,
+            trials=(_trial(scenario_id="s1", verdict=Verdict.SUCCEEDED),),
+            score=score_trials([_trial(scenario_id="s1", verdict=Verdict.SUCCEEDED)]),
+        )
+        result = compare_baseline(tmp_path / "b", report)
+        assert result.exit_code == 3
+        assert result.decision.value == "not_comparable"
+        assert "intensity mismatch" in result.summary
+
+    def test_intensity_match_is_comparable(self, tmp_path: Path) -> None:
+        from neuralstrike.evaluation.runner import RunMeta
+
+        meta_base = RunMeta("r", "s1", 0, 1, 0.0, 0.7, "t", intensity="adaptive")
+        save_baseline(
+            tmp_path / "b",
+            RunReport(meta=meta_base, trials=(_trial(scenario_id="s1", verdict=Verdict.RESISTED),), score=None),
+        )
+        meta_now = RunMeta("r", "s1", 0, 1, 0.0, 0.7, "t", intensity="adaptive")
+        report = RunReport(
+            meta=meta_now,
+            trials=(_trial(scenario_id="s1", verdict=Verdict.SUCCEEDED),),
+            score=score_trials([_trial(scenario_id="s1", verdict=Verdict.SUCCEEDED)]),
+        )
+        # Same intensity -> regression gate fires normally (exit 4).
+        result = compare_baseline(tmp_path / "b", report, fail_on="regression")
+        assert result.exit_code == 4
+
+    def test_old_baseline_without_intensity_skips_check(self, tmp_path: Path) -> None:
+        """Backward compat: a baseline with no recorded intensity skips the refusal."""
+        # Hand-craft a baseline JSON with no 'intensity' key (an old Phase-0 baseline).
+        import json
+
+        bl_dir = tmp_path / "b"
+        bl_dir.mkdir()
+        (bl_dir / "s1.baseline.json").write_text(
+            json.dumps(
+                {
+                    "scenario_id": "s1", "base_seed": 0, "trials": 1,
+                    "verdicts": {"s1": "resisted"},
+                    "succeeded_severities": {}, "score": {},
+                }
+            ),
+            encoding="utf-8",
+        )
+        from neuralstrike.evaluation.runner import RunMeta
+
+        meta_now = RunMeta("r", "s1", 0, 1, 0.0, 0.7, "t", intensity="standard")
+        report = RunReport(
+            meta=meta_now,
+            trials=(_trial(scenario_id="s1", verdict=Verdict.SUCCEEDED),),
+            score=score_trials([_trial(scenario_id="s1", verdict=Verdict.SUCCEEDED)]),
+        )
+        # No intensity in baseline -> refusal skipped -> regression gate fires (exit 4).
+        result = compare_baseline(tmp_path / "b", report, fail_on="regression")
+        assert result.exit_code == 4
+
     def test_invalid_fail_on_raises(self, tmp_path: Path) -> None:
         with pytest.raises(BaselineError):
             compare_baseline(tmp_path / "b", self._report(), fail_on="bogus")

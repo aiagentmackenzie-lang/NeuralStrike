@@ -101,6 +101,13 @@ class RunMeta:
     started_at: str
     judge_model: str | None = None
     attacker_model: str | None = None
+    intensity: str = "standard"
+    """A label pinning the probe profile (e.g. 'standard', 'adaptive', 'k3-instrumented').
+
+    The baseline gate refuses to compare runs whose ``intensity`` differs —
+    a baseline pinned at one probe profile is not comparable to a run at a
+    different profile (the ASR means different things). Backward compatible:
+    a baseline with no recorded intensity skips the check."""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -113,6 +120,7 @@ class RunMeta:
             "started_at": self.started_at,
             "judge_model": self.judge_model,
             "attacker_model": self.attacker_model,
+            "intensity": self.intensity,
         }
 
 
@@ -241,6 +249,7 @@ class TrialRunner:
         judge_model: str | None = None,
         attacker_model: str | None = None,
         persist: bool = True,
+        intensity: str = "standard",
     ) -> RunReport:
         """Run ``probe`` for ``trials`` trials; return the scored report."""
         if trials < 1:
@@ -257,6 +266,7 @@ class TrialRunner:
             started_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             judge_model=judge_model,
             attacker_model=attacker_model,
+            intensity=intensity,
         )
 
         run_path: Path | None = None
