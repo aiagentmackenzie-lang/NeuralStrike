@@ -11,8 +11,9 @@ The gate (from PRODUCTION_ROADMAP.md §Phase 2):
 4. ruff + mypy --strict + pytest --cov-fail-under=85 green (enforced by CI;
    this module asserts the corpus-run + report properties the gate names).
 
-These tests run the FULL corpus (43 scenarios) against the bundled
-vulnerable LangGraph fixture so the gate is honest, not a sample.
+These tests run the FULL corpus against the bundled vulnerable LangGraph
+fixture so the gate is honest, not a sample. The corpus size is taken
+from ``load_corpus_dir()`` so Phase-5 additions do not break the gate.
 """
 
 from __future__ import annotations
@@ -69,12 +70,15 @@ def full_corpus_run():
 
 class TestExitGate1SarifMapsEveryFinding:
     def test_full_corpus_run_produces_sarif(self, full_corpus_run) -> None:
+        expected_scenarios = len(load_corpus_dir())
         sarif = to_sarif(full_corpus_run)
         doc = json.loads(sarif)
         run = doc["runs"][0]
-        # The full corpus is 43 scenarios, so 43 rules.
+        # The full corpus size is dynamic; one SARIF rule per scenario.
         rules = run["tool"]["driver"]["rules"]
-        assert len(rules) == 43, f"expected 43 rules, got {len(rules)}"
+        assert len(rules) == expected_scenarios, (
+            f"expected {expected_scenarios} rules, got {len(rules)}"
+        )
         # Every rule maps to an ASI/LLM ID + ATLAS + compliance controls.
         for rule in rules:
             props = rule["properties"]

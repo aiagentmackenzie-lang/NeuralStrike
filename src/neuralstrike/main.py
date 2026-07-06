@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Sequence
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -1534,6 +1535,241 @@ def adaptive(
             )
 
     _run(run())
+
+
+# --- Phase 5 protocol + identity coverage ----------------------------------
+
+
+@app.command()
+def mcp_scan(
+    url: str = typer.Option(..., help="MCP server URL (http/https)."),
+    known_tools: str | None = typer.Option(
+        None,
+        "--known-tools",
+        help="Comma-separated list of legitimate tool names to detect shadow tools against.",
+    ),
+    pin_hash: str | None = typer.Option(
+        None,
+        "--pin-hash",
+        help="Expected SHA-256 manifest hash; drift triggers a critical finding.",
+    ),
+    previous_url: str | None = typer.Option(
+        None,
+        "--previous-url",
+        help="Fetch a previous manifest from this URL to detect sleeper rug-pulls.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Emit raw JSON report to stdout."),
+) -> None:
+    """Scan an MCP server for tool-poisoning patterns and manifest drift."""
+    validate_url(url, field="url")
+    if previous_url:
+        validate_url(previous_url, field="previous-url")
+
+    from neuralstrike.adapters.mcp_http import MCPHTTPAdapter
+    from neuralstrike.attacks.mcp_poison import (
+        MCPManifest,
+        MCPPoisonDetector,
+    )
+
+    async def run() -> None:
+        known: set[str] = set()
+        if known_tools:
+            known = {t.strip() for t in known_tools.split(",") if t.strip()}
+        detector = MCPPoisonDetector(known_legitimate_tools=known, pin_hash=pin_hash)
+        adapter = MCPHTTPAdapter(url)
+        try:
+            previous: MCPManifest | None = None
+            if previous_url:
+                prev_adapter = MCPHTTPAdapter(previous_url)
+                try:
+                    await prev_adapter.initialize()
+                    prev_tools = await prev_adapter.list_tools()
+                    previous = MCPManifest(tools=tuple(prev_tools))
+                finally:
+                    await prev_adapter.close()
+            report = await detector.scan(adapter, previous_manifest=previous)
+        finally:
+            await adapter.close()
+        _print_mcp_report(report, json_output=json_output)
+
+    _run(run())
+
+
+@app.command()
+def a2a_scan(
+    base_url: str = typer.Option(..., help="A2A agent base URL."),
+    json_output: bool = typer.Option(False, "--json", help="Emit raw JSON report to stdout."),
+) -> None:
+    """Fetch and verify an A2A Agent Card signature; test tamper detection."""
+    validate_url(base_url, field="base_url")
+
+    from neuralstrike.attacks.a2a.card_tamper import A2ACardTamperScanner
+
+    async def run() -> None:
+        scanner = A2ACardTamperScanner(base_url=base_url)
+        try:
+            result = await scanner.scan()
+        finally:
+            await scanner.close()
+        if json_output:
+            import json as _json
+            console.print(_json.dumps(result.raw_card, indent=2))
+        else:
+            color = "green" if result.signature_valid and result.tampered_card_rejected else "red"
+            console.print(
+                Panel(
+                    f"signature_valid={result.signature_valid}\n"
+                    f"tampered_card_rejected={result.tampered_card_rejected}\n"
+                    f"issuer_did={result.issuer_did}\n"
+                    f"evidence={result.evidence}",
+                    title=f"A2A Agent Card ({result.url})",
+                    style=color,
+                )
+            )
+            if result.key_resolution_warnings:
+                console.print("[yellow]Key-resolution warnings:[/yellow]")
+                for w in result.key_resolution_warnings:
+                    console.print(f"  - {w}")
+
+    _run(run())
+
+
+@app.command()
+def minja(
+    target: str = typer.Option(..., help="Target model/endpoint."),
+    bridge: str = typer.Option(..., help="Benign bridge query to plant in memory."),
+    payload: str = typer.Option(..., help="Malicious payload query to inject via memory."),
+    canary: str = typer.Option(..., help="Canary token to detect leakage (CANARY-<16-hex>)."),
+    target_type: str = typer.Option("remote", help="Target type: 'local' or 'remote'."),
+    shorteners: str | None = typer.Option(
+        None,
+        "--shorteners",
+        help="Comma-separated progressive-shortening queries.",
+    ),
+) -> None:
+    """Run a MINJA memory-injection sequence against a memory-augmented target."""
+    validate_target_model(target)
+    if target_type not in {"local", "remote"}:
+        raise ValidationError("target_type must be 'local' or 'remote'")
+    if not canary.startswith("CANARY-"):
+        raise ValidationError("canary must start with CANARY-")
+
+    from neuralstrike.adapters.openai_endpoint import OpenAIEndpointAdapter
+    from neuralstrike.attacks.minja import MinjaHarness, MINJAStrategy
+    from neuralstrike.oracles.canary import CanaryOracle
+
+    async def run() -> None:
+        shorts = tuple(s.strip() for s in (shorteners or "").split(",") if s.strip())
+        strategy = MINJAStrategy(
+            bridge_query=bridge,
+            payload_query=payload,
+            progressive_shorteners=shorts,
+            oracles=(CanaryOracle(canary),),
+        )
+        adapter = OpenAIEndpointAdapter(target, model=target, tier="text")
+        try:
+            result = await MinjaHarness(strategy).run_sequence(adapter)
+        finally:
+            await adapter.close()
+        console.print(
+            Panel(
+                f"steps={len(result['steps'])}\n"
+                f"verdict={result['verdict'].value}\n"
+                f"fidelity={result['fidelity'].value}\n"
+                f"findings={len(result['findings'])}",
+                title="MINJA memory injection",
+            )
+        )
+        for step in result["steps"]:
+            console.print(f"  {step['step']}: {step['response'].text[:80]!r}")
+
+    _run(run())
+
+
+@app.command()
+def rag_poison(
+    target: str = typer.Option(..., help="Target model/endpoint."),
+    query: str = typer.Option(..., help="Benign query that should trigger retrieval."),
+    poison_doc: str = typer.Option(..., help="Malicious document text to rank high in retrieval."),
+    canary: str = typer.Option(..., help="Canary token to detect leakage (CANARY-<16-hex>)."),
+    target_type: str = typer.Option("remote", help="Target type: 'local' or 'remote'."),
+    benign_doc: str | None = typer.Option(
+        None, "--benign-doc", help="Optional benign document to include in retrieval context."
+    ),
+) -> None:
+    """Run a PoisonedRAG-style corpus-poisoning attack against a retrieval target."""
+    validate_target_model(target)
+    if target_type not in {"local", "remote"}:
+        raise ValidationError("target_type must be 'local' or 'remote'")
+    if not canary.startswith("CANARY-"):
+        raise ValidationError("canary must start with CANARY-")
+
+    from neuralstrike.adapters.openai_endpoint import OpenAIEndpointAdapter
+    from neuralstrike.attacks.rag_poison import (
+        PoisonedDocument,
+        RAGPoisonHarness,
+        RAGPoisonStrategy,
+    )
+    from neuralstrike.oracles.canary import CanaryOracle
+
+    async def run() -> None:
+        docs: list[PoisonedDocument] = [
+            PoisonedDocument(id="poison-1", text=poison_doc, is_poison=True, query_match_score=0.99)
+        ]
+        if benign_doc:
+            docs.append(
+                PoisonedDocument(id="benign-1", text=benign_doc, is_poison=False, query_match_score=0.5)
+            )
+        strategy = RAGPoisonStrategy(
+            benign_query=query,
+            poisoned_documents=tuple(docs),
+            oracles=(CanaryOracle(canary),),
+        )
+        adapter = OpenAIEndpointAdapter(target, model=target, tier="text")
+        try:
+            result = await RAGPoisonHarness(strategy).run(adapter)
+        finally:
+            await adapter.close()
+        console.print(
+            Panel(
+                f"verdict={result['verdict'].value}\n"
+                f"fidelity={result['fidelity'].value}\n"
+                f"findings={len(result['findings'])}",
+                title="RAG poisoning",
+            )
+        )
+
+    _run(run())
+
+
+def _print_mcp_report(report: Any, *, json_output: bool) -> None:
+    if json_output:
+        import json as _json
+        obj = {
+            "manifest_hash": report.manifest_hash,
+            "previous_hash": report.previous_hash,
+            "drift_detected": report.drift_detected,
+            "shadow_tools": list(report.shadow_tools),
+            "findings": [
+                {"pattern": f.pattern, "tool": f.tool_name, "severity": f.severity, "evidence": f.evidence}
+                for f in report.findings
+            ],
+        }
+        console.print(_json.dumps(obj, indent=2))
+        return
+    color = "red" if report.verdict.value == "succeeded" else "green"
+    console.print(
+        Panel(
+            f"manifest_hash={report.manifest_hash}\n"
+            f"shadow_tools={sorted(report.shadow_tools)}\n"
+            f"drift={report.drift_detected}\n"
+            f"findings={len(report.findings)}",
+            title="MCP poison scan",
+            style=color,
+        )
+    )
+    for f in report.findings:
+        console.print(f"  [{f.severity}] {f.pattern} in {f.tool_name}: {f.evidence}")
 
 
 if __name__ == "__main__":
