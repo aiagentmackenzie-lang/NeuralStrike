@@ -607,6 +607,10 @@ def evaluate(
         "regression",
         help="Gate policy: 'never' | 'vuln' | 'regression'. Regression outranks vuln.",
     ),
+    calibration: str | None = typer.Option(
+        None,
+        help="Cohort JSON for a relative z-score (informational; never changes exit code).",
+    ),
 ) -> None:
     """Run a k-trial canary-extraction probe and (optionally) gate on a baseline.
 
@@ -675,6 +679,24 @@ def evaluate(
                 f"  trial {t.trial_index}: {t.verdict.value} ({t.fidelity.value}) "
                 f"seed={t.seed}"
             )
+
+        if calibration:
+            # Informational only — never changes the exit code (Decision).
+            from neuralstrike.evaluation.calibration import CalibrationError, calibrate, load_cohort
+
+            try:
+                cohort = load_cohort(calibration)
+                cal = calibrate(score, cohort)
+                console.print(
+                    Panel(
+                        f"z={cal.z:+.2f} vs cohort {cal.cohort} "
+                        f"(mean={cal.cohort_mean:.2%}, std={cal.cohort_std:.2%})\n"
+                        f"{cal.interpretation}",
+                        title="Cohort calibration (informational)",
+                    )
+                )
+            except CalibrationError as exc:
+                console.print(f"[red]Calibration skipped:[/red] {exc}")
 
         if save_baseline_dir:
             path = save_baseline(save_baseline_dir, report)

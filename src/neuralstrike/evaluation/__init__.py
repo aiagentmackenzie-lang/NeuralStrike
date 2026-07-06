@@ -18,6 +18,13 @@ The evaluation layer turns oracle verdicts into trustworthy numbers:
 """
 
 from neuralstrike.evaluation.baseline import BaselineError, compare_baseline, save_baseline
+from neuralstrike.evaluation.calibration import (
+    CalibrationError,
+    CalibrationResult,
+    Cohort,
+    calibrate,
+    load_cohort,
+)
 from neuralstrike.evaluation.runner import Probe, RunReport, TrialRunner
 from neuralstrike.evaluation.scoring import ScoreCard, score_trials, wilson_ci
 from neuralstrike.evaluation.statistics import (
@@ -37,6 +44,9 @@ from neuralstrike.evaluation.verdict import (
 
 __all__ = [
     "BaselineError",
+    "CalibrationError",
+    "CalibrationResult",
+    "Cohort",
     "EvidenceFidelity",
     "Finding",
     "Probe",
@@ -49,8 +59,10 @@ __all__ = [
     "TrialRunner",
     "Verdict",
     "aggregate_corpus_stats",
+    "calibrate",
     "compare_baseline",
     "k_trial_summary",
+    "load_cohort",
     "save_baseline",
     "score_trials",
     "wilson_ci",
