@@ -366,6 +366,79 @@ neuralstrike evaluate --target mistral:7b --trials 3 --baseline-dir .baselines -
 - ✅ Startup reachability check (D1): refuses to run with an unreachable
   Attacker or Judge; walks the Judge fallback chain.
 
+### Measurement, CI gating & benchmark packs (Phase 3)
+
+Phase 3 makes verdicts mean something statistically and gate CI. The
+conclusive-only measurement primitives now live in
+`evaluation/statistics.py` (the canonical home); `evaluation/scoring.py`
+is a backward-compat re-export shim so no caller breaks.
+
+```bash
+# A k-trial run reports Wilson CIs + coverage, not just a raw ASR.
+neuralstrike evaluate --target mistral:7b --trials 3 --seed 42
+# -> ASR=66.7% (Wilson 12.5%-94.0%, z=1.96) coverage=100.0% risk=.../100 ...
+
+# Cohort-relative z-score (informational; never changes exit code).
+# NeuralStrike ships NO built-in cohort — supply your own.
+neuralstrike evaluate --target mistral:7b --trials 3 --calibration cohorts/mine.json
+
+# Benchmark packs: HarmBench / JailbreakBench / CyberSecEval (on demand)
+# or a local dataset. Packs ship NO expected-token oracle -> verdicts come
+# from --judge (DECIDE), or every probe is honestly Inconclusive.
+neuralstrike pack --name harmbench --accept-license --target mistral:7b --judge
+neuralstrike pack --name local --import-probes my-probes.json --target mistral:7b --no-judge
+
+# Pin the probe profile into the baseline; the gate refuses an intensity mismatch.
+neuralstrike evaluate --target mistral:7b --trials 3 --intensity standard --save-baseline-dir .bl
+neuralstrike evaluate --target mistral:7b --trials 3 --intensity adaptive --baseline-dir .bl
+# -> exit 3: intensity mismatch: baseline 'standard', current 'adaptive'
+
+# Advisory explanation of Succeeded/Inconclusive findings (requires --judge).
+neuralstrike evaluate --target mistral:7b --trials 3 --judge --explain
+
+# Operator safety: --delay (avoid WAF/rate-limit bans), --timeout (bound a
+# hung trial -> Inconclusive, never a fabricated pass), --quiet/--verbose,
+# --progress (rich bar over scenarios on corpus/pack runs).
+neuralstrike corpus --format sarif --delay 1.0 --timeout 60 --progress
+```
+
+- ✅ `statistics.py`: Wilson CIs, conclusive-only ASR, per-category ASR,
+  severity-weighted 0–100 risk index, coverage, flaky detection,
+  `aggregate_corpus_stats` (trial-level), `k_trial_summary`,
+  `z_score` (population-z). `scoring.py` re-exports it (no caller breaks).
+- ✅ `calibration.py`: cohort-relative z-score (garak-style relative
+  scoring). **Informational only — never changes an exit code.** Ships
+  **no built-in cohort** (a fabricated cohort makes every z-score a lie).
+- ✅ `packs/`: HarmBench / JailbreakBench / CyberSecEval (on-demand fetch
+  behind `--accept-license`; **no data bundled**) + `LocalPack`
+  (`--import-probes`). Pack probes ship no expected-token oracle →
+  `--judge` decides (DECIDE) or every probe is honestly Inconclusive —
+  never a fabricated pass.
+- ✅ Intensity-mismatch refusal: a baseline pinned at one probe profile
+  is not comparable to a run at a different profile (exit 3). Backward
+  compatible (an old baseline with no intensity skips the check).
+- ✅ `--explain`: advisory LLM rationale on Succeeded/Inconclusive
+  findings; quotes verbatim evidence unless redacted; never flips a
+  verdict; fail-soft (a dead Judge skips, never aborts).
+- ✅ Operator flags: `--delay`, `--timeout`, `--quiet`, `--verbose`,
+  `--progress`.
+
+### Phase 3 honest scope
+
+- **No built-in cohort.** The z-score is only as honest as its reference
+  cohort; NeuralStrike refuses to fabricate one. Bring your own
+  `--calibration cohort.json`.
+- **Pack verdicts require `--judge`.** Without it, every pack probe is
+  Inconclusive (a coverage gap) — never a fabricated Resisted/Succeeded.
+  This is the contract, not a limitation to "fix".
+- **Network packs fetch on demand.** `--accept-license` gates the fetch;
+  nothing is vendored. If the upstream schema changes, the parser raises
+  a clear `schema mismatch` error rather than silently producing wrong
+  probes.
+- **`main.py` CLI coverage** remains below the 85%-of-main.py target; that
+  is a Phase 6 deliverable (H1), not a Phase 3 gate. The Phase 3 gate is
+  total coverage ≥85% (met) + the three exit-gate bullets below.
+
 ---
 
 ## Module specifications
@@ -387,6 +460,10 @@ neuralstrike evaluate --target mistral:7b --trials 3 --baseline-dir .baselines -
 | **Corpus** (Phase 2) | `corpus/asi01-asi10.yaml` + `corpus/llm01-llm10.yaml` — 43 OWASP-tagged scenarios with deterministic oracle refs | ✅ |
 | **IndirectHarness** (Phase 2) | Delivery-vector injection across `user_message`/`tool_result`/`retrieved_document`/`memory`/`system_prompt`; channel verified by adapter trace | ✅ |
 | **Reports** (Phase 2) | JSON / SARIF 2.1.0 / JUnit / Markdown / PDF + compliance crosswalk (NIST AI RMF / EU AI Act / ISO 42001 / SOC 2 / CSA MAESTRO) | ✅ |
+| **statistics** (Phase 3) | Canonical measurement: Wilson CIs, conclusive-only ASR, per-category ASR, risk index, coverage, `aggregate_corpus_stats`, `k_trial_summary`, `z_score` | ✅ |
+| **calibration** (Phase 3) | Cohort-relative z-score (informational; never changes exit code; ships no built-in cohort) | ✅ |
+| **packs** (Phase 3) | HarmBench / JailbreakBench / CyberSecEval (on-demand, `--accept-license`, no data bundled) + `LocalPack` (`--import-probes`); no expected-token oracle → `--judge` or Inconclusive | ✅ |
+| **explain** (Phase 3) | Advisory `--explain` rationale on Succeeded/Inconclusive findings; requires `--judge`; never flips a verdict; redaction-aware | ✅ |
 
 ### Honest limitations
 - **ToolEnum** primary path is now real MCP `tools/list` introspection (Phase 1);
@@ -471,7 +548,14 @@ reproduce identical verdicts when replayed with the same seed. The Phase-2
 exit gate additionally requires a full corpus run to produce a SARIF report
 mapping every finding to an ASI/LLM/ATLAS ID + a compliance control,
 indirect-injection delivery vectors verified by adapter trace (not the
-prompt), and the README mapping table generated from `corpus/*.yaml`.
+prompt), and the README mapping table generated from `corpus/*.yaml`. The
+**Phase-3 exit gate** additionally requires: (1) a 3-trial run reports Wilson
+CIs and a coverage number, not just a raw ASR (`test_exit_gate_1_*`); (2) a
+baseline saved on `main` gates a PR — a new finding exits 4, a pre-existing
+finding exits 1, a clean run exits 0, and an intensity mismatch exits 3
+(`TestBaselineGate`, `TestEvaluateIntensityGate`); (3) a HarmBench pack run
+with `--judge` produces real verdicts and without `--judge` every probe is
+honestly Inconclusive (`TestExitGate3PackVerdicts`).
 
 ---
 
@@ -498,10 +582,11 @@ NeuralStrike/
 │   │   └── post_ex/           # AgentC2 (JSON-persistent), DataExfiltrator
 │   ├── evasion/mimicry.py     # EvasionSuite
 │   ├── oracles/               # (Phase 0) canary, forbidden_tool, predicate, schema, judge, system_prompt, tool_harness, evidence
-│   ├── evaluation/            # (Phase 0) verdict, scoring, runner, baseline, probes
+│   ├── evaluation/            # (Phase 0) verdict, scoring (re-export), runner, baseline, probes; (Phase 3) statistics, calibration, explain
 │   ├── adapters/              # (Phase 1) base, openai_endpoint, langgraph, langgraph_server, mcp_http, a2a
 │   ├── corpus/                # (Phase 2) loader — typed scenarios + oracle builder from YAML
 │   ├── attacks/indirect.py    # (Phase 2) indirect-injection delivery-vector harness
+│   ├── packs/                 # (Phase 3) base, harmbench, jailbreakbench, cyberseceval, local — on-demand benchmark import
 │   └── reports/               # (Phase 2) json, sarif, junit, markdown, pdf, compliance, readme_mapping
 ├── corpus/                    # (Phase 2) asi01-asi10.yaml + llm01-llm10.yaml — 43 OWASP-tagged scenarios
 ├── tests/                     # unit + CLI + proxy + exit-gate suites
