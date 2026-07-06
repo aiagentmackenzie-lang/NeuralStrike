@@ -305,3 +305,93 @@ class TestProbeSeedPinning:
         await runner.run(probe, trials=1)
         assert captured, "victim was not called"
         assert captured[0]["seed"] == _derive_seed(99, 0)
+
+
+class TestStatistics:
+    """Phase-3 canonical measurement module (statistics.py)."""
+
+    def test_z_score_basic(self) -> None:
+        from neuralstrike.evaluation.statistics import z_score
+
+        assert z_score(0.9, 0.5, 0.2) == pytest.approx(2.0)
+        # Degenerate cohort (zero std) -> no comparative signal, never infinity.
+        assert z_score(0.9, 0.5, 0.0) == 0.0
+        assert z_score(0.9, 0.5, -0.0) == 0.0
+
+    def test_aggregate_corpus_stats_flattens_trials(self) -> None:
+        from neuralstrike.evaluation.runner import RunMeta, RunReport
+        from neuralstrike.evaluation.statistics import aggregate_corpus_stats
+
+        meta = RunMeta("r", "s1", 0, 1, 0.0, 0.7, "t")
+        r1 = RunReport(
+            meta=meta,
+            trials=(_trial(index=0, verdict=Verdict.SUCCEEDED, scenario_id="s1"),),
+            score=score_trials([_trial(verdict=Verdict.SUCCEEDED)]),
+        )
+        r2 = RunReport(
+            meta=meta,
+            trials=(_trial(index=0, verdict=Verdict.RESISTED, scenario_id="s2"),),
+            score=score_trials([_trial(verdict=Verdict.RESISTED)]),
+        )
+        card = aggregate_corpus_stats([r1, r2])
+        # Two trials across two reports, one succeeded -> ASR 50%, coverage 100%.
+        assert card.total == 2
+        assert card.succeeded == 1
+        assert card.resisted == 1
+        assert card.asr == 0.5
+        assert card.coverage == 1.0
+
+    def test_k_trial_summary_reports_wilson_ci_and_coverage(self) -> None:
+        from neuralstrike.evaluation.statistics import k_trial_summary
+
+        # 3 trials: 2 succeeded, 1 resisted -> conclusive-only ASR 2/3.
+        card = score_trials(
+            [
+                _trial(index=0, verdict=Verdict.SUCCEEDED),
+                _trial(index=1, verdict=Verdict.SUCCEEDED),
+                _trial(index=2, verdict=Verdict.RESISTED),
+            ]
+        )
+        summary = k_trial_summary(card)
+        # The exit-gate contract: "Wilson CIs and a coverage number, not raw ASR."
+        assert "Wilson" in summary
+        assert "coverage=" in summary
+        assert "ASR=66.7%" in summary
+        assert card.asr_ci_low < card.asr < card.asr_ci_high
+
+    def test_exit_gate_1_three_trial_run_reports_ci_and_coverage(self) -> None:
+        """Phase-3 exit gate, bullet 1: a 3-trial run reports Wilson CIs + coverage.
+
+        Not just a raw ASR. This is the contract the gate asserts on a fresh
+        clone; it must hold for any k>=1 run with at least one conclusive trial.
+        """
+        trials = [
+            _trial(index=0, verdict=Verdict.SUCCEEDED),
+            _trial(index=1, verdict=Verdict.SUCCEEDED),
+            _trial(index=2, verdict=Verdict.RESISTED),
+        ]
+        card = score_trials(trials)
+        # Wilson CI is present and bracketed (not a point estimate).
+        assert 0.0 <= card.asr_ci_low <= card.asr <= card.asr_ci_high <= 1.0
+        assert card.asr_ci_low < card.asr_ci_high  # non-degenerate for n=3
+        # Coverage is reported and is 100% here (all conclusive).
+        assert card.coverage == 1.0
+        # The headline prints both, not just the raw ASR.
+        assert "CI" in card.headline and "coverage=" in card.headline
+
+    def test_run_statistics_headline_without_cohort(self) -> None:
+        from neuralstrike.evaluation.statistics import RunStatistics
+
+        card = score_trials([_trial(verdict=Verdict.RESISTED)])
+        stats = RunStatistics(score=card)
+        assert stats.z_score is None
+        # No fabricated cohort z-score: the "vs cohort" line is absent.
+        assert "vs cohort" not in stats.headline
+
+    def test_run_statistics_headline_with_cohort(self) -> None:
+        from neuralstrike.evaluation.statistics import RunStatistics
+
+        card = score_trials([_trial(verdict=Verdict.SUCCEEDED)])
+        stats = RunStatistics(score=card, z_score=1.5, cohort="my-cohort.json")
+        assert "z=+1.50" in stats.headline
+        assert "vs cohort my-cohort.json" in stats.headline
