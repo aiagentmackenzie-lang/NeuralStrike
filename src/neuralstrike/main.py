@@ -546,9 +546,24 @@ def evade(
     payload: str = typer.Option(..., help="The adversarial payload."),
     sample: str | None = typer.Option(None, help="Target's normal behavior sample (mimicry)."),
     persona: str = typer.Option("Senior Engineer", help="Persona for persona wrapping."),
-    technique: str = typer.Option("persona", help="Technique: 'persona', 'mimicry', 'steganographic'."),
+    hidden: str | None = typer.Option(
+        None, "--hidden",
+        help="Hidden message for the steganography technique (invisible-Unicode channel).",
+    ),
+    cover: str = typer.Option(
+        "All clear here.", "--cover",
+        help="Cover text the steganography technique hides the --hidden message inside.",
+    ),
+    technique: str = typer.Option(
+        "persona",
+        help="Technique: persona | mimicry | delimiter_wrap | steganography | steganographic (deprecated).",
+    ),
 ) -> None:
     """Apply stealth techniques to bypass anomaly detectors."""
+    valid = {"persona", "mimicry", "delimiter_wrap", "steganography", "steganographic"}
+    if technique not in valid:
+        raise ValidationError(f"--technique must be one of {sorted(valid)}")
+
     from neuralstrike.evasion.mimicry import EvasionSuite
 
     console.print(f"[yellow]Applying evasion technique '{technique}'...[/yellow]")
@@ -556,7 +571,23 @@ def evade(
     async def run() -> None:
         engine = EvasionSuite()
         if technique == "steganographic":
-            console.print(Panel(engine.steganographic_prompt(payload), title="Steganographic Result"))
+            # Deprecated alias for delimiter_wrap (the old misnomer).
+            console.print(
+                "[yellow]'steganographic' is a deprecated misnomer; use 'delimiter_wrap' "
+                "(the old method was delimiter obfuscation, not steganography). For real "
+                "invisible-Unicode steganography, use --technique steganography.[/yellow]"
+            )
+            console.print(Panel(engine.delimiter_wrap(payload), title="Delimiter Wrap (deprecated alias)"))
+        elif technique == "delimiter_wrap":
+            console.print(Panel(engine.delimiter_wrap(payload), title="Delimiter Wrap"))
+        elif technique == "steganography":
+            if not hidden:
+                console.print("[red]--technique steganography requires --hidden <message>.[/red]")
+                raise typer.Exit(1)
+            encoded = engine.steganography(cover, hidden)
+            revealed = engine.reveal_steganography(encoded)
+            console.print(Panel(encoded, title="Steganography (invisible-Unicode hidden channel)"))
+            console.print(f"[blue]Decoded hidden channel: {revealed!r}[/blue]")
         elif technique == "mimicry":
             if not sample:
                 console.print("[red]--sample is required for mimicry technique.[/red]")
@@ -565,11 +596,6 @@ def evade(
             console.print(Panel(res, title="Mimicry Result"))
         elif technique == "persona":
             console.print(Panel(engine.persona_wrap(payload, persona), title="Persona Wrapped Result"))
-        else:
-            console.print(
-                f"[red]Unknown technique {technique!r}. Use persona, mimicry, or steganographic.[/red]"
-            )
-            raise typer.Exit(1)
 
     _run(run())
 
