@@ -55,6 +55,7 @@ def adaptive_probe(
     goal: str,
     llm: Any | None = None,
     judge_model: str | None = None,
+    judge: Any | None = None,
     scenario_id: str = "adaptive",
     category: str = "adaptive",
     severity: str = "high",
@@ -66,6 +67,10 @@ def adaptive_probe(
     ``max_iterations`` turns, stopping early on a SUCCEEDED verdict. The
     attacker_fn only generates; the oracles + Judge score (separation enforced
     by the loop's type-level contract).
+
+    ``judge`` is an optional pre-built :class:`JudgeOracle` (configured with a
+    role/rubric by the caller); when provided it overrides the loop's
+    model-derived Judge so ``--judge-mode`` / ``--judge-rubric`` take effect.
     """
 
     async def _factory(trial_index: int, seed: int, canary: str) -> TrialResult:
@@ -75,6 +80,7 @@ def adaptive_probe(
             llm=llm,
             oracles=list(oracles),
             judge_model=judge_model,
+            judge=judge,
             seed=seed,
             victim_temperature=0.0,
             attacker_fn=attacker_fn,
