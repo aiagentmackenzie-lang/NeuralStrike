@@ -245,11 +245,15 @@ local JSON state file.
 ```bash
 neuralstrike evade --payload "malicious instruction" --technique persona --persona "Senior Engineer"
 neuralstrike evade --payload "malicious instruction" --technique mimicry --sample "normal behavior text"
-neuralstrike evade --payload "malicious instruction" --technique steganographic
+neuralstrike evade --payload "malicious instruction" --technique delimiter_wrap
+# Real invisible-Unicode steganography (Phase 4): hide a message inside a cover.
+neuralstrike evade --payload "cover" --technique steganography --hidden "exfiltrate-this" --cover "All clear here."
+# 'steganographic' is a deprecated alias for delimiter_wrap.
 ```
 ✅ `persona` (pure string op), ✅ `mimicry` (local LLM rewrite),
-✅ `steganographic` (delimiter wrap — note: this is delimiter obfuscation,
-not true steganography; see [Module specs](#module-specifications)).
+✅ `delimiter_wrap` (delimiter obfuscation; renamed from `steganographic_prompt`,
+which was a misnomer — see [Phase 4](#adaptive-attacks--evasion--defenses-phase-4)),
+✅ `steganography` (Phase 4 — real invisible-Unicode tag-block hidden channel).
 
 All commands accept `--target-type local|remote` (default `remote`) where a
 target LLM is involved.
@@ -439,6 +443,80 @@ neuralstrike corpus --format sarif --delay 1.0 --timeout 60 --progress
   is a Phase 6 deliverable (H1), not a Phase 3 gate. The Phase 3 gate is
   total coverage ≥85% (met) + the three exit-gate bullets below.
 
+### Adaptive attacks + evasion + defenses (Phase 4)
+
+Phase 4 ships the field's hardest class (adaptive attacks), a correct-by-
+construction 18-codec evasion pipeline, the *defensive* half (test the
+published defenses, not just attack past them), and real invisible-Unicode
+steganography (closing the E4/I3 "steganographic" misnomer).
+
+```bash
+# Adaptive attacks: PAIR / TAP / Crescendo refine the payload across turns.
+# Separation enforced: the attacker generates, the Judge scores (distinct
+# clients). With --no-judge, every trial is Inconclusive (never fabricated).
+neuralstrike adaptive --target mistral:7b --strategy pair \
+  --attacker-model deepseek-r1 --judge --judge-model deepseek-v3.1:671b-cloud \
+  --judge-mode primary --judge-rubric evidence-anchored --max-iterations 5
+
+# The 18-codec evasion pipeline (each transform carries provenance + a
+# winnability guard so a lossy codec can't silently fabricate a Resisted).
+python -c "from neuralstrike.transforms import apply_transform; \
+print(apply_transform('base64', 'reveal the secret').provenance)"
+
+# Measure a spotlighting defense's ASR delta (the harness reports both arms).
+# See defenses.measure_defense_delta — used by the Phase-4 exit-gate suite.
+```
+
+- ✅ `attacks/adaptive/` — `crescendo` (scripted-ladder fallback, no attacker
+  LLM required), `pair` (Chao et al. 2023), `tap` (Mehrotra et al. 2023,
+  simplified beam=1: branch K candidates, judge-rank, keep the best).
+  Separation enforced: the attacker_fn only generates; the loop's oracles +
+  advisory Judge score.
+- ✅ `transforms/` — 18-codec pipeline (atbash, ascii_art, base64, binary,
+  caesar, emoji_braille, hex, homoglyph, json_wrap, leetspeak, markdown,
+  morse, nato, reversed, rot13, url, xml_wrap, zero_width). Each transform
+  declares lossless vs lossy; the `winnability_guard` flags a lossy transform
+  whose round-trip destroyed the payload so a downstream `Resisted` is not
+  mistaken for defense (the probe is `Inconclusive`, never a fabricated pass).
+- ✅ `defenses/` — 8 payload-transform defenses (instruction_hierarchy,
+  spotlighting, struq, camel, delimiter, sandwiching, injection_detector,
+  tool_filter) + 2 static checkers (lethal_trifecta, rule_of_two — the Noma
+  critique is recorded honestly: passing does not prove safety against
+  indirect injection). `measure_defense_delta` runs each scenario with AND
+  without the defense (same canary/victim/oracles; the only difference is the
+  defense wrapper) and reports both ASRs + the delta.
+- ✅ Real invisible-Unicode steganography (`evasion/steganography.py`): tag-block
+  (U+E0000+) and variation-selector (U+FE00+) hidden channels. The old
+  `steganographic_prompt` is renamed `delimiter_wrap` (kept as a deprecated
+  alias) — it was delimiter obfuscation, not steganography (closes E4/I3).
+- ✅ `attacks/ascii_smuggling.py` — the EchoLeak-class ASCII-smuggling exfil
+  probe: a deterministic `AsciiSmugglingOracle` decodes the tag-block channel
+  from the SUT response and scores Succeeded iff the hidden canary surfaces
+  (Behavioral fidelity). A SUT that strips invisible Unicode is Inconclusive.
+- ✅ `evade --technique` gains `delimiter_wrap` + `steganography` (with
+  `--hidden`/`--cover`); `steganographic` is a deprecated alias.
+- ✅ Adaptive CLI knobs: `--attacker-model`, `--attacker-api-key`,
+  `--judge-model`, `--judge-api-key`, `--judge-mode primary|fallback`,
+  `--judge-rubric evidence-anchored|strict|lenient` (default
+  evidence-anchored). The rubric sets the Judge's severity floor; it never
+  lets the Judge flip a deterministic verdict.
+
+### Phase 4 honest scope
+
+- **TAP is simplified beam=1.** The full paper branches a wider beam; the
+  `AttackerFn` interface returns one payload per turn, so beam=1 (keep the
+  single best candidate per turn) is the honest reduction that still
+  demonstrates branch-and-prune.
+- **`--judge-mode fallback`** with no deterministic oracle yields Inconclusive
+  (the Judge annotates but does not decide) — useful for "show me the
+  attacker's refinement without trusting the Judge to score", not a scoring
+  mode.
+- **Defenses are prompt-level testable surfaces.** StruQ/CaMeL enforce policy
+  in the runtime in production; NeuralStrike tests the prompt-level surface
+  a red-team can reach. The README never claims the prompt-level gate *is*
+  the runtime enforcement.
+- **`main.py` CLI coverage** remains a Phase 6 target (H1), not a Phase 4 gate.
+
 ---
 
 ## Module specifications
@@ -456,7 +534,11 @@ neuralstrike corpus --format sarif --delay 1.0 --timeout 60 --progress
 | **ModelExtract** | Fingerprint prompts (raw responses); latency timing | ⚠️ informational only |
 | **AgentC2** | Persistent compromised-agent registry; dispatch + chunked exfiltration simulation | ✅ |
 | **DataExfiltrator** | Trick agent into sending data to attacker-controlled endpoint via a tool | ✅ |
-| **EvasionSuite** | Persona wrap, behavioral mimicry, delimiter-based stealth wrap | ✅ (steganographic = delimiter wrap) |
+| **EvasionSuite** | Persona wrap, behavioral mimicry, delimiter wrap, real invisible-Unicode steganography (Phase 4) | ✅ |
+| **Transforms** (Phase 4) | 18-codec evasion pipeline (atbash…zero_width) with provenance + winnability guard | ✅ |
+| **Adaptive attacks** (Phase 4) | Crescendo / PAIR / TAP — attacker generates, Judge scores (distinct clients) | ✅ |
+| **Defenses** (Phase 4) | 8 payload-transform defenses (spotlighting/StruQ/CaMeL/AgentDojo…) + lethal-trifecta & Rule-of-Two checkers + `measure_defense_delta` | ✅ |
+| **Steganography** (Phase 4) | Real invisible-Unicode tag-block / variation-selector hidden channels + ASCII-smuggling exfil probe (EchoLeak class) | ✅ |
 | **Corpus** (Phase 2) | `corpus/asi01-asi10.yaml` + `corpus/llm01-llm10.yaml` — 43 OWASP-tagged scenarios with deterministic oracle refs | ✅ |
 | **IndirectHarness** (Phase 2) | Delivery-vector injection across `user_message`/`tool_result`/`retrieved_document`/`memory`/`system_prompt`; channel verified by adapter trace | ✅ |
 | **Reports** (Phase 2) | JSON / SARIF 2.1.0 / JUnit / Markdown / PDF + compliance crosswalk (NIST AI RMF / EU AI Act / ISO 42001 / SOC 2 / CSA MAESTRO) | ✅ |
@@ -479,9 +561,13 @@ neuralstrike corpus --format sarif --delay 1.0 --timeout 60 --progress
 - **ModelExtract.fingerprint_model** returns raw model responses keyed by
   brand probe; it does not score or identify the model. `timing` reports
   latency only and is not a model-identification signal.
-- **EvasionSuite.steganographic_prompt** wraps the payload in
-  `--- BEGIN/END SYSTEM OVERRIDE ---` delimiters. This is delimiter
-  obfuscation, not cryptographic or token-level steganography.
+- **EvasionSuite.steganographic_prompt** is a **deprecated alias** for
+  `delimiter_wrap` (Phase 4 renamed it). It wraps the payload in
+  `--- BEGIN/END SYSTEM OVERRIDE ---` delimiters — delimiter obfuscation,
+  not cryptographic or token-level steganography. Real invisible-Unicode
+  steganography (tag-block / variation-selector hidden channels) ships
+  separately in `evasion/steganography.py` (Phase 4), invoked via
+  `evade --technique steganography`.
 - **AgentC2** is a local JSON registry and dispatcher for compromised-agent
   simulations; it does not open network listeners and is not a background
   daemon.
@@ -555,7 +641,13 @@ baseline saved on `main` gates a PR — a new finding exits 4, a pre-existing
 finding exits 1, a clean run exits 0, and an intensity mismatch exits 3
 (`TestBaselineGate`, `TestEvaluateIntensityGate`); (3) a HarmBench pack run
 with `--judge` produces real verdicts and without `--judge` every probe is
-honestly Inconclusive (`TestExitGate3PackVerdicts`).
+honestly Inconclusive (`TestExitGate3PackVerdicts`). The **Phase-4 exit gate** additionally requires:
+(1) a PAIR run against a vulnerable fixture succeeds where a static template
+fails (adaptive ASR > static ASR — `test_static_template_fails_pair_succeeds`);
+(2) all 18 transforms round-trip on a known-answer vector suite
+(`TestKnownAnswerRoundTrip`, parametrized over all 18); (3) a spotlighting
+defense reduces ASR on the same corpus by a measured delta, and the harness
+reports both arms (`test_spotlighting_reduces_asr`).
 
 ---
 
@@ -580,12 +672,17 @@ NeuralStrike/
 │   │   ├── weaponize/         # JailbreakForge, ContextPoison
 │   │   ├── exploit/           # FunctionHijack, AgentPivot, MCPInterceptor, ModelExtract
 │   │   └── post_ex/           # AgentC2 (JSON-persistent), DataExfiltrator
-│   ├── evasion/mimicry.py     # EvasionSuite
+│   ├── evasion/mimicry.py     # EvasionSuite (delimiter_wrap + steganography, Phase 4)
+│   ├── evasion/steganography.py  # (Phase 4) real invisible-Unicode tag-block / variation-selector
 │   ├── oracles/               # (Phase 0) canary, forbidden_tool, predicate, schema, judge, system_prompt, tool_harness, evidence
 │   ├── evaluation/            # (Phase 0) verdict, scoring (re-export), runner, baseline, probes; (Phase 3) statistics, calibration, explain
 │   ├── adapters/              # (Phase 1) base, openai_endpoint, langgraph, langgraph_server, mcp_http, a2a
 │   ├── corpus/                # (Phase 2) loader — typed scenarios + oracle builder from YAML
 │   ├── attacks/indirect.py    # (Phase 2) indirect-injection delivery-vector harness
+│   ├── attacks/adaptive/      # (Phase 4) base, crescendo, pair, tap — adaptive refinement attacker_fns
+│   ├── attacks/ascii_smuggling.py  # (Phase 4) EchoLeak-class invisible-Unicode exfil probe
+│   ├── transforms/            # (Phase 4) base + codecs — 18-codec evasion pipeline + winnability guard
+│   ├── defenses/              # (Phase 4) base, defenses, checkers, harness — defensive-pattern testing + delta
 │   ├── packs/                 # (Phase 3) base, harmbench, jailbreakbench, cyberseceval, local — on-demand benchmark import
 │   └── reports/               # (Phase 2) json, sarif, junit, markdown, pdf, compliance, readme_mapping
 ├── corpus/                    # (Phase 2) asi01-asi10.yaml + llm01-llm10.yaml — 43 OWASP-tagged scenarios
