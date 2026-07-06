@@ -76,7 +76,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["PLR0915", "PLR0912", "PLW0603", "PLR0911", "S101", "PLC0415", "E501"]
-"src/neuralstrike/main.py" = ["PLC0415", "B008", "PLR0915"]  # lazy imports + Typer's Option() default pattern
+"src/neuralstrike/main.py" = ["PLC0415", "B008", "PLR0915", "PLR0912"]  # lazy imports + Typer's Option() default pattern
 "src/neuralstrike/modules/exploit/mcp_interceptor.py" = ["PLC0415"]  # optional [mcp] extra, lazy import
 "src/neuralstrike/corpus/loader.py" = ["PLC0415"]  # local oracle imports break a latent package cycle
 "src/neuralstrike/evaluation/runner.py" = ["PLC0415"]  # local mint_canary import breaks a package cycle

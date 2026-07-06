@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Sequence
 
 import typer
 from rich.console import Console
@@ -812,6 +812,201 @@ def scan(
             await target_adapter.close()
 
     _run(run())
+
+
+# --- Phase 2: corpus run + reports -------------------------------------------
+
+
+@app.command(name="readme-mapping")
+def readme_mapping(
+    apply: bool = typer.Option(
+        False, "--apply",
+        help="Write the generated section into README.md between the markers.",
+    ),
+) -> None:
+    """Generate the OWASP/ATLAS mapping table from corpus/*.yaml.
+
+    The README mapping claim becomes a real table generated from the
+    shipped corpus (closes C1/I1). With --apply the section between the
+    BEGIN/END neuralstrike-mapping markers in README.md is replaced; without
+    --apply the table is printed to stdout for review.
+    """
+    from neuralstrike.reports import readme_mapping_section
+
+    section = readme_mapping_section()
+    if not apply:
+        console.print(section)
+        return
+    from pathlib import Path
+
+    readme = Path("README.md")
+    if not readme.is_file():
+        raise ValidationError("README.md not found in the current directory")
+    text = readme.read_text(encoding="utf-8")
+    from neuralstrike.reports.readme_mapping import BEGIN_MARKER, END_MARKER
+
+    if BEGIN_MARKER not in text or END_MARKER not in text:
+        raise ValidationError(
+            f"README.md is missing the {BEGIN_MARKER!r} / {END_MARKER!r} markers; "
+            "add them where the mapping table should go."
+        )
+    start = text.index(BEGIN_MARKER)
+    end = text.index(END_MARKER) + len(END_MARKER)
+    new_text = text[:start] + section + text[end:]
+    readme.write_text(new_text, encoding="utf-8")
+    console.print(f"[green]README.md mapping table regenerated ({len(section)} chars).[/green]")
+    console.print(f"[blue]{len(load_corpus_dir_safe())} scenarios mapped from corpus/*.yaml[/blue]")
+
+
+@app.command()
+def corpus(
+    adapter: str = typer.Option(
+        "langgraph",
+        help="Adapter to drive: langgraph (bundled fixture) | openai.",
+    ),
+    url: str | None = typer.Option(
+        None,
+        help="Target URL (required for --adapter openai; the OpenAI endpoint).",
+    ),
+    model: str | None = typer.Option(
+        None, help="Victim model (required for --adapter openai)."
+    ),
+    tier: str = typer.Option(
+        "instrumented",
+        help="OpenAI SUT tier: text|function-calling|instrumented.",
+    ),
+    graph_module: str | None = typer.Option(
+        None,
+        help="For --adapter langgraph with a custom graph: 'pkg.mod:attr'. "
+             "Default drives the bundled vulnerable fixture.",
+    ),
+    format: str = typer.Option(
+        "sarif", help="Report format: sarif|json|junit|markdown|pdf."
+    ),
+    out: str = typer.Option(
+        "neuralstrike-report", help="Output file path (extension added per --format)."
+    ),
+    trials: int = typer.Option(1, help="Trials per scenario (k-trial run)."),
+    seed: int = typer.Option(2024, help="Base seed for reproducibility."),
+    limit: int | None = typer.Option(
+        None, "--limit", help="Run only the first N scenarios (smoke / debug)."
+    ),
+) -> None:
+    """Run the OWASP ASI/LLM corpus against a target and emit an audit-grade report.
+
+    Every finding maps to an ASI/LLM ID + MITRE ATLAS technique + a compliance
+    control (NIST AI RMF / EU AI Act / ISO 42001 / SOC 2 / CSA MAESTRO).
+    Inconclusive probes are surfaced (SARIF note / JUnit skipped), never dropped.
+    """
+    if adapter not in {"langgraph", "openai"}:
+        raise ValidationError("--adapter must be langgraph|openai")
+    if tier not in {"text", "function-calling", "instrumented"}:
+        raise ValidationError("--tier must be text|function-calling|instrumented")
+    if format not in {"sarif", "json", "junit", "markdown", "pdf"}:
+        raise ValidationError("--format must be sarif|json|junit|markdown|pdf")
+    if trials < 1:
+        raise ValidationError("--trials must be >= 1")
+    if adapter == "openai" and (not url or not model):
+        raise ValidationError("--adapter openai requires --url and --model")
+
+    from neuralstrike.adapters.base import TargetAdapter
+    from neuralstrike.adapters.langgraph import LangGraphAdapter
+    from neuralstrike.adapters.openai_endpoint import OpenAIEndpointAdapter
+    from neuralstrike.attacks.indirect import IndirectHarness
+    from neuralstrike.corpus import load_corpus_dir
+    from neuralstrike.evaluation.runner import TrialRunner
+    from neuralstrike.oracles.tool_harness import make_canary_tools
+    from neuralstrike.reports import build_corpus_run, to_json, to_junit, to_markdown, to_pdf, to_sarif
+
+    console.print(
+        f"[yellow]Running corpus ({format}) via {adapter} "
+        f"(trials={trials}, seed={seed})...[/yellow]"
+    )
+
+    async def run() -> None:
+        scenarios = load_corpus_dir()
+        if limit is not None:
+            scenarios = scenarios[: max(0, limit)]
+        if not scenarios:
+            console.print("[red]No scenarios loaded; is corpus/*.yaml present?[/red]")
+            raise typer.Exit(3)
+        canary = make_canary_tools()
+        tools = TargetAdapter.canary_tools_as_schemas(canary)
+        reports = []
+        adapters_to_close: list[object] = []
+        for s in scenarios:
+            a: object
+            if adapter == "openai":
+                a = OpenAIEndpointAdapter(url or "", model=model or "", tier=tier)
+            elif graph_module:
+                a = LangGraphAdapter(spec=graph_module)
+            else:
+                from tests.fixtures.langgraph_agent import build_vulnerable_graph
+
+                a = LangGraphAdapter(graph=build_vulnerable_graph())
+            adapters_to_close.append(a)
+            harness = IndirectHarness(s)
+            probe = harness.probe_for(
+                a,
+                canary_tools=canary if tier != "text" else (),
+                tools=tools if tier != "text" else (),
+            )
+            runner = TrialRunner(base_seed=seed, run_dir=None)
+            r = await runner.run(probe, trials=trials, persist=False)
+            reports.append(r)
+        target = url or model or "bundled-vulnerable-fixture"
+        corpus_run = build_corpus_run(
+            scenarios=scenarios,
+            reports=reports,
+            base_seed=seed,
+            trials_per_scenario=trials,
+            adapter=adapter,
+            target=target,
+        )
+        for a in adapters_to_close:
+            if isinstance(a, OpenAIEndpointAdapter):
+                await a.close()
+        ext = {"sarif": ".sarif", "json": ".json", "junit": ".xml", "markdown": ".md", "pdf": ".pdf"}[format]
+        path = out + ext
+        content: str | bytes
+        if format == "sarif":
+            content = to_sarif(corpus_run)
+        elif format == "json":
+            content = to_json(corpus_run)
+        elif format == "junit":
+            content = to_junit(corpus_run)
+        elif format == "markdown":
+            content = to_markdown(corpus_run)
+        else:
+            content = to_pdf(corpus_run)
+        from pathlib import Path
+
+        out_path = Path(path)
+        if isinstance(content, bytes):
+            out_path.write_bytes(content)
+        else:
+            out_path.write_text(content, encoding="utf-8")
+        console.print(Panel(corpus_run_summary(corpus_run), title=f"Corpus run → {path}"))
+        console.print(
+            f"[green]{len(scenarios)} scenarios · {corpus_run.overall_total} trials · "
+            f"ASR {corpus_run.asr:.2%} · coverage {corpus_run.coverage:.2%}[/green]"
+        )
+
+    _run(run())
+
+
+def load_corpus_dir_safe() -> Sequence[object]:
+    from neuralstrike.corpus import load_corpus_dir
+
+    return load_corpus_dir()
+
+
+def corpus_run_summary(run: object) -> str:
+    return (
+        f"ASR={getattr(run, 'asr', 0.0):.2%} coverage={getattr(run, 'coverage', 0.0):.2%}\n"
+        f"succeeded={getattr(run, 'overall_succeeded', 0)} resisted={getattr(run, 'overall_resisted', 0)} "
+        f"inconclusive={getattr(run, 'overall_inconclusive', 0)} total={getattr(run, 'overall_total', 0)}"
+    )
 
 
 if __name__ == "__main__":
