@@ -80,6 +80,8 @@ ignore = [
 "src/neuralstrike/modules/exploit/mcp_interceptor.py" = ["PLC0415"]  # optional [mcp] extra, lazy import
 "src/neuralstrike/corpus/loader.py" = ["PLC0415"]  # local oracle imports break a latent package cycle
 "src/neuralstrike/evaluation/runner.py" = ["PLC0415"]  # local mint_canary import breaks a package cycle
+"src/neuralstrike/packs/__init__.py" = ["PLC0415"]  # pack classes registered via @register_pack at import; lazy AdversarialLoop import
+"src/neuralstrike/packs/base.py" = ["PLC0415"]  # lazy httpx import keeps pack import side-effect-free
 
 [tool.ruff.lint.isort]
 known-first-party = ["neuralstrike"]

@@ -1031,5 +1031,164 @@ def corpus_run_summary(run: object) -> str:
     )
 
 
+# --- Phase 3: benchmark packs -------------------------------------------------
+
+
+@app.command()
+def pack(
+    name: str = typer.Option(..., help="Pack name: harmbench|jailbreakbench|cyberseceval|local."),
+    target: str = typer.Option(..., help="Victim model to evaluate."),
+    target_type: str = typer.Option("local", help="Victim type: 'local' or 'remote'."),
+    import_probes: str | None = typer.Option(
+        None, "--import-probes",
+        help="Local JSON probe dataset (pack=local); skips the license gate.",
+    ),
+    accept_license: bool = typer.Option(
+        False, "--accept-license",
+        help="Acknowledge the pack's license before a network fetch.",
+    ),
+    judge: bool = typer.Option(
+        True,
+        help="Use the advisory Judge (DECIDE). Without it, every probe is Inconclusive.",
+    ),
+    trials: int = typer.Option(1, help="Trials per probe (k-trial run)."),
+    seed: int = typer.Option(0, help="Base seed for reproducibility."),
+    limit: int | None = typer.Option(
+        None, "--limit", help="Run only the first N probes (smoke / debug)."
+    ),
+    run_dir: str = typer.Option("runs", help="Directory for per-trial transcripts."),
+    save_baseline_dir: str | None = typer.Option(None, help="Directory to save the baseline into."),
+    baseline_dir: str | None = typer.Option(None, help="Directory to compare against (gate)."),
+    fail_on: str = typer.Option("regression", help="Gate policy: never|vuln|regression."),
+) -> None:
+    """Run a benchmark pack (HarmBench/JailbreakBench/CyberSecEval/local) against a SUT.
+
+    Packs ship NO expected-token oracle, so verdicts come from the advisory
+    Judge (DECIDE). With --no-judge, every probe is honestly Inconclusive —
+    never a fabricated pass. Network packs require --accept-license; a local
+    pack (--import-probes <file.json>) skips the gate.
+
+    Exit codes: 0 pass · 1 vuln · 3 runtime error · 4 regression.
+    """
+    if target_type not in {"local", "remote"}:
+        raise ValidationError("target_type must be 'local' or 'remote'")
+    if trials < 1:
+        raise ValidationError("--trials must be >= 1")
+    if fail_on not in {"never", "vuln", "regression"}:
+        raise ValidationError("--fail-on must be never|vuln|regression")
+    if name == "local" and not import_probes:
+        raise ValidationError("--name local requires --import-probes <file.json>")
+    if name != "local" and import_probes:
+        raise ValidationError("--import-probes is only valid with --name local")
+
+    from neuralstrike.core.config import settings
+    from neuralstrike.core.llm_manager import LLMManager
+    from neuralstrike.core.runtime import resolve_models
+    from neuralstrike.evaluation.baseline import compare_baseline, save_baseline
+    from neuralstrike.evaluation.runner import TrialRunner
+    from neuralstrike.evaluation.statistics import k_trial_summary
+    from neuralstrike.packs import LocalPack, Pack, get_pack, list_packs, pack_probe_factory
+
+    console.print(
+        f"[yellow]Running pack {name!r} against {target} "
+        f"(trials={trials}, seed={seed}, judge={'on' if judge else 'off'})...[/yellow]"
+    )
+
+    async def run() -> None:
+        # Materialize the pack's probes.
+        pack_obj: Pack
+        if name == "local":
+            pack_obj = LocalPack(path=import_probes)
+        else:
+            if name not in list_packs():
+                raise ValidationError(
+                    f"unknown pack {name!r}; registered packs: {list_packs()}"
+                )
+            pack_obj = get_pack(name)
+        try:
+            probes = pack_obj.probes(accept_license=accept_license, limit=limit)
+        except PermissionError as exc:
+            console.print(f"[red]License required:[/red] {exc}")
+            raise typer.Exit(3) from exc
+        except Exception as exc:
+            console.print(f"[red]Could not load pack {name!r}:[/red] {exc}")
+            raise typer.Exit(3) from exc
+        if not probes:
+            console.print(f"[red]Pack {name!r} produced no probes.[/red]")
+            raise typer.Exit(3)
+
+        # Judge resolution (DECIDE). Without --judge -> judge_model=None ->
+        # every probe is Inconclusive (no oracle, no judge).
+        mgr = LLMManager()
+        attacker_model = settings.attacker_model
+        judge_model = settings.judge_model if judge else None
+        if judge and not settings.skip_reachability_check and target_type == "local":
+            resolved = await resolve_models(
+                mgr,
+                attacker_model=attacker_model,
+                judge_model=judge_model or settings.judge_model,
+                judge_fallbacks=settings.judge_model_fallbacks,
+            )
+            judge_model = resolved.judge_model
+            if resolved.judge_fell_back:
+                console.print(f"[blue]Judge fell back to {resolved.judge_model}[/blue]")
+
+        runner = TrialRunner(base_seed=seed, run_dir=run_dir)
+        reports = []
+        for p in probes:
+            probe_obj = pack_probe_factory(
+                p, target, target_type, llm=mgr, judge_model=judge_model
+            )
+            r = await runner.run(
+                probe_obj, trials=trials, judge_model=judge_model, attacker_model=attacker_model
+            )
+            reports.append(r)
+
+        from neuralstrike.evaluation.statistics import aggregate_corpus_stats
+
+        overall = aggregate_corpus_stats(reports)
+        console.print(
+            Panel(
+                k_trial_summary(overall),
+                title=f"Pack {name} — {len(probes)} probes · {overall.total} trials",
+            )
+        )
+        if not judge:
+            # Honest reminder: without a Judge, every pack probe is Inconclusive.
+            inconclusive = sum(r.score.inconclusive for r in reports if r.score)
+            console.print(
+                f"[blue]--no-judge: {inconclusive}/{overall.total} trial(s) Inconclusive "
+                f"(packs ship no expected-token oracle; verdicts require --judge).[/blue]"
+            )
+        else:
+            for r in reports:
+                s = r.score
+                assert s is not None
+                console.print(f"  {r.meta.scenario_id}: {s.headline}")
+
+        if save_baseline_dir:
+            # Save a per-pack baseline: one baseline file per probe (scenario_id).
+            for r in reports:
+                save_baseline(save_baseline_dir, r)
+            console.print(
+                f"[green]Baseline saved → {save_baseline_dir} ({len(reports)} probe(s))[/green]"
+            )
+        if baseline_dir:
+            worst_exit = 0
+            for r in reports:
+                result = compare_baseline(baseline_dir, r, fail_on=fail_on)
+                console.print(
+                    f"  {r.meta.scenario_id}: {result.decision.value} (exit {result.exit_code})"
+                )
+                # Regression (4) outranks vuln (1) outranks pass (0); runtime error (3) aborts.
+                if result.exit_code == 3:
+                    raise typer.Exit(3)
+                worst_exit = max(worst_exit, result.exit_code)
+            console.print(Panel(f"pack gate -> exit {worst_exit}", title=f"fail-on={fail_on}"))
+            raise typer.Exit(worst_exit)
+
+    _run(run())
+
+
 if __name__ == "__main__":
     app()
