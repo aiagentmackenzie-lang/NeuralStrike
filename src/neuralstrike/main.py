@@ -40,6 +40,23 @@ def _run(coro: Awaitable[None]) -> None:
         raise typer.Exit(1) from exc
 
 
+def _apply_verbosity(quiet: bool, verbose: bool) -> None:
+    """Adjust the neuralstrike logger level (operator-safety knob)."""
+    import logging
+
+    if quiet and verbose:
+        # Contradictory flags: verbose wins (an operator who passed both
+        # asked for signal).
+        pass
+    root = get_logger("neuralstrike")
+    if quiet:
+        root.setLevel(logging.WARNING)
+    elif verbose:
+        root.setLevel(logging.DEBUG)
+    else:
+        root.setLevel(logging.INFO)
+
+
 def _version_callback(value: bool) -> None:
     if value:
         console.print(f"NeuralStrike v{__version__}")
@@ -615,6 +632,20 @@ def evaluate(
         "standard",
         help="Probe profile label pinned into the baseline (e.g. standard|adaptive|k3-instrumented).",
     ),
+    explain: bool = typer.Option(
+        False, "--explain",
+        help="Attach an advisory LLM rationale to Succeeded/Inconclusive findings (requires --judge).",
+    ),
+    delay: float = typer.Option(
+        0.0, "--delay",
+        help="Seconds to sleep between trials (avoid WAF/rate-limit bans on live targets).",
+    ),
+    timeout: float | None = typer.Option(
+        None, "--timeout",
+        help="Per-trial timeout in seconds; a hung trial is recorded Inconclusive (never a fabricated pass).",
+    ),
+    quiet: bool = typer.Option(False, "--quiet", help="Reduce logging to WARNING and above."),
+    verbose: bool = typer.Option(False, "--verbose", help="Increase logging to DEBUG."),
 ) -> None:
     """Run a k-trial canary-extraction probe and (optionally) gate on a baseline.
 
@@ -627,6 +658,12 @@ def evaluate(
         raise ValidationError("--trials must be >= 1")
     if fail_on not in {"never", "vuln", "regression"}:
         raise ValidationError("--fail-on must be 'never', 'vuln', or 'regression'")
+    if delay < 0:
+        raise ValidationError("--delay must be >= 0")
+    if timeout is not None and timeout <= 0:
+        raise ValidationError("--timeout must be > 0")
+
+    _apply_verbosity(quiet, verbose)
 
     from neuralstrike.core.config import settings
     from neuralstrike.core.llm_manager import LLMManager
@@ -664,7 +701,12 @@ def evaluate(
             judge_model=judge_model,
             scenario_id=scenario_id,
         )
-        runner = TrialRunner(base_seed=seed, run_dir=run_dir)
+        runner = TrialRunner(
+            base_seed=seed,
+            run_dir=run_dir,
+            inter_trial_delay=delay,
+            trial_timeout=timeout,
+        )
         report = await runner.run(
             probe,
             trials=trials,
@@ -702,6 +744,38 @@ def evaluate(
                 )
             except CalibrationError as exc:
                 console.print(f"[red]Calibration skipped:[/red] {exc}")
+
+        if explain:
+            # Advisory only — requires --judge; never flips a verdict.
+            if not judge_model:
+                console.print(
+                    "[yellow]--explain requires --judge; skipping explanations.[/yellow]"
+                )
+            else:
+                from neuralstrike.core.config import settings as _settings
+                from neuralstrike.evaluation.explain import Explainer
+                from neuralstrike.oracles.judge import JudgeOracle
+
+                async def _call_judge(prompt: str) -> str:
+                    return await mgr.call_local(
+                        judge_model, prompt, options={"seed": seed, "temperature": 0.0}
+                    )
+
+                explainer = Explainer(
+                    JudgeOracle(_call_judge, role="annotate"),
+                    redact=_settings.redact_logs,
+                )
+                explanations = await explainer.explain(report)
+                if not explanations:
+                    console.print("[blue]--explain: no Succeeded/Inconclusive findings to explain.[/blue]")
+                for ex in explanations:
+                    quote = ex.evidence_quote if ex.evidence_quote else ("[redacted]" if ex.redacted else "—")
+                    console.print(
+                        Panel(
+                            f"{ex.rationale}\nEvidence: {quote}",
+                            title=f"Explain — {ex.scenario_id} trial {ex.trial_index} ({ex.verdict.value})",
+                        )
+                    )
 
         if save_baseline_dir:
             path = save_baseline(save_baseline_dir, report)
@@ -751,6 +825,8 @@ def scan(
         "standard",
         help="Probe profile label pinned into the baseline (gates intensity-mismatch refusal).",
     ),
+    delay: float = typer.Option(0.0, "--delay", help="Seconds to sleep between trials."),
+    timeout: float | None = typer.Option(None, "--timeout", help="Per-trial timeout in seconds."),
 ) -> None:
     """Drive a real target via an adapter and score behaviour (Phase 1).
 
@@ -815,7 +891,9 @@ def scan(
             scenario_id=scenario_id,
             category="asi05-tool-poisoning",
         )
-        runner = TrialRunner(base_seed=seed, run_dir=run_dir)
+        runner = TrialRunner(
+            base_seed=seed, run_dir=run_dir, inter_trial_delay=delay, trial_timeout=timeout
+        )
         report = await runner.run(probe_obj, trials=trials, intensity=intensity)
         score = report.score
         assert score is not None
@@ -922,6 +1000,13 @@ def corpus(
     limit: int | None = typer.Option(
         None, "--limit", help="Run only the first N scenarios (smoke / debug)."
     ),
+    delay: float = typer.Option(0.0, "--delay", help="Seconds to sleep between scenarios."),
+    timeout: float | None = typer.Option(None, "--timeout", help="Per-trial timeout in seconds."),
+    quiet: bool = typer.Option(False, "--quiet", help="Reduce logging to WARNING and above."),
+    verbose: bool = typer.Option(False, "--verbose", help="Increase logging to DEBUG."),
+    progress: bool = typer.Option(
+        False, "--progress", help="Show a rich progress bar over scenarios."
+    ),
 ) -> None:
     """Run the OWASP ASI/LLM corpus against a target and emit an audit-grade report.
 
@@ -937,8 +1022,14 @@ def corpus(
         raise ValidationError("--format must be sarif|json|junit|markdown|pdf")
     if trials < 1:
         raise ValidationError("--trials must be >= 1")
+    if delay < 0:
+        raise ValidationError("--delay must be >= 0")
+    if timeout is not None and timeout <= 0:
+        raise ValidationError("--timeout must be > 0")
     if adapter == "openai" and (not url or not model):
         raise ValidationError("--adapter openai requires --url and --model")
+
+    _apply_verbosity(quiet, verbose)
 
     from neuralstrike.adapters.base import TargetAdapter
     from neuralstrike.adapters.langgraph import LangGraphAdapter
@@ -965,26 +1056,57 @@ def corpus(
         tools = TargetAdapter.canary_tools_as_schemas(canary)
         reports = []
         adapters_to_close: list[object] = []
-        for s in scenarios:
-            a: object
-            if adapter == "openai":
-                a = OpenAIEndpointAdapter(url or "", model=model or "", tier=tier)
-            elif graph_module:
-                a = LangGraphAdapter(spec=graph_module)
-            else:
-                from tests.fixtures.langgraph_agent import build_vulnerable_graph
-
-                a = LangGraphAdapter(graph=build_vulnerable_graph())
-            adapters_to_close.append(a)
-            harness = IndirectHarness(s)
-            probe = harness.probe_for(
-                a,
-                canary_tools=canary if tier != "text" else (),
-                tools=tools if tier != "text" else (),
+        progress_ctx = None
+        task = None
+        if progress:
+            from rich.progress import (
+                BarColumn,
+                MofNCompleteColumn,
+                Progress,
+                TextColumn,
+                TimeElapsedColumn,
             )
-            runner = TrialRunner(base_seed=seed, run_dir=None)
-            r = await runner.run(probe, trials=trials, persist=False)
-            reports.append(r)
+
+            progress_ctx = Progress(
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                MofNCompleteColumn(),
+                TimeElapsedColumn(),
+                console=console,
+            )
+            progress_ctx.start()
+            task = progress_ctx.add_task("Corpus scan", total=len(scenarios))
+        try:
+            for i, s in enumerate(scenarios):
+                if i > 0 and delay > 0:
+                    await asyncio.sleep(delay)
+                a: object
+                if adapter == "openai":
+                    a = OpenAIEndpointAdapter(url or "", model=model or "", tier=tier)
+                elif graph_module:
+                    a = LangGraphAdapter(spec=graph_module)
+                else:
+                    from tests.fixtures.langgraph_agent import build_vulnerable_graph
+
+                    a = LangGraphAdapter(graph=build_vulnerable_graph())
+                adapters_to_close.append(a)
+                harness = IndirectHarness(s)
+                probe = harness.probe_for(
+                    a,
+                    canary_tools=canary if tier != "text" else (),
+                    tools=tools if tier != "text" else (),
+                )
+                runner = TrialRunner(
+                    base_seed=seed, run_dir=None,
+                    inter_trial_delay=delay, trial_timeout=timeout,
+                )
+                r = await runner.run(probe, trials=trials, persist=False)
+                reports.append(r)
+                if task is not None and progress_ctx is not None:
+                    progress_ctx.advance(task)
+        finally:
+            if progress_ctx is not None:
+                progress_ctx.stop()
         target = url or model or "bundled-vulnerable-fixture"
         corpus_run = build_corpus_run(
             scenarios=scenarios,
@@ -1073,6 +1195,8 @@ def pack(
         "standard",
         help="Probe profile label pinned into the baseline (gates intensity-mismatch refusal).",
     ),
+    delay: float = typer.Option(0.0, "--delay", help="Seconds to sleep between trials and probes."),
+    timeout: float | None = typer.Option(None, "--timeout", help="Per-trial timeout in seconds."),
 ) -> None:
     """Run a benchmark pack (HarmBench/JailbreakBench/CyberSecEval/local) against a SUT.
 
@@ -1146,9 +1270,13 @@ def pack(
             if resolved.judge_fell_back:
                 console.print(f"[blue]Judge fell back to {resolved.judge_model}[/blue]")
 
-        runner = TrialRunner(base_seed=seed, run_dir=run_dir)
+        runner = TrialRunner(
+            base_seed=seed, run_dir=run_dir, inter_trial_delay=delay, trial_timeout=timeout
+        )
         reports = []
-        for p in probes:
+        for i, p in enumerate(probes):
+            if i > 0 and delay > 0:
+                await asyncio.sleep(delay)
             probe_obj = pack_probe_factory(
                 p, target, target_type, llm=mgr, judge_model=judge_model
             )

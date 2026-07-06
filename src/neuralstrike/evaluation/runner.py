@@ -20,6 +20,7 @@ with a deterministic fake.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import secrets
@@ -226,12 +227,21 @@ class TrialRunner:
         attacker_temperature: float = 0.7,
         run_dir: str | Path | None = "runs",
         rng: secrets.SystemRandom | None = None,
+        inter_trial_delay: float = 0.0,
+        trial_timeout: float | None = None,
     ) -> None:
         self.base_seed = int(base_seed)
         self.victim_temperature = float(victim_temperature)
         self.attacker_temperature = float(attacker_temperature)
         self.run_dir = Path(run_dir) if run_dir is not None else None
         self._rng = rng or secrets.SystemRandom()
+        # Operator-safety knobs (Phase 3). --delay spaces trials so a live
+        # target's WAF/rate-limiter does not ban the run (gap G6). --timeout
+        # bounds a single trial so one hung LLM call cannot stall the whole
+        # run (gap G5); a timed-out trial is recorded Inconclusive (a
+        # coverage gap), never a fabricated pass.
+        self.inter_trial_delay = float(inter_trial_delay)
+        self.trial_timeout = float(trial_timeout) if trial_timeout is not None else None
 
     def _mint(self) -> str:
         # Local import breaks a latent module-load cycle (oracles.base
@@ -279,13 +289,36 @@ class TrialRunner:
 
         results: list[TrialResult] = []
         for trial_index in range(trials):
+            if trial_index > 0 and self.inter_trial_delay > 0:
+                await asyncio.sleep(self.inter_trial_delay)
             seed = _derive_seed(self.base_seed, trial_index)
             canary = self._mint()
             logger.info(
                 "run %s trial %d/%d seed=%d canary=%s", run_id, trial_index + 1, trials, seed, canary
             )
             try:
-                trial = await probe.factory(trial_index, seed, canary)
+                if self.trial_timeout is not None:
+                    trial = await asyncio.wait_for(
+                        probe.factory(trial_index, seed, canary), timeout=self.trial_timeout
+                    )
+                else:
+                    trial = await probe.factory(trial_index, seed, canary)
+            except asyncio.TimeoutError:
+                # A hung trial is a coverage gap, not a fabricated pass. The
+                # run continues (other trials may conclude); the timeout is
+                # recorded honestly on this trial.
+                logger.warning("trial %d timed out after %ss", trial_index, self.trial_timeout)
+                trial = TrialResult(
+                    trial_index=trial_index,
+                    seed=seed,
+                    temperature=self.victim_temperature,
+                    verdict=Verdict.INCONCLUSIVE,
+                    fidelity=EvidenceFidelity.VERBAL,
+                    payload="",
+                    response=None,
+                    error=f"trial timed out after {self.trial_timeout}s",
+                    scenario_id=probe.scenario_id,
+                )
             except Exception as exc:
                 # Victim errors are recorded as Inconclusive (coverage gap);
                 # attacker/judge errors should already have aborted inside the

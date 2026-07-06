@@ -25,6 +25,7 @@ from neuralstrike.evaluation.calibration import (
     calibrate,
     load_cohort,
 )
+from neuralstrike.evaluation.explain import Explainer, Explanation
 from neuralstrike.evaluation.runner import Probe, RunReport, TrialRunner
 from neuralstrike.evaluation.scoring import ScoreCard, score_trials, wilson_ci
 from neuralstrike.evaluation.statistics import (
@@ -48,6 +49,8 @@ __all__ = [
     "CalibrationResult",
     "Cohort",
     "EvidenceFidelity",
+    "Explainer",
+    "Explanation",
     "Finding",
     "Probe",
     "RunReport",

@@ -169,7 +169,18 @@ class JudgeOracle(Oracle):
 
     async def score(self, ctx: JudgeCallContext) -> JudgeVerdict:
         """Call the Judge LLM and return a typed, validated verdict (fail-closed)."""
-        raw = await self._call_judge(self.build_prompt(ctx))
+        return await self.score_prompt(self.build_prompt(ctx))
+
+    async def score_prompt(self, prompt: str) -> JudgeVerdict:
+        """Score an arbitrary prompt and return a typed, validated verdict.
+
+        Used by the advisory Explainer (``--explain``), which sends a
+        different prompt (an explain prompt that names the current
+        verdict) but reuses the same fail-closed parsing. The verdict the
+        Judge returns here is *advisory* — the caller never lets it flip a
+        deterministic verdict.
+        """
+        raw = await self._call_judge(prompt)
         if not isinstance(raw, str):
             raise LLMError("judge", f"Judge returned non-string content: {raw!r}")
         return self._parse(raw)
