@@ -31,8 +31,14 @@ htmlcov/
 .env.*
 !.env.example
 
-# Local state
-.neuralstrike/
+# Build / SBOM artifacts
+neuralstrike-smoke.*
+sbom.json
+*.whl
+*.tar.gz
+
+# Dashboard build artifacts
+dashboard/dist/
 
 # Run transcripts (seed/temperature-pinned trial records)
 runs/

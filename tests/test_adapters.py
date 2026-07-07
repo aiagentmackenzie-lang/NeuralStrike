@@ -210,7 +210,7 @@ class TestMCPHTTPAdapter:
 class TestLangGraphAdapter:
     @pytest.mark.asyncio
     async def test_drives_compiled_graph_and_observes_tool_calls(self) -> None:
-        from tests.fixtures.langgraph_agent import build_vulnerable_graph
+        from neuralstrike.fixtures.langgraph_agent import build_vulnerable_graph
 
         graph = build_vulnerable_graph()
         adapter = LangGraphAdapter(graph=graph)
@@ -222,7 +222,7 @@ class TestLangGraphAdapter:
 
     @pytest.mark.asyncio
     async def test_attribute_discovery_via_module_namespace(self) -> None:
-        from tests.fixtures.langgraph_agent import vulnerable_graph_module
+        from neuralstrike.fixtures.langgraph_agent import vulnerable_graph_module
 
         ns = vulnerable_graph_module()
         adapter = LangGraphAdapter(graph=ns)

@@ -1019,6 +1019,84 @@ def scan(
 # --- Phase 2: corpus run + reports -------------------------------------------
 
 
+@app.command(name="smoke")
+def smoke(
+    out: str = typer.Option(
+        "neuralstrike-smoke", help="Output file path stem (no extension)."
+    ),
+    format: str = typer.Option(
+        "json", help="Report format for the smoke artifact: sarif|json."
+    ),
+    quiet: bool = typer.Option(False, "--quiet", help="Reduce logging to WARNING and above."),
+    verbose: bool = typer.Option(False, "--verbose", help="Increase logging to DEBUG."),
+) -> None:
+    """Offline smoke test: run a tiny corpus against the bundled fixture.
+
+    Does not require a local Ollama or any external API. Exits non-zero if the
+    fixture report cannot be produced or the structure is malformed.
+    """
+    if format not in {"sarif", "json"}:
+        raise ValidationError("--format must be sarif|json")
+    _apply_verbosity(quiet, verbose)
+    from pathlib import Path
+
+    from neuralstrike.adapters.base import TargetAdapter
+    from neuralstrike.adapters.langgraph import LangGraphAdapter
+    from neuralstrike.attacks.indirect import IndirectHarness
+    from neuralstrike.corpus import load_corpus_dir
+    from neuralstrike.evaluation.runner import TrialRunner
+    from neuralstrike.fixtures.langgraph_agent import build_vulnerable_graph
+    from neuralstrike.oracles.tool_harness import make_canary_tools
+    from neuralstrike.reports import build_corpus_run, to_json, to_sarif
+
+    console.print("[yellow]NeuralStrike smoke: bundled fixture corpus scan...[/yellow]")
+
+    async def run() -> None:
+        scenarios = load_corpus_dir()
+        scenarios = scenarios[:3]
+        canary = make_canary_tools()
+        tools = TargetAdapter.canary_tools_as_schemas(canary)
+        reports = []
+        adapter = LangGraphAdapter(graph=build_vulnerable_graph())
+        try:
+            for s in scenarios:
+                harness = IndirectHarness(s)
+                probe = harness.probe_for(adapter, canary_tools=canary, tools=tools)
+                runner = TrialRunner(base_seed=42, run_dir=None)
+                r = await runner.run(probe, trials=1, persist=False)
+                reports.append(r)
+        finally:
+            await adapter.close()
+        corpus_run = build_corpus_run(
+            scenarios=scenarios,
+            reports=reports,
+            base_seed=42,
+            trials_per_scenario=1,
+            adapter="langgraph",
+            target="bundled-vulnerable-fixture",
+        )
+        ext = ".sarif" if format == "sarif" else ".json"
+        path = Path(out + ext)
+        content = to_sarif(corpus_run) if format == "sarif" else to_json(corpus_run)
+        path.write_text(content, encoding="utf-8")
+        overall = corpus_run.to_dict()["overall"]
+        required = {"total", "succeeded", "resisted", "inconclusive", "asr", "coverage"}
+        missing = required - set(overall.keys())
+        if missing:
+            raise ValidationError(f"smoke report missing overall keys: {missing}")
+        if corpus_run.overall_total != len(scenarios):
+            raise ValidationError(
+                f"smoke total mismatch: expected {len(scenarios)}, got {corpus_run.overall_total}"
+            )
+        console.print(
+            f"[green]Smoke passed[/green] — {len(scenarios)} scenarios, "
+            f"{corpus_run.overall_total} trials, ASR {corpus_run.asr:.1%}, "
+            f"coverage {corpus_run.coverage:.1%} → {path}"
+        )
+
+    _run(run())
+
+
 @app.command(name="readme-mapping")
 def readme_mapping(
     apply: bool = typer.Option(
@@ -1190,7 +1268,7 @@ def corpus(
                 elif graph_module:
                     a = LangGraphAdapter(spec=graph_module)
                 else:
-                    from tests.fixtures.langgraph_agent import build_vulnerable_graph
+                    from neuralstrike.fixtures.langgraph_agent import build_vulnerable_graph
 
                     a = LangGraphAdapter(graph=build_vulnerable_graph())
                 adapters_to_close.append(a)

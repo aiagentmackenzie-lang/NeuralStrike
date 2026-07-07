@@ -119,7 +119,7 @@ class TestExitGate1MCPBehavioral:
 class TestExitGate2LangGraphDrive:
     @pytest.mark.asyncio
     async def test_langgraph_drive_observes_tool_calls(self, tmp_path) -> None:
-        from tests.fixtures.langgraph_agent import build_vulnerable_graph
+        from neuralstrike.fixtures.langgraph_agent import build_vulnerable_graph
 
         adapter = LangGraphAdapter(graph=build_vulnerable_graph())
         spec = ForbiddenToolSpec(forbidden_tools=("grant_admin_access",))
@@ -150,7 +150,7 @@ class TestExitGate2LangGraphDrive:
 class TestExitGate3FidelityTagged:
     @pytest.mark.asyncio
     async def test_every_finding_in_report_has_fidelity(self, tmp_path) -> None:
-        from tests.fixtures.langgraph_agent import build_vulnerable_graph
+        from neuralstrike.fixtures.langgraph_agent import build_vulnerable_graph
 
         adapter = LangGraphAdapter(graph=build_vulnerable_graph())
         spec = ForbiddenToolSpec(forbidden_tools=("grant_admin_access",))

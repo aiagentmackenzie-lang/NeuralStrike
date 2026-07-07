@@ -53,7 +53,7 @@ async def test_delivery_vector_lands_in_declared_channel_by_adapter_trace(
     vector: str, tmp_path,
 ) -> None:
     """The adapter trace (not the prompt) confirms the channel."""
-    from tests.fixtures.langgraph_agent import build_vulnerable_graph
+    from neuralstrike.fixtures.langgraph_agent import build_vulnerable_graph
 
     scenarios = load_corpus_dir()
     scenario = next(s for s in scenarios if s.delivery_vector == vector)
@@ -103,7 +103,7 @@ async def test_delivery_records_present_and_absent_channels(tmp_path) -> None:
     tool_result as present — proof the harness did not string-stuff the
     user prompt.
     """
-    from tests.fixtures.langgraph_agent import build_vulnerable_graph
+    from neuralstrike.fixtures.langgraph_agent import build_vulnerable_graph
 
     scenarios = load_corpus_dir()
     scenario = next(s for s in scenarios if s.delivery_vector == "tool_result")
@@ -138,7 +138,7 @@ async def test_delivery_records_present_and_absent_channels(tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_indirect_harness_produces_verdict_and_fidelity(tmp_path) -> None:
     """The harness returns a conclusive verdict + tagged fidelity per the contract."""
-    from tests.fixtures.langgraph_agent import build_vulnerable_graph
+    from neuralstrike.fixtures.langgraph_agent import build_vulnerable_graph
 
     scenarios = load_corpus_dir()
     # A scenario whose success_criteria is forbidden_tool grant_admin_access

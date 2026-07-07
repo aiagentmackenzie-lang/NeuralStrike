@@ -6,12 +6,13 @@ FROM python:3.12-slim AS builder
 WORKDIR /build
 
 # Build deps first for layer caching
-COPY pyproject.toml README.md /build/
+COPY pyproject.toml README.md requirements.txt /build/
 COPY src /build/src
 
 RUN python -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir --upgrade pip \
-    && /opt/venv/bin/pip install --no-cache-dir ".[mcp]"
+    && /opt/venv/bin/pip install --no-cache-dir --no-deps -r requirements.txt \
+    && /opt/venv/bin/pip install --no-cache-dir --no-deps ".[mcp]"
 
 # ---- Runtime stage ----
 FROM python:3.12-slim AS runtime

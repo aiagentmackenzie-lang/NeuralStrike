@@ -40,7 +40,7 @@ def full_corpus_run():
     scenarios = load_corpus_dir()
 
     async def _run() -> object:
-        from tests.fixtures.langgraph_agent import build_vulnerable_graph
+        from neuralstrike.fixtures.langgraph_agent import build_vulnerable_graph
 
         reports = []
         for s in scenarios:
@@ -129,7 +129,7 @@ class TestExitGate2IndirectInjectionChannelsByAdapterTrace:
     )
     @pytest.mark.asyncio
     async def test_vector_exercises_correct_channel(self, vector: str, tmp_path) -> None:
-        from tests.fixtures.langgraph_agent import build_vulnerable_graph
+        from neuralstrike.fixtures.langgraph_agent import build_vulnerable_graph
 
         scenarios = load_corpus_dir()
         scenario = next(s for s in scenarios if s.delivery_vector == vector)

@@ -67,9 +67,11 @@ the SUT is tested at the boundary, not just at the user message."""
 
 def corpus_path() -> Path:
     """The bundled corpus directory (sibling of the installed package)."""
-    # corpus/ lives at the repo root, next to src/. Resolve from this file.
-    here = Path(__file__).resolve()
-    # src/neuralstrike/corpus/loader.py -> repo root is three parents up.
+    here = Path(__file__).resolve().parent
+    bundled = here / "data"
+    if bundled.is_dir():
+        return bundled
+    # Fallback: repo layout where corpus/ lives next to src/.
     root = here.parents[3]
     return root / "corpus"
 

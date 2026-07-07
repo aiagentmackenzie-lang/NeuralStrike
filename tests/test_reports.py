@@ -45,7 +45,7 @@ def corpus_run():
         subset.append(s)
 
     async def _run() -> object:
-        from tests.fixtures.langgraph_agent import build_vulnerable_graph
+        from neuralstrike.fixtures.langgraph_agent import build_vulnerable_graph
 
         reports = []
         for s in subset:

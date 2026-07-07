@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -810,6 +812,42 @@ class TestMissingBranchCoverage:
                 ["adaptive", "--target", "deepseek-r1", "--strategy", "crescendo", "--no-judge"],
             )
         assert result.exit_code == 0, result.output
+
+
+# --- Smoke (offline fixture) ------------------------------------------------
+
+
+class TestSmokeCommand:
+    def test_smoke_json_report(self, runner: CliRunner) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "smoke"
+            result = runner.invoke(app, ["smoke", "--out", str(out), "--format", "json"])
+            assert result.exit_code == 0, result.output
+            assert "Smoke passed" in result.output
+            report_path = out.with_suffix(".json")
+            assert report_path.exists()
+            data = json.loads(report_path.read_text(encoding="utf-8"))
+            overall = data["overall"]
+            assert overall["total"] == 3
+            assert "asr" in overall
+            assert "coverage" in overall
+            assert data["scenario_results"]
+
+    def test_smoke_sarif_report(self, runner: CliRunner) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "smoke"
+            result = runner.invoke(app, ["smoke", "--out", str(out), "--format", "sarif"])
+            assert result.exit_code == 0, result.output
+            report_path = out.with_suffix(".sarif")
+            assert report_path.exists()
+            data = json.loads(report_path.read_text(encoding="utf-8"))
+            assert data["version"] == "2.1.0"
+            assert data["runs"][0]["tool"]["driver"]["name"] == "NeuralStrike"
+
+    def test_smoke_invalid_format(self, runner: CliRunner) -> None:
+        result = runner.invoke(app, ["smoke", "--format", "xml"])
+        assert result.exit_code == 1
+        assert "must be sarif|json" in str(result.exception)
 
 
 class TestRegisterParser:
