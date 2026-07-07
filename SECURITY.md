@@ -24,13 +24,60 @@ harm:
 - CLI inputs are validated: target URLs must be `http://`/`https://`, ports
   must be in 1–65535, iteration counts are bounded.
 - DoS-class operations (`exhaust`) require `--force` above 10,000 tokens.
+- Scope checking (`--scope-file`) blocks out-of-scope targets before a probe
+  runs.
+- Irreversible intents require `--require-approval` after `safety-check`.
 - Logs are redacted of credential-shaped strings when
   `NEURALSTRIKE_REDACT_LOGS=true` (default).
 
 These defaults do **not** make the tool safe to run against systems you do not
 own. You are responsible for your use.
 
-## 2. Reporting vulnerabilities in NeuralStrike
+## 2. Threat model
+
+A full threat model of NeuralStrike itself is in
+[`docs/threat_model.md`](docs/threat_model.md). The headline risks are:
+
+- **Supply-chain compromise** of the package, image, or dependencies — mitigated
+  by hashed requirements, `pip-audit`, CycloneDX SBOM, and cosign-signed GHCR
+  images with Rekor attestation.
+- **Credential leakage** from logs, prompts, or report artifacts — mitigated by
+  log redaction, `.env`/`.gitignore` hygiene, and deterministic canaries that
+  are not operator secrets.
+- **Compromised Attacker/Judge models** producing misleading verdicts —
+  mitigated by deterministic oracles, fail-closed LLM errors, and recorded
+  per-trial metadata.
+- **MCP Interceptor exposed as an open proxy** — mitigated by loopback default,
+  explicit non-loopback opt-in with a warning, and non-root container user.
+- **A2A identity / delegation spoofing** — mitigated by Agent Card signature
+  verification in `a2a-scan` and alignment with the A2A Identity Working Group
+  error conventions (see below).
+
+## 3. A2A Identity Working Group error conventions
+
+NeuralStrike reports that touch agent identity and delegation use the same
+structural-before-semantic error vocabulary as the A2A Identity Working Group
+(CTEF / agent-identity extension discussions). This keeps red-team findings
+aligned with the language defensive stacks use to reject bad identity claims.
+
+Two codes are surfaced today:
+
+- **`INVALID_CLAIM_SCOPE`** — a presented identity or delegation claim expands or
+  narrows the authorized scope beyond what the upstream principal delegated.
+  In NeuralStrike this maps to an A2A `a2a-scan` finding where a tampered or
+  overreaching Agent Card / delegation chain grants more authority than its
+  signed ancestor.
+- **`INVALID_COMPOSITION`** — a multi-layer identity or delegation envelope is
+  structurally malformed (e.g., incompatible claim types layered together, a
+  chain that violates monotonic scope narrowing, or a missing binding). In
+  NeuralStrike this maps to an A2A scan finding where the composed identity
+  evidence does not form a valid chain even if individual signatures verify.
+
+These codes are descriptive, not normative — they translate NeuralStrike's
+observations into the WG's vocabulary so defenders can act on them without a
+secondary mapping.
+
+## 4. Reporting vulnerabilities in NeuralStrike
 
 If you find a security issue in NeuralStrike itself (e.g., a way the tool
 leaks operator credentials, bypasses its own redaction, or misroutes traffic

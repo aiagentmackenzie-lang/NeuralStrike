@@ -23,6 +23,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   workflow (`.github/workflows/release.yml`). Publish is gated by
   `workflow_dispatch` inputs and requires explicit operator approval.
 
+### Added (Phase 6 chunk 4)
+- `dashboard/` — Vite + React results viewer that reads NeuralStrike JSON and
+  SARIF 2.1.0 reports, with summary cards, per-category verdict filters, and
+  a Vitest test suite covering both formats.
+- `docs/threat_model.md` — full threat model of NeuralStrike itself.
+- `SECURITY.md` expanded with the formal threat model and the A2A Identity
+  Working Group error conventions (`INVALID_CLAIM_SCOPE`,
+  `INVALID_COMPOSITION`).
+- Offline `neuralstrike smoke` command documented in `README.md` and
+  `USAGE.md`.
+
+### Changed (Phase 6 chunk 4)
+- `USAGE.md` and `README.md` updated to v1.0.0; `README.md` notes Phase 6
+  chunk 2 CLI coverage as shipped and adds a dashboard section.
+- CI now includes a `dashboard` job that builds and tests the viewer.
+
 ### Changed
 - Version bumped to `1.0.0`; classifier moved to `Production/Stable`.
 - `typer[all]` dependency simplified to `typer>=0.12` (optional extras are

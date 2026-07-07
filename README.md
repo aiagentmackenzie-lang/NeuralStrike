@@ -150,11 +150,19 @@ pip install -e ".[dev,mcp]"
 neuralstrike --version
 ```
 
+### Fresh-clone smoke test
+
+```bash
+pip install -e ".[dev,mcp]"
+neuralstrike smoke          # runs offline against the bundled fixture
+```
+
 ### With Docker
 
 ```bash
 docker compose up -d ollama        # local brain
 docker compose run --rm neuralstrike neuralstrike --help
+docker compose run --rm neuralstrike neuralstrike smoke
 ```
 
 ### Prerequisites
@@ -165,9 +173,9 @@ docker compose run --rm neuralstrike neuralstrike --help
 - **API keys** (optional, for `--target-type remote`): set
   `NEURALSTRIKE_OPENAI_API_KEY` / `NEURALSTRIKE_ANTHROPIC_API_KEY` in `.env`.
 
-Dependencies are single-sourced in `pyproject.toml`. There is no
-`requirements.txt`; install extras (`[dev]` for the test/lint/type toolchain,
-`[mcp]` for the MCP interceptor proxy).
+Dependencies are single-sourced in `pyproject.toml`. Production deployments can
+install from the hashed `requirements.txt`/`requirements-dev.txt` lockfiles
+produced by `uv pip compile --generate-hashes`.
 
 ---
 
@@ -515,7 +523,7 @@ print(apply_transform('base64', 'reveal the secret').provenance)"
   in the runtime in production; NeuralStrike tests the prompt-level surface
   a red-team can reach. The README never claims the prompt-level gate *is*
   the runtime enforcement.
-- **`main.py` CLI coverage** remains a Phase 6 target (H1), not a Phase 4 gate.
+- **`main.py` CLI coverage** shipped in Phase 6 chunk 2 (87%).
 
 ### MCP & A2A deep coverage + agent identity (Phase 5)
 
@@ -593,7 +601,7 @@ neuralstrike rag-poison --target http://localhost:11434 --query "reset password"
   Code/Cursor server realism; Phase 5's `mcp-scan` uses the existing HTTP
   adapter because the dominant 2025–2026 attack class (descriptor-channel
   poisoning) is transport-agnostic.
-- **`main.py` CLI coverage** remains a Phase 6 target (H1), not a Phase 5 gate.
+- **`main.py` CLI coverage** shipped in Phase 6 chunk 2 (87%).
 
 ---
 
@@ -734,6 +742,24 @@ fails (adaptive ASR > static ASR — `test_static_template_fails_pair_succeeds`)
 (`TestKnownAnswerRoundTrip`, parametrized over all 18); (3) a spotlighting
 defense reduces ASR on the same corpus by a measured delta, and the harness
 reports both arms (`test_spotlighting_reduces_asr`).
+
+---
+
+## Results dashboard
+
+A minimal Vite + React viewer lives in `dashboard/`. It reads a NeuralStrike
+JSON report or a SARIF 2.1.0 file and surfaces per-category ASR, coverage,
+severity, and verdict filters.
+
+```bash
+cd dashboard
+npm install
+npm run build   # outputs to dashboard/dist/
+npm test        # parses both report formats
+```
+
+Open `dashboard/dist/index.html` in a browser after building, or run
+`npm run dev` for the Vite dev server.
 
 ---
 

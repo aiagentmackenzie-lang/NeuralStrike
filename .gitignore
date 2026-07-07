@@ -32,6 +32,7 @@ htmlcov/
 !.env.example
 
 # Build / SBOM artifacts
+node_modules/
 neuralstrike-smoke.*
 sbom.json
 *.whl
@@ -39,6 +40,7 @@ sbom.json
 
 # Dashboard build artifacts
 dashboard/dist/
+dashboard/node_modules/
 
 # Run transcripts (seed/temperature-pinned trial records)
 runs/

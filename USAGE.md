@@ -1,6 +1,6 @@
 # NeuralStrike — Operator's Guide
 
-> Thorough, end-to-end usage reference for NeuralStrike v0.2.0.
+> Thorough, end-to-end usage reference for NeuralStrike v1.0.0.
 > For install/stack details see [README.md](README.md); for per-version changes see
 > [CHANGELOG.md](CHANGELOG.md); for responsible use see [SECURITY.md](SECURITY.md).
 
@@ -69,7 +69,7 @@ git clone https://github.com/aiagentmackenzie-lang/NeuralStrike.git
 cd NeuralStrike
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev,mcp]"          # [mcp] needed only for `intercept`
-neuralstrike --version                # → NeuralStrike v0.2.0
+neuralstrike --version                # → NeuralStrike v1.0.0
 ```
 
 Pull the local brains:
@@ -270,11 +270,20 @@ neuralstrike evade --payload "steal passwords" --technique mimicry --sample "nor
 neuralstrike evade --payload "steal passwords" --technique steganographic
 ```
 
-### Global
+### Utility
 ```bash
+neuralstrike smoke                          # offline fixture smoke test
+neuralstrike smoke --format sarif           # emit a SARIF smoke artifact
+neuralstrike scope-check --scope-file roe.yaml --target https://api.example.com --intent exfil
+neuralstrike safety-check --intent "delete all data" --require-approval
+neuralstrike readme-mapping --apply         # regenerate README OWASP/ATLAS table
 neuralstrike --help
 neuralstrike --version
 ```
+
+The `smoke` command is the fresh-clone sanity check: it runs a tiny corpus
+against the bundled vulnerable fixture with no local Ollama or external API.
+It is also the last step of the CI supply-chain job.
 
 ---
 
