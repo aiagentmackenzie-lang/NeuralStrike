@@ -1097,6 +1097,190 @@ def smoke(
     _run(run())
 
 
+@app.command(name="neuralguard-bench")
+def neuralguard_bench(
+    neuralguard_url: str | None = typer.Option(
+        None,
+        "--neuralguard-url",
+        help="Live NeuralGuard /v1/evaluate base URL (real cross-repo path). "
+        "Default: bundled NeuralGuard-compatible fixture (deterministic).",
+    ),
+    in_process: bool = typer.Option(
+        False,
+        "--in-process",
+        help="Use the real in-process NeuralGuard ASGI app (requires the "
+        "neuralguard package installed, e.g. 'uv pip install -e "
+        "../NeuralGuard-AI-Firewall'). Errors if not importable.",
+    ),
+    target_url: str | None = typer.Option(
+        None,
+        "--target-url",
+        help="Victim OpenAI-compatible /v1/chat/completions URL. Default: "
+        "bundled echo victim (leaks the canary — a vulnerable agent).",
+    ),
+    target_model: str | None = typer.Option(
+        None, "--target-model", help="Victim model name (with --target-url).",
+    ),
+    target_api_key: str | None = typer.Option(
+        None, "--target-api-key", help="Victim API key (with --target-url).",
+    ),
+    json_out: str | None = typer.Option(
+        None, "--json-out", help="If set, write a JSON results summary to this path.",
+    ),
+    quiet: bool = typer.Option(False, "--quiet", help="Reduce logging to WARNING and above."),
+    verbose: bool = typer.Option(False, "--verbose", help="Increase logging to DEBUG."),
+) -> None:
+    """Run the canonical attack chain against a NeuralGuard-defended victim.
+
+    The Phase-7 pairing command. Runs recon -> weaponize -> exploit ->
+    post-ex payloads against a victim WITH and WITHOUT a NeuralGuard
+    firewall in front, and prints the ASR for both arms plus the delta.
+    Exits 0 on success, non-zero on error.
+
+    Defaults run on a fresh clone with no external deps: the bundled echo
+    victim (leaks the canary) screened by the bundled NeuralGuard-compatible
+    fixture (deterministic). Use --in-process for real cross-repo validation
+    against the neuralguard package, or --neuralguard-url for a live
+    deployment.
+    """
+    _apply_verbosity(quiet, verbose)
+    from neuralstrike.integrations import (
+        BundledNeuralGuardFixture,
+        NeuralGuardHTTPScreen,
+        in_process_screen,
+        neuralguard_available,
+        run_attack_chain_delta,
+    )
+
+    console.print(
+        "[yellow]NeuralStrike <-> NeuralGuard attack-chain benchmark...[/yellow]"
+    )
+
+    # Build the screen: --neuralguard-url (live) > --in-process (real NG) >
+    # bundled fixture (deterministic default, fresh-clone-runnable).
+    from neuralstrike.integrations.neuralguard import NeuralGuardScreen
+
+    screen_close = False
+    screen: NeuralGuardScreen
+    if neuralguard_url:
+        screen = NeuralGuardHTTPScreen(neuralguard_url)
+        screen_close = True
+    elif in_process:
+        if not neuralguard_available():
+            raise ValidationError(
+                "--in-process requires the neuralguard package (e.g. "
+                "'uv pip install -e ../NeuralGuard-AI-Firewall')."
+            )
+        screen = in_process_screen()
+    else:
+        screen = BundledNeuralGuardFixture()
+
+    # Build the victim_fn: live OpenAI endpoint > bundled echo victim.
+    victim_name = "bundled-echo-victim"
+    if target_url:
+        if not target_model:
+            raise ValidationError("--target-url requires --target-model")
+        from neuralstrike.adapters.openai_endpoint import OpenAIEndpointAdapter
+
+        adapter = OpenAIEndpointAdapter(
+            target_url, model=target_model, api_key=target_api_key, tier="text",
+        )
+        victim_name = f"openai:{target_model}"
+
+        async def victim_fn(prompt: str) -> str:
+            resp = await adapter.query(prompt)
+            return resp.text or ""
+
+        async def _run_bench() -> None:
+            try:
+                delta = await run_attack_chain_delta(
+                    screen, victim_fn, victim_name=victim_name,
+                )
+            finally:
+                await adapter.close()
+                if screen_close:
+                    await screen.close()
+            _print_attack_chain_delta(delta, json_out)
+    else:
+        async def _echo_victim(prompt: str) -> str:
+            # A vulnerable agent that complies with injected instructions and
+            # repeats the canary. This is the honest baseline victim.
+            return prompt
+
+        async def _run_bench() -> None:
+            try:
+                delta = await run_attack_chain_delta(
+                    screen, _echo_victim, victim_name=victim_name,
+                )
+            finally:
+                if screen_close:
+                    await screen.close()
+            _print_attack_chain_delta(delta, json_out)
+
+    _run(_run_bench())
+
+
+def _print_attack_chain_delta(delta: Any, json_out: str | None) -> None:
+    """Render an AttackChainDelta to the console (and optional JSON file)."""
+    from pathlib import Path
+
+    console.print(f"[bold]{delta.headline}[/bold]")
+    console.print(
+        f"  victim: {delta.victim}  |  screen: {delta.screen}  |  "
+        f"payloads: {delta.n}"
+    )
+    console.print("  per-phase:")
+    for ph in delta.phases:
+        console.print(
+            f"    {ph.phase.value:<10} n={ph.n}  "
+            f"baseline ASR={ph.baseline_asr:.1%} -> defended ASR={ph.defended_asr:.1%}  "
+            f"(delta={ph.delta:+.1%})"
+        )
+    console.print("  per-payload (firewall verdict -> defended verdict):")
+    for a in delta.payloads:
+        console.print(
+            f"    {a.payload_id:<14} {a.phase.value:<10} "
+            f"firewall={a.firewall_verdict:<9} -> defended={a.defended_verdict.value}"
+        )
+    if json_out:
+        import json as _json
+
+        summary = {
+            "screen": delta.screen,
+            "victim": delta.victim,
+            "n": delta.n,
+            "baseline_asr": delta.baseline_asr,
+            "defended_asr": delta.defended_asr,
+            "delta": delta.delta,
+            "baseline_succeeded": delta.baseline_succeeded,
+            "baseline_conclusive": delta.baseline_conclusive,
+            "defended_succeeded": delta.defended_succeeded,
+            "defended_conclusive": delta.defended_conclusive,
+            "phases": [
+                {
+                    "phase": ph.phase.value,
+                    "n": ph.n,
+                    "baseline_asr": ph.baseline_asr,
+                    "defended_asr": ph.defended_asr,
+                    "delta": ph.delta,
+                }
+                for ph in delta.phases
+            ],
+            "payloads": [
+                {
+                    "id": a.payload_id,
+                    "phase": a.phase.value,
+                    "baseline_verdict": a.baseline_verdict.value,
+                    "defended_verdict": a.defended_verdict.value,
+                    "firewall_verdict": a.firewall_verdict,
+                }
+                for a in delta.payloads
+            ],
+        }
+        Path(json_out).write_text(_json.dumps(summary, indent=2), encoding="utf-8")
+        console.print(f"  [blue]JSON results -> {json_out}[/blue]")
+
+
 @app.command(name="readme-mapping")
 def readme_mapping(
     apply: bool = typer.Option(

@@ -6,6 +6,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.0] — 2026-07-07
 
+### Added (Phase 7 — NeuralGuard pairing)
+- `src/neuralstrike/integrations/neuralguard.py` — the `NeuralGuardScreen`
+  contract + `NeuralGuardHTTPScreen` (live deployment),
+  `BundledNeuralGuardFixture` (deterministic, contract-compatible fixture —
+  NOT real NeuralGuard; fresh-clone-runnable), and `in_process_screen()` (real
+  in-process NeuralGuard ASGI app when the `neuralguard` package is importable).
+- `src/neuralstrike/integrations/attack_chain.py` — the canonical
+  recon→weaponize→exploit→post-ex attack chain + `run_attack_chain_delta`
+  which scores both arms (the ONLY difference is the firewall, so the delta is
+  honestly attributable). Blocked payloads → INCONCLUSIVE, never fabricated.
+- `neuralstrike neuralguard-bench` CLI — runs the attack chain against a
+  victim with/without a NeuralGuard firewall; prints per-phase + overall ASR
+  + delta; `--in-process` / `--neuralguard-url` / `--target-url` / `--json-out`.
+- `tests/test_phase7_exit_gate.py` + `tests/test_integrations_neuralguard.py` —
+  23 tests (exit-gate bullets + screen/runner unit tests); skip-gated
+  real-NeuralGuard in-process test.
+- Closed C2/I2: the README NeuralGuard-pairing claim is now verified from the
+  offensive side; cross-project alignment with NeuralGuard's
+  `benchmarks/ng_vs_ns/` (the defensive side's view).
+
 ### Added
 - `neuralstrike smoke` — offline smoke test that runs a tiny corpus against the
   bundled vulnerable fixture. No local Ollama or external API required.

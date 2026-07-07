@@ -87,6 +87,7 @@ ignore = [
 "src/neuralstrike/identity/did.py" = ["PLC0415"]  # optional base58 import for did:key
 "src/neuralstrike/identity/jws.py" = ["PLC0415"]  # optional cryptography imports
 "src/neuralstrike/identity/signatures.py" = ["PLC0415"]  # optional cryptography imports
+"src/neuralstrike/integrations/neuralguard.py" = ["PLC0415"]  # optional neuralguard in-process imports (mirrors [langgraph] extra pattern)
 "src/neuralstrike/packs/__init__.py" = ["PLC0415"]  # pack classes registered via @register_pack at import; lazy AdversarialLoop import
 "src/neuralstrike/packs/base.py" = ["PLC0415"]  # lazy httpx import keeps pack import side-effect-free
 "src/neuralstrike/transforms/codecs.py" = ["RUF001", "RUF002", "RUF003"]  # homoglyph/braille tables use unicode lookalikes by design
@@ -103,7 +104,7 @@ no_implicit_optional = true
 files = ["src/neuralstrike"]
 
 [[tool.mypy.overrides]]
-module = ["litellm", "ollama", "jsonschema"]
+module = ["litellm", "ollama", "jsonschema", "neuralguard", "neuralguard.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

@@ -69,7 +69,7 @@ The corpus ships **43 scenarios** across 20 OWASP categories (10 ASI + 10 LLM), 
 _Each scenario's `success_criteria` reference deterministic oracles (canary / forbidden-tool / predicate / schema / system-prompt extraction); the Judge is advisory only and never flips a deterministic verdict. See `PRODUCTION_ROADMAP.md` §Phase 2._
 <!-- END neuralstrike-mapping -->
 
-It pairs with **[NeuralGuard-AI-Firewall](https://github.com/aiagentmackenzie-lang/NeuralGuard-AI-Firewall)** as the adversarial half of an attack/defend AI-security story: NeuralStrike generates the attacks, NeuralGuard validates the defensive controls, and NeuralGuard's deterministic benchmark harness lets you measure blocked/detection rates against live NeuralStrike payloads.
+It pairs with **[NeuralGuard-AI-Firewall](https://github.com/aiagentmackenzie-lang/NeuralGuard-AI-Firewall)** as the adversarial half of an attack/defend AI-security story: NeuralStrike generates the attacks, NeuralGuard validates the defensive controls, and the two repos actually talk via the `neuralstrike neuralguard-bench` command (Phase 7) and NeuralGuard's `benchmarks/ng_vs_ns/` harness (Sprint A). See [NeuralGuard pairing (Phase 7)](#neuralguard-pairing-phase-7).
 
 ### Status legend
 Throughout this README, each capability is tagged:
@@ -603,6 +603,90 @@ neuralstrike rag-poison --target http://localhost:11434 --query "reset password"
   poisoning) is transport-agnostic.
 - **`main.py` CLI coverage** shipped in Phase 6 chunk 2 (87%).
 
+### NeuralGuard pairing (Phase 7)
+
+Phase 7 makes the README's NeuralGuard-pairing claim real from the
+**offensive** side. NeuralStrike generates a canonical recon → weaponize →
+exploit → post-ex attack chain; a NeuralGuard firewall screens each
+payload before it reaches the victim; the runner reports the ASR **with and
+without** the firewall plus the per-phase delta. This is the attack/defend
+pairing closed — C2/I2 resolved.
+
+```bash
+# Default: bundled echo victim + bundled NeuralGuard-compatible fixture
+# (deterministic, fresh-clone-runnable, no external deps):
+neuralstrike neuralguard-bench
+
+# Real cross-repo validation (install the sibling repo, then run in-process):
+uv pip install -e ../NeuralGuard-AI-Firewall
+neuralstrike neuralguard-bench --in-process
+
+# Or point at a live NeuralGuard deployment:
+neuralstrike neuralguard-bench --neuralguard-url http://localhost:8000
+
+# Drive a real victim too:
+neuralstrike neuralguard-bench --target-url http://localhost:11434/v1 --target-model mistral:7b
+```
+
+**What ships**
+- ✅ `src/neuralstrike/integrations/neuralguard.py` — the screen contract
+  (`NeuralGuardScreen`) + three implementations: `NeuralGuardHTTPScreen`
+  (live deployment), `BundledNeuralGuardFixture` (deterministic,
+  NeuralGuard-`/v1/evaluate`-contract-compatible fixture — **NOT NeuralGuard**,
+  exists so the exit gate runs on a fresh clone), and `in_process_screen()`
+  (real in-process NeuralGuard ASGI app when the `neuralguard` package is
+  importable, mirroring the `[langgraph]` optional-extra pattern).
+- ✅ `src/neuralstrike/integrations/attack_chain.py` — the canonical
+  recon→weaponize→exploit→post-ex chain (`canonical_attack_chain`) +
+  `run_attack_chain_delta` which scores both arms (the ONLY difference is the
+  firewall, so the delta is honestly attributable). Blocked payloads →
+  `INCONCLUSIVE` (no canary leak = coverage gap), never a fabricated `RESISTED`.
+- ✅ `neuralstrike neuralguard-bench` CLI — prints per-phase + overall ASR
+  with/without the firewall + the delta; optional `--json-out`.
+
+**Phase 7 exit gate (green)**
+1. `run_attack_chain_delta` against the bundled fixture reports both ASRs;
+   the firewall reduces ASR by a measured delta (defended ASR < baseline ASR).
+   `tests/test_phase7_exit_gate.py::TestExitGate1AttackChainDelta`.
+2. Every canonical payload maps a NeuralStrike module to a NeuralGuard
+   threat family — the pairing claim is verifiable from shipped code.
+   `tests/test_phase7_exit_gate.py::TestExitGate2PairingMappingVerifiable`.
+3. `neuralguard-bench` runs end-to-end on a fresh clone (no external deps)
+   and prints both ASRs + the delta.
+   `tests/test_phase7_exit_gate.py::TestExitGate3CLI`.
+
+### Phase 7 honest scope
+
+- **The bundled fixture is NOT NeuralGuard.** It is a deterministic,
+  contract-compatible pattern screen so the integration plumbing and the
+  delta-reporting are provable on a fresh clone with no `neuralguard`
+  installed. Real NeuralGuard runs via `--in-process` (when the package is
+  importable) or `--neuralguard-url` (live deployment). The fixture is
+  clearly labeled in every code path and log line.
+- **Same-author caveat.** The attacker (NeuralStrike) and the defender
+  (NeuralGuard) share an author. This measures **defense-in-depth /
+  regression detection**, NOT neutral third-party independence — the same
+  caveat NeuralGuard's `benchmarks/ng_vs_ns/README.md` states plainly.
+- **Real NeuralGuard (pattern-only) has honest detection gaps on this
+  chain.** Verified 2026-07-07 against in-process NeuralGuard
+  (`benchmark_config()` — pattern-only, semantic/judge OFF): the canonical
+  8-payload chain is split 4/8 — recon (system-prompt reveal, tool enum),
+  `JailbreakForge` (DAN), and `DataExfiltrator` (attacker.example exfil) are
+  **blocked**; `ContextPoison` (trusted-system-data), `FunctionHijack`
+  (grant_admin_access), `ModelExtract` (repeat system prompt), and `AgentC2`
+  (C2 registry) are **allowed**. These are real NeuralGuard pattern-scanner
+  gaps, recorded as findings — not papered over. The semantic + judge layers
+  (OFF in the benchmark config) are the documented closing path.
+- **The exit-gate delta test uses the bundled fixture** (deterministic,
+  catches all 8 → defended ASR = 0). The real-NeuralGuard path is a
+  skip-gated test that asserts the command *runs* and prints both ASRs, not
+  that defended ASR = 0 — because the real gaps make that assertion false.
+
+Cross-project alignment: NeuralGuard's `benchmarks/ng_vs_ns/` (Sprint A)
+is the **defensive** half's view of the same pairing; `neuralstrike
+neuralguard-bench` is the **offensive** half's view. Both repos point at
+the same worked example.
+
 ---
 
 ## Module specifications
@@ -795,6 +879,7 @@ NeuralStrike/
 │   ├── attacks/ascii_smuggling.py  # (Phase 4) EchoLeak-class invisible-Unicode exfil probe
 │   ├── transforms/            # (Phase 4) base + codecs — 18-codec evasion pipeline + winnability guard
 │   ├── defenses/              # (Phase 4) base, defenses, checkers, harness — defensive-pattern testing + delta
+│   ├── integrations/          # (Phase 7) neuralguard (screen contract: HTTP + bundled fixture + in-process NG) + attack_chain (recon→weaponize→exploit→post-ex delta)
 │   ├── packs/                 # (Phase 3) base, harmbench, jailbreakbench, cyberseceval, local — on-demand benchmark import
 │   └── reports/               # (Phase 2) json, sarif, junit, markdown, pdf, compliance, readme_mapping
 ├── corpus/                    # (Phase 2) asi01-asi10.yaml + llm01-llm10.yaml — 43 OWASP-tagged scenarios

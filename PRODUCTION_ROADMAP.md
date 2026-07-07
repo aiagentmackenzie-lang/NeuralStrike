@@ -535,7 +535,13 @@ core).
 
 ---
 
-### Phase 7 — NeuralGuard benchmark harness (the pairing story)
+### Phase 7 — NeuralGuard benchmark harness (the pairing story) — SHIPPED 2026-07-07
+
+**Status:** complete. `integrations/neuralguard.py` + `integrations/attack_chain.py`
++ `neuralguard-bench` CLI shipped; exit gate green (23 new tests, 681 passed /
+2 skipped on a fresh clone, 90.56% coverage). Real in-process NeuralGuard
+validation verified (4/8 caught by pattern-only — honest detection gaps
+recorded). C2/I2 closed. See README §"NeuralGuard pairing (Phase 7)".
 
 **Goal:** Make the README's NeuralGuard-pairing claim real, and close
 the attack/defend/govern triad.
