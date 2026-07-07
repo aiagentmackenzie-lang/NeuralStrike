@@ -12,6 +12,8 @@ from rich.panel import Panel
 
 from neuralstrike import __version__
 from neuralstrike.core.exceptions import ValidationError
+from neuralstrike.safety import HITLGate, classify_intent
+from neuralstrike.scope import load_scope
 from neuralstrike.utils.logging import configure_logging, get_logger
 from neuralstrike.utils.validation import (
     validate_iteration_bounds,
@@ -56,6 +58,20 @@ def _apply_verbosity(quiet: bool, verbose: bool) -> None:
         root.setLevel(logging.DEBUG)
     else:
         root.setLevel(logging.INFO)
+
+
+def _apply_scope(scope_file: str | None, target: str, intent: str | None) -> None:
+    """Validate target/intent against a rules-of-engagement file."""
+    if not scope_file:
+        return
+    scope = load_scope(scope_file)
+    scope.assert_allows(target, intent)
+
+
+def _apply_safety(intent: str | None, require_approval: bool) -> None:
+    """Fail closed on irreversible actions without explicit approval."""
+    action_class = classify_intent(intent)
+    HITLGate(action_class, intent=intent, approved=require_approval).assert_approved()
 
 
 def _version_callback(value: bool) -> None:
@@ -601,6 +617,33 @@ def evade(
     _run(run())
 
 
+@app.command()
+def scope_check(
+    scope_file: str = typer.Option(..., help="Path to rules-of-engagement YAML/JSON."),
+    target: str = typer.Option(..., help="Target to validate."),
+    intent: str | None = typer.Option(None, help="Intent to validate."),
+) -> None:
+    """Validate a target/intent against the rules of engagement."""
+    _apply_scope(scope_file, target, intent)
+    console.print(f"[green]In scope:[/green] {target}" + (f" intent={intent}" if intent else ""))
+
+
+@app.command()
+def safety_check(
+    intent: str = typer.Option(..., help="Intent to classify."),
+    require_approval: bool = typer.Option(False, "--require-approval", help="Explicit operator approval."),
+) -> None:
+    """Classify an intent and enforce the HITL gate."""
+    _apply_safety(intent, require_approval)
+    from neuralstrike.safety import ttl_for
+
+    action_class = classify_intent(intent)
+    console.print(
+        f"[green]{intent}[/green] -> {action_class.value} "
+        f"(TTL {ttl_for(action_class)}s, approved={require_approval})"
+    )
+
+
 # --- Evaluation (Phase 0) ------------------------------------------------
 
 
@@ -673,6 +716,15 @@ def evaluate(
     ),
     quiet: bool = typer.Option(False, "--quiet", help="Reduce logging to WARNING and above."),
     verbose: bool = typer.Option(False, "--verbose", help="Increase logging to DEBUG."),
+    scope_file: str | None = typer.Option(
+        None, "--scope-file", help="Rules-of-engagement YAML/JSON to validate against."
+    ),
+    intent: str | None = typer.Option(
+        None, "--intent", help="Attack intent (used by scope + safety classification)."
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for irreversible actions."
+    ),
 ) -> None:
     """Run a k-trial canary-extraction probe and (optionally) gate on a baseline.
 
@@ -690,6 +742,8 @@ def evaluate(
     if timeout is not None and timeout <= 0:
         raise ValidationError("--timeout must be > 0")
 
+    _apply_scope(scope_file, target, intent)
+    _apply_safety(intent, require_approval)
     _apply_verbosity(quiet, verbose)
 
     from neuralstrike.core.config import settings
@@ -854,6 +908,15 @@ def scan(
     ),
     delay: float = typer.Option(0.0, "--delay", help="Seconds to sleep between trials."),
     timeout: float | None = typer.Option(None, "--timeout", help="Per-trial timeout in seconds."),
+    scope_file: str | None = typer.Option(
+        None, "--scope-file", help="Rules-of-engagement YAML/JSON to validate against."
+    ),
+    intent: str | None = typer.Option(
+        None, "--intent", help="Attack intent (used by scope + safety classification)."
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for irreversible actions."
+    ),
 ) -> None:
     """Drive a real target via an adapter and score behaviour (Phase 1).
 
@@ -871,6 +934,9 @@ def scan(
         raise ValidationError("--fail-on must be never|vuln|regression")
     if adapter == "openai" and not model:
         raise ValidationError("--adapter openai requires --model")
+
+    _apply_scope(scope_file, url, intent)
+    _apply_safety(intent, require_approval)
 
     from neuralstrike.adapters.a2a import A2AAdapter
     from neuralstrike.adapters.base import TargetAdapter
@@ -1034,6 +1100,15 @@ def corpus(
     progress: bool = typer.Option(
         False, "--progress", help="Show a rich progress bar over scenarios."
     ),
+    scope_file: str | None = typer.Option(
+        None, "--scope-file", help="Rules-of-engagement YAML/JSON to validate against."
+    ),
+    intent: str | None = typer.Option(
+        None, "--intent", help="Attack intent (used by scope + safety classification)."
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for irreversible actions."
+    ),
 ) -> None:
     """Run the OWASP ASI/LLM corpus against a target and emit an audit-grade report.
 
@@ -1056,6 +1131,8 @@ def corpus(
     if adapter == "openai" and (not url or not model):
         raise ValidationError("--adapter openai requires --url and --model")
 
+    _apply_scope(scope_file, url or model or "bundled-vulnerable-fixture", intent)
+    _apply_safety(intent, require_approval)
     _apply_verbosity(quiet, verbose)
 
     from neuralstrike.adapters.base import TargetAdapter
@@ -1224,6 +1301,15 @@ def pack(
     ),
     delay: float = typer.Option(0.0, "--delay", help="Seconds to sleep between trials and probes."),
     timeout: float | None = typer.Option(None, "--timeout", help="Per-trial timeout in seconds."),
+    scope_file: str | None = typer.Option(
+        None, "--scope-file", help="Rules-of-engagement YAML/JSON to validate against."
+    ),
+    intent: str | None = typer.Option(
+        None, "--intent", help="Attack intent (used by scope + safety classification)."
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for irreversible actions."
+    ),
 ) -> None:
     """Run a benchmark pack (HarmBench/JailbreakBench/CyberSecEval/local) against a SUT.
 
@@ -1244,6 +1330,9 @@ def pack(
         raise ValidationError("--name local requires --import-probes <file.json>")
     if name != "local" and import_probes:
         raise ValidationError("--import-probes is only valid with --name local")
+
+    _apply_scope(scope_file, target, intent)
+    _apply_safety(intent, require_approval)
 
     from neuralstrike.core.config import settings
     from neuralstrike.core.llm_manager import LLMManager
@@ -1408,6 +1497,15 @@ def adaptive(
     seed: int = typer.Option(0, help="Base seed for reproducibility."),
     max_iterations: int = typer.Option(5, help="Max attacker refinement turns per trial."),
     run_dir: str = typer.Option("runs", help="Directory for per-trial transcripts."),
+    scope_file: str | None = typer.Option(
+        None, "--scope-file", help="Rules-of-engagement YAML/JSON to validate against."
+    ),
+    intent: str | None = typer.Option(
+        None, "--intent", help="Attack intent (used by scope + safety classification)."
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for irreversible actions."
+    ),
 ) -> None:
     """Run an adaptive attack (PAIR/TAP/Crescendo) that refines its payload across turns.
 
@@ -1425,6 +1523,9 @@ def adaptive(
         raise ValidationError("--judge-rubric must be evidence-anchored|strict|lenient")
     if trials < 1:
         raise ValidationError("--trials must be >= 1")
+
+    _apply_scope(scope_file, target, intent)
+    _apply_safety(intent, require_approval)
 
     from neuralstrike.attacks.adaptive import (
         adaptive_probe,
@@ -1559,11 +1660,23 @@ def mcp_scan(
         help="Fetch a previous manifest from this URL to detect sleeper rug-pulls.",
     ),
     json_output: bool = typer.Option(False, "--json", help="Emit raw JSON report to stdout."),
+    scope_file: str | None = typer.Option(
+        None, "--scope-file", help="Rules-of-engagement YAML/JSON to validate against."
+    ),
+    intent: str | None = typer.Option(
+        None, "--intent", help="Attack intent (used by scope + safety classification)."
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for irreversible actions."
+    ),
 ) -> None:
     """Scan an MCP server for tool-poisoning patterns and manifest drift."""
     validate_url(url, field="url")
     if previous_url:
         validate_url(previous_url, field="previous-url")
+
+    _apply_scope(scope_file, url, intent)
+    _apply_safety(intent, require_approval)
 
     from neuralstrike.adapters.mcp_http import MCPHTTPAdapter
     from neuralstrike.attacks.mcp_poison import (
@@ -1599,9 +1712,21 @@ def mcp_scan(
 def a2a_scan(
     base_url: str = typer.Option(..., help="A2A agent base URL."),
     json_output: bool = typer.Option(False, "--json", help="Emit raw JSON report to stdout."),
+    scope_file: str | None = typer.Option(
+        None, "--scope-file", help="Rules-of-engagement YAML/JSON to validate against."
+    ),
+    intent: str | None = typer.Option(
+        None, "--intent", help="Attack intent (used by scope + safety classification)."
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for irreversible actions."
+    ),
 ) -> None:
     """Fetch and verify an A2A Agent Card signature; test tamper detection."""
     validate_url(base_url, field="base_url")
+
+    _apply_scope(scope_file, base_url, intent)
+    _apply_safety(intent, require_approval)
 
     from neuralstrike.attacks.a2a.card_tamper import A2ACardTamperScanner
 
@@ -1646,6 +1771,15 @@ def minja(
         "--shorteners",
         help="Comma-separated progressive-shortening queries.",
     ),
+    scope_file: str | None = typer.Option(
+        None, "--scope-file", help="Rules-of-engagement YAML/JSON to validate against."
+    ),
+    intent: str | None = typer.Option(
+        None, "--intent", help="Attack intent (used by scope + safety classification)."
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for irreversible actions."
+    ),
 ) -> None:
     """Run a MINJA memory-injection sequence against a memory-augmented target."""
     validate_target_model(target)
@@ -1653,6 +1787,9 @@ def minja(
         raise ValidationError("target_type must be 'local' or 'remote'")
     if not canary.startswith("CANARY-"):
         raise ValidationError("canary must start with CANARY-")
+
+    _apply_scope(scope_file, target, intent)
+    _apply_safety(intent, require_approval)
 
     from neuralstrike.adapters.openai_endpoint import OpenAIEndpointAdapter
     from neuralstrike.attacks.minja import MinjaHarness, MINJAStrategy
@@ -1696,6 +1833,15 @@ def rag_poison(
     benign_doc: str | None = typer.Option(
         None, "--benign-doc", help="Optional benign document to include in retrieval context."
     ),
+    scope_file: str | None = typer.Option(
+        None, "--scope-file", help="Rules-of-engagement YAML/JSON to validate against."
+    ),
+    intent: str | None = typer.Option(
+        None, "--intent", help="Attack intent (used by scope + safety classification)."
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for irreversible actions."
+    ),
 ) -> None:
     """Run a PoisonedRAG-style corpus-poisoning attack against a retrieval target."""
     validate_target_model(target)
@@ -1703,6 +1849,9 @@ def rag_poison(
         raise ValidationError("target_type must be 'local' or 'remote'")
     if not canary.startswith("CANARY-"):
         raise ValidationError("canary must start with CANARY-")
+
+    _apply_scope(scope_file, target, intent)
+    _apply_safety(intent, require_approval)
 
     from neuralstrike.adapters.openai_endpoint import OpenAIEndpointAdapter
     from neuralstrike.attacks.rag_poison import (
