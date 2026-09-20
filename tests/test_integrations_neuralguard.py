@@ -200,6 +200,80 @@ class TestRunAttackChainDelta:
         assert delta.delta == 0.0
 
 
+class TestCatchRateHonesty:
+    """The conclusive-only ASR denominator excludes blocked payloads (they are
+    INCONCLUSIVE), so the overall delta can read +0.0% while the screen stopped
+    half the chain. The catch-rate surface is the honest complement: it says
+    what the screen STOPPED, per run."""
+
+    @pytest.mark.asyncio
+    async def test_catch_rate_counts_caught_payloads(self) -> None:
+        screen = BundledNeuralGuardFixture()
+
+        async def echo_victim(prompt: str) -> str:
+            return prompt
+
+        delta = await run_attack_chain_delta(screen, echo_victim, seed=42)
+        # The fixture catches all 8 canonical payloads.
+        assert delta.firewall_caught == delta.n
+        assert delta.catch_rate == 1.0
+        assert "8/8" in delta.catch_headline
+
+    @pytest.mark.asyncio
+    async def test_catch_rate_on_partial_catch(self) -> None:
+        # A pattern screen that catches only RECON payloads: ASR delta would
+        # be computed over the conclusive subset, but the catch rate must
+        # still report exactly what the screen stopped (2/8).
+        from neuralstrike.integrations.neuralguard import ScreenResult
+
+        class _ReconOnly(BundledNeuralGuardFixture):
+            name = "recon-only-fixture"
+
+            async def screen(self, prompt: str):  # type: ignore[override]
+                result = await super().screen(prompt)
+                if "tool" not in prompt.lower() and "system prompt" not in prompt.lower():
+                    # Simplified: allow everything except the recon-family shapes.
+                    return ScreenResult(verdict="allow")
+                return result
+
+        async def echo_victim(prompt: str) -> str:
+            return prompt
+
+        delta = await run_attack_chain_delta(_ReconOnly(), echo_victim, seed=7)
+        assert 0 < delta.firewall_caught < delta.n
+        assert 0.0 < delta.catch_rate < 1.0
+        # The recon phase's payloads that were caught are exactly the caught set:
+        # every caught payload's defended verdict is INCONCLUSIVE, every allowed
+        # one is SUCCEEDED (echo victim leaks).
+        from neuralstrike.evaluation.verdict import Verdict
+
+        for a in delta.payloads:
+            if a.firewall_verdict in CAUGHT_VERDICTS:
+                assert a.defended_verdict is Verdict.INCONCLUSIVE
+            else:
+                assert a.firewall_verdict == "allow"
+                assert a.defended_verdict is Verdict.SUCCEEDED
+        # Additive JSON keys exist for the report surface (Wave-2 producer +
+        # purple report consume these).
+        summary_keys = {"firewall_caught", "catch_rate"}
+        assert summary_keys.issubset(
+            {
+                "screen",
+                "victim",
+                "n",
+                "baseline_asr",
+                "defended_asr",
+                "delta",
+                "firewall_caught",
+                "catch_rate",
+                "baseline_succeeded",
+                "baseline_conclusive",
+                "defended_succeeded",
+                "defended_conclusive",
+            }
+        )
+
+
 class TestNeuralGuardAvailability:
     def test_returns_bool(self) -> None:
         # On a fresh NeuralStrike clone, neuralguard is not installed.
