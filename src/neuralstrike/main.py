@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import typer
 from rich.console import Console
@@ -13,6 +13,12 @@ from rich.panel import Panel
 from neuralstrike import __version__
 from neuralstrike.core.exceptions import ValidationError
 from neuralstrike.safety import HITLGate, classify_intent
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from neuralstrike.integrations.neuralguard import NeuralGuardScreen
+    from neuralstrike.integrations.scarletai import ExerciseTelemetry
 from neuralstrike.scope import load_scope
 from neuralstrike.utils.logging import configure_logging, get_logger
 from neuralstrike.utils.validation import (
@@ -1065,6 +1071,99 @@ def smoke(
     _run(run())
 
 
+def _build_telemetry(
+    scarletai_url: str | None, scarletai_token: str | None, telemetry_actor: str | None
+) -> ExerciseTelemetry | None:
+    """Resolve the ScarletAI telemetry config: CLI flags > env (settings).
+
+    OPT-IN: None = telemetry off. A partial config (URL without token or the
+    reverse) is a validation error — never a silent half-pipe. The run host
+    is stamped ``neuralstrike-<runid>`` so the SIEM-side join keys on the
+    host ILIKE filter + the actor slot.
+    """
+    from neuralstrike.core.config import settings as _settings
+    from neuralstrike.integrations.scarletai import ExerciseTelemetry
+
+    url = scarletai_url or _settings.scarletai_url
+    token = scarletai_token or _settings.scarletai_token
+    actor = telemetry_actor or _settings.telemetry_actor
+    if bool(url) != bool(token):
+        raise ValidationError(
+            "--scarletai-url and --scarletai-token (or NEURALSTRIKE_SCARLETAI_URL and "
+            "NEURALSTRIKE_SCARLETAI_TOKEN) must be set together — no silent half-pipe."
+        )
+    if not url:
+        return None
+    if url is None or token is None:  # pragma: no cover — narrowed above; keeps mypy exact
+        return None
+    import secrets
+    from datetime import datetime
+
+    run_id = f"{datetime.now().strftime('%Y%m%d%H%M%S')}-{secrets.token_hex(4)}"
+    return ExerciseTelemetry(
+        ingest_url=url,
+        token=token,
+        run_host=f"neuralstrike-{run_id}",
+        actor=actor,
+    )
+
+
+async def _run_chain_with_telemetry(
+    screen: NeuralGuardScreen,
+    victim_fn: Callable[[str], Awaitable[str]],
+    victim_name: str,
+    telemetry: ExerciseTelemetry | None,
+    json_out: str | None,
+    *,
+    target: str = "",
+    seed: int = 0,
+) -> None:
+    """Run the attack-chain delta; emit Scarlet exercise telemetry when ON.
+
+    Telemetry is observability, never a control (the P2-7 doctrine mirrored):
+    every post is best-effort fail-soft; a dead SIEM never fails the exercise
+    or changes a verdict. Start bookend posts BEFORE the chain (a start
+    without an end is the honest crashed-exercise signal); the probes + end
+    bookend post after completion.
+    """
+    from datetime import datetime, timezone
+
+    from neuralstrike.integrations.attack_chain import (
+        canonical_attack_chain,
+        run_attack_chain_delta,
+    )
+    from neuralstrike.integrations.scarletai import (
+        build_exercise_events,
+        build_exercise_start_event,
+        post_events,
+    )
+
+    if telemetry is None:
+        delta = await run_attack_chain_delta(screen, victim_fn, victim_name=victim_name)
+        _print_attack_chain_delta(delta, json_out)
+        return
+    started_at = datetime.now(timezone.utc)
+    await post_events(
+        telemetry.ingest_url,
+        telemetry.token,
+        [
+            build_exercise_start_event(
+                telemetry,
+                timestamp=started_at,
+                target=target,
+                screen=screen.name,
+                n_payloads=len(canonical_attack_chain()),
+                seed=seed,
+            )
+        ],
+        timeout=telemetry.timeout,
+    )
+    delta = await run_attack_chain_delta(screen, victim_fn, victim_name=victim_name)
+    events = build_exercise_events(telemetry, delta, started_at=started_at, target=target, seed=seed)
+    await post_events(telemetry.ingest_url, telemetry.token, events, timeout=telemetry.timeout)
+    _print_attack_chain_delta(delta, json_out)
+
+
 @app.command(name="neuralguard-bench")
 def neuralguard_bench(
     neuralguard_url: str | None = typer.Option(
@@ -1101,6 +1200,24 @@ def neuralguard_bench(
         "--json-out",
         help="If set, write a JSON results summary to this path.",
     ),
+    scarletai_url: str | None = typer.Option(
+        None,
+        "--scarletai-url",
+        help="FULL SecurityScarletAI ingest URL (e.g. http://localhost:8000/api/v1/ingest) "
+        "— emits exercise telemetry (exercise_start / probe_* / exercise_end). "
+        "Opt-in with --scarletai-token; env NEURALSTRIKE_SCARLETAI_URL/TOKEN.",
+    ),
+    scarletai_token: str | None = typer.Option(
+        None,
+        "--scarletai-token",
+        help="ScarletAI INGEST_BEARER_TOKEN (the scoped ingest token; never logged).",
+    ),
+    telemetry_actor: str | None = typer.Option(
+        None,
+        "--telemetry-actor",
+        help="The exercise actor (user_name slot; default NEURALSTRIKE_TELEMETRY_ACTOR "
+        "or 'neuralstrike-operator').",
+    ),
     quiet: bool = typer.Option(False, "--quiet", help="Reduce logging to WARNING and above."),
     verbose: bool = typer.Option(False, "--verbose", help="Increase logging to DEBUG."),
 ) -> None:
@@ -1123,14 +1240,17 @@ def neuralguard_bench(
         NeuralGuardHTTPScreen,
         in_process_screen,
         neuralguard_available,
-        run_attack_chain_delta,
     )
 
     console.print("[yellow]NeuralStrike <-> NeuralGuard attack-chain benchmark...[/yellow]")
 
+    # ScarletAI exercise telemetry (opt-in): CLI flags > env. None = off.
+    telemetry = _build_telemetry(scarletai_url, scarletai_token, telemetry_actor)
+    if telemetry is not None:
+        console.print(f"[blue]SIEM telemetry ON → {telemetry.ingest_url}[/blue]")
+
     # Build the screen: --neuralguard-url (live) > --in-process (real NG) >
     # bundled fixture (deterministic default, fresh-clone-runnable).
-    from neuralstrike.integrations.neuralguard import NeuralGuardScreen
 
     screen_close = False
     screen: NeuralGuardScreen
@@ -1168,16 +1288,13 @@ def neuralguard_bench(
 
         async def _run_bench() -> None:
             try:
-                delta = await run_attack_chain_delta(
-                    screen,
-                    victim_fn,
-                    victim_name=victim_name,
+                await _run_chain_with_telemetry(
+                    screen, victim_fn, victim_name, telemetry, json_out, target=target_url
                 )
             finally:
                 await adapter.close()
                 if screen_close:
                     await screen.close()
-            _print_attack_chain_delta(delta, json_out)
     else:
 
         async def _echo_victim(prompt: str) -> str:
@@ -1187,15 +1304,10 @@ def neuralguard_bench(
 
         async def _run_bench() -> None:
             try:
-                delta = await run_attack_chain_delta(
-                    screen,
-                    _echo_victim,
-                    victim_name=victim_name,
-                )
+                await _run_chain_with_telemetry(screen, _echo_victim, victim_name, telemetry, json_out)
             finally:
                 if screen_close:
                     await screen.close()
-            _print_attack_chain_delta(delta, json_out)
 
     _run(_run_bench())
 

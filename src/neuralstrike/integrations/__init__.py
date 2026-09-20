@@ -26,13 +26,20 @@ from neuralstrike.integrations.neuralguard import (
     in_process_screen,
     neuralguard_available,
 )
+from neuralstrike.integrations.scarletai import (
+    SCARLETAI_SOURCE,
+    ExerciseTelemetry,
+    post_events,
+)
 
 __all__ = [
     "CAUGHT_VERDICTS",
+    "SCARLETAI_SOURCE",
     "AttackChainDelta",
     "AttackChainPayload",
     "AttackPhase",
     "BundledNeuralGuardFixture",
+    "ExerciseTelemetry",
     "NeuralGuardHTTPScreen",
     "NeuralGuardScreen",
     "PhaseResult",
@@ -40,5 +47,6 @@ __all__ = [
     "canonical_attack_chain",
     "in_process_screen",
     "neuralguard_available",
+    "post_events",
     "run_attack_chain_delta",
 ]
