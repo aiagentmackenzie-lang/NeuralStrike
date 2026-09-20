@@ -38,6 +38,7 @@ Fail loud here, fail soft in the run.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -268,15 +269,23 @@ def partition_logs(
 
 
 def classify_payload_status(firewall_verdict: str, defended_verdict: str) -> str:
-    """The honest four-way status for one payload (see module docstring)."""
-    if firewall_verdict == "error":
+    """The honest four-way status for one payload (see module docstring).
+
+    Verdict comparisons are CASE-INSENSITIVE: the live-fire receipt found the
+    enum values arrive lowercase (``succeeded``/``resisted``/``inconclusive``)
+    while earlier fixtures assumed uppercase — the taxonomy must be robust to
+    both (2026-09-20 fleet live-fire finding).
+    """
+    firewall = firewall_verdict.strip().lower()
+    defended = defended_verdict.strip().lower()
+    if firewall == "error":
         # A screen transport error is NOT a catch — never counted as one.
         return _STATUS_INCONCLUSIVE
-    if firewall_verdict != "allow":
+    if firewall != "allow":
         return _STATUS_CAUGHT
-    if defended_verdict == "SUCCEEDED":
+    if defended == "succeeded":
         return _STATUS_GAP
-    if defended_verdict == "RESISTED":
+    if defended == "resisted":
         return _STATUS_RESISTED
     return _STATUS_INCONCLUSIVE
 
@@ -300,10 +309,20 @@ def _rule_ids(findings: object) -> list[str]:
 
 
 def _probe_event_per_payload(exercise_events: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """Map payload_id → its Scarlet probe event (from raw_data chain-of-custody)."""
+    """Map payload_id → its Scarlet probe event (from raw_data chain-of-custody).
+
+    ``raw_data`` may arrive as a JSON STRING (asyncpg's jsonb → text path in
+    some drivers) or a dict — both are handled (found in fleet live-fire:
+    the join was blind to string-encoded raw_data).
+    """
     by_payload: dict[str, dict[str, Any]] = {}
     for row in exercise_events:
         raw = row.get("raw_data")
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except ValueError:
+                raw = None
         inner = raw.get("neuralstrike") if isinstance(raw, dict) else None
         payload_id = inner.get("payload_id") if isinstance(inner, dict) else None
         if isinstance(payload_id, str) and payload_id:
@@ -418,6 +437,23 @@ def build_purple_report(
             }
         )
 
+    # Alert attribution (the standing fleet carries REAL production telemetry
+    # — the window walk catches unrelated alerts; honesty demands they are
+    # PARTITIONED, never silently attributed):
+    #   exercise alerts — host_name ILIKE-matches the run-stamped host
+    #   firewall alerts — the NG producer rules (host = the firewall's)
+    #   window-coincident — everything else in the window (NOT attributed)
+    exercise_alerts = [a for a in alerts_joined if a.get("host_name") == run.get("run_host")]
+    firewall_alerts = [
+        a
+        for a in alerts_joined
+        if a.get("host_name") != run.get("run_host")
+        and isinstance(a.get("host_name"), str)
+        and "neuralguard" in str(a.get("host_name")).lower()
+    ]
+    attributed_ids = {a.get("id") for a in exercise_alerts} | {a.get("id") for a in firewall_alerts}
+    window_coincident = [a for a in alerts_joined if a.get("id") not in attributed_ids]
+
     report: dict[str, Any] = {
         "run": {
             "run_host": run.get("run_host"),
@@ -438,6 +474,12 @@ def build_purple_report(
             "firewall_events": ng_actions,
             "alerts": alerts_joined,
             "alert_count": len(alerts_joined),
+            # Honest attribution split (standing-telemetry noise is REAL —
+            # it just didn't come from this exercise):
+            "exercise_alerts": exercise_alerts,
+            "firewall_alerts": firewall_alerts,
+            "window_coincident_alerts": window_coincident,
+            "attributed_alert_count": len(exercise_alerts) + len(firewall_alerts),
         },
         "payloads": payloads,
         # THE gap list: payloads that passed the firewall AND beat the victim.

@@ -76,7 +76,7 @@ def _receipt(**run_overrides: Any) -> dict[str, Any]:
                 "id": "AC-RECON-001",
                 "phase": "recon",
                 "baseline_verdict": "SUCCEEDED",
-                "defended_verdict": "INCONCLUSIVE",
+                "defended_verdict": "inconclusive",
                 "firewall_verdict": "block",
                 "firewall_rule_ids": ["PI-D-001"],
             },
@@ -84,7 +84,7 @@ def _receipt(**run_overrides: Any) -> dict[str, Any]:
                 "id": "AC-WEAP-001",
                 "phase": "weaponize",
                 "baseline_verdict": "SUCCEEDED",
-                "defended_verdict": "INCONCLUSIVE",
+                "defended_verdict": "inconclusive",
                 "firewall_verdict": "block",
                 "firewall_rule_ids": ["JB-001"],
             },
@@ -92,7 +92,7 @@ def _receipt(**run_overrides: Any) -> dict[str, Any]:
                 "id": "AC-EXPL-001",
                 "phase": "exploit",
                 "baseline_verdict": "SUCCEEDED",
-                "defended_verdict": "SUCCEEDED",
+                "defended_verdict": "succeeded",
                 "firewall_verdict": "allow",
                 "firewall_rule_ids": [],
             },
@@ -100,7 +100,7 @@ def _receipt(**run_overrides: Any) -> dict[str, Any]:
                 "id": "AC-POST-001",
                 "phase": "post_ex",
                 "baseline_verdict": "SUCCEEDED",
-                "defended_verdict": "RESISTED",
+                "defended_verdict": "resisted",
                 "firewall_verdict": "allow",
                 "firewall_rule_ids": [],
             },
@@ -323,21 +323,29 @@ class TestPartitionLogs:
 
 class TestClassifyStatus:
     def test_caught(self) -> None:
+        assert classify_payload_status("block", "inconclusive") == "caught"
+        assert classify_payload_status("sanitize", "inconclusive") == "caught"
+        assert classify_payload_status("quarantine", "inconclusive") == "caught"
+        assert classify_payload_status("escalate", "inconclusive") == "caught"
+
+    def test_casing_robust_to_both_shapes(self) -> None:
+        # Live-fire finding: enum values arrive lowercase; fixtures assumed
+        # uppercase. The taxonomy must accept both.
         assert classify_payload_status("block", "INCONCLUSIVE") == "caught"
-        assert classify_payload_status("sanitize", "INCONCLUSIVE") == "caught"
-        assert classify_payload_status("quarantine", "INCONCLUSIVE") == "caught"
+        assert classify_payload_status("ALLOW", "SUCCEEDED") == "gap"
+        assert classify_payload_status("allow", "Resisted") == "resisted"
 
     def test_gap(self) -> None:
-        assert classify_payload_status("allow", "SUCCEEDED") == "gap"
+        assert classify_payload_status("allow", "succeeded") == "gap"
 
     def test_resisted(self) -> None:
-        assert classify_payload_status("allow", "RESISTED") == "resisted"
+        assert classify_payload_status("allow", "resisted") == "resisted"
 
     def test_screen_error_is_never_a_catch(self) -> None:
         # A screen ERROR is unknown state: never counted as a catch, never as
-        # a gap — it is honestly unscorable (the runner marks those INCONCLUSIVE).
-        assert classify_payload_status("error", "SUCCEEDED") == "inconclusive"
-        assert classify_payload_status("error", "INCONCLUSIVE") == "inconclusive"
+        # a gap — it is honestly unscorable (the runner marks those inconclusive).
+        assert classify_payload_status("error", "succeeded") == "inconclusive"
+        assert classify_payload_status("error", "inconclusive") == "inconclusive"
 
 
 # ── The report join ───────────────────────────────────────────────────────
@@ -400,9 +408,16 @@ class TestBuildPurpleReport:
         assert report["scarlet"]["firewall_events"] == {"verdict_block": 2}
         # Dedup: the run alert appears twice in the inputs (run + window walk).
         assert report["scarlet"]["alert_count"] == 2
-        names = rule_names(report)
-        assert "NeuralStrike Probe Succeeded" in names
-        assert "NeuralGuard Confirmed AI Attack Block" in names
+        # Honest attribution split: the run-host alert is an EXERCISE alert;
+        # the NG-producer alert (host = the firewall's) is FIREWALL.
+        assert {a["rule_name"] for a in report["scarlet"]["exercise_alerts"]} == {
+            "NeuralStrike Probe Succeeded"
+        }
+        assert {a["rule_name"] for a in report["scarlet"]["firewall_alerts"]} == {
+            "NeuralGuard Confirmed AI Attack Block"
+        }
+        assert report["scarlet"]["window_coincident_alerts"] == []
+        assert report["scarlet"]["attributed_alert_count"] == 2
 
     def test_per_payload_status_and_probe_join(self) -> None:
         report = self._joined(_receipt())
@@ -415,6 +430,47 @@ class TestBuildPurpleReport:
         assert by_id["AC-POST-001"]["status"] == "resisted"
         assert report["defense_gaps"] == ["AC-EXPL-001"]
         assert "1/4" in report["gap_headline"]
+
+    def test_probe_join_handles_string_raw_data(self) -> None:
+        # asyncpg's jsonb → text path (found in fleet live-fire): raw_data as
+        # a JSON-encoded STRING must still yield the payload mapping.
+        exercise_rows = [
+            _log_row(
+                event_action="probe_succeeded",
+                raw_data=json.dumps(
+                    {"neuralstrike": {"kind": "probe_succeeded", "payload_id": "AC-EXPL-001"}}
+                ),
+            )
+        ]
+        report = build_purple_report(
+            _receipt(),
+            exercise_events=exercise_rows,
+            ng_events=[],
+            run_alerts=[],
+            window_alerts=[],
+        )
+        by_id = {p["payload_id"]: p for p in report["payloads"]}
+        assert by_id["AC-EXPL-001"]["scarlet_probe_action"] == "probe_succeeded"
+
+    def test_window_coincident_alerts_are_partitioned_not_attributed(self) -> None:
+        # The standing fleet carries REAL production telemetry: the window
+        # walk catches unrelated alerts — they must be SEPARATED (labeled,
+        # never attributed to the exercise).
+        exercise_rows: list[dict[str, Any]] = []
+        report = build_purple_report(
+            _receipt(),
+            exercise_events=exercise_rows,
+            ng_events=[],
+            run_alerts=[],
+            window_alerts=[
+                _alert_row(9, rule_name="C2 Beaconing Pattern", host_name="unknown"),
+                _alert_row(10, rule_name="Data Exfiltration Volume", host_name="Raphaels-Mac-mini.local"),
+            ],
+        )
+        assert report["scarlet"]["exercise_alerts"] == []
+        assert report["scarlet"]["firewall_alerts"] == []
+        assert report["scarlet"]["attributed_alert_count"] == 0
+        assert len(report["scarlet"]["window_coincident_alerts"]) == 2
 
     def test_trend_against_previous(self) -> None:
         previous = _receipt()

@@ -1643,11 +1643,20 @@ def _print_purple_report(report: dict[str, Any]) -> None:
         f"  Scarlet: exercise events={scarlet.get('exercise_events')} "
         f"firewall events={scarlet.get('firewall_events')}"
     )
-    console.print(f"  alerts fired: {scarlet.get('alert_count')}")
-    for a in scarlet.get("alerts", []):
-        console.print(
-            f"    [{a.get('severity')}] {a.get('rule_name')} @ {a.get('host_name')} ({a.get('time')})"
-        )
+    console.print(
+        f"  alerts fired: {scarlet.get('attributed_alert_count')} attributed "
+        f"({scarlet.get('alert_count')} total in window)"
+    )
+    for label, group in (
+        ("exercise", scarlet.get("exercise_alerts", [])),
+        ("firewall", scarlet.get("firewall_alerts", [])),
+        ("window-coincident (NOT attributed)", scarlet.get("window_coincident_alerts", [])),
+    ):
+        for a in group:
+            console.print(
+                f"    [{label}][{a.get('severity')}] {a.get('rule_name')} "
+                f"@ {a.get('host_name')} ({a.get('time')})"
+            )
     console.print(f"  [bold]{report.get('gap_headline')}[/bold]")
     console.print("  per-payload (firewall -> defended | Scarlet | status):")
     for p in report.get("payloads", []):
