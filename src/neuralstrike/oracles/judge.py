@@ -195,9 +195,7 @@ class JudgeOracle(Oracle):
         :class:`Oracle` ABC contract for typing — it raises so nobody
         calls it by accident.
         """
-        raise NotImplementedError(
-            "JudgeOracle is advisory and async; use JudgeOracle.score(), not check()."
-        )
+        raise NotImplementedError("JudgeOracle is advisory and async; use JudgeOracle.score(), not check().")
 
     def to_oracle_result(self, jv: JudgeVerdict, *, role: JudgeRole | None = None) -> OracleResult:
         """Convert a typed JudgeVerdict into an :class:`OracleResult`.

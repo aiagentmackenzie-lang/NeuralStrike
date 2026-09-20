@@ -33,10 +33,7 @@ from neuralstrike.reports.model import CorpusRun, ScenarioResult
 
 __all__ = ["to_sarif"]
 
-_SARIF_SCHEMA = (
-    "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/"
-    "Schemata/sarif-schema-2.1.0.json"
-)
+_SARIF_SCHEMA = "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/Schemata/sarif-schema-2.1.0.json"
 
 
 def _level_for(verdict: Verdict) -> str:
@@ -76,9 +73,7 @@ def _rule_for(scenario_result: ScenarioResult) -> dict[str, Any]:
             "mitigations": list(s.mitigations),
             "compliance_controls": controls,
             # Human-readable framework names for the SARIF viewer tooltip.
-            "compliance_frameworks": [
-                framework_name(c.framework) for c in scenario_result.controls
-            ],
+            "compliance_frameworks": [framework_name(c.framework) for c in scenario_result.controls],
         },
     }
 
@@ -157,9 +152,7 @@ def to_sarif(run: CorpusRun) -> str:
                     "driver": {
                         "name": "NeuralStrike",
                         "version": __version__,
-                        "informationUri": (
-                            "https://github.com/aiagentmackenzie-lang/NeuralStrike"
-                        ),
+                        "informationUri": ("https://github.com/aiagentmackenzie-lang/NeuralStrike"),
                         "rules": rules,
                         "properties": {
                             "summary": (

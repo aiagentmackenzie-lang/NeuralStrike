@@ -76,9 +76,7 @@ class TestExitGate1SarifMapsEveryFinding:
         run = doc["runs"][0]
         # The full corpus size is dynamic; one SARIF rule per scenario.
         rules = run["tool"]["driver"]["rules"]
-        assert len(rules) == expected_scenarios, (
-            f"expected {expected_scenarios} rules, got {len(rules)}"
-        )
+        assert len(rules) == expected_scenarios, f"expected {expected_scenarios} rules, got {len(rules)}"
         # Every rule maps to an ASI/LLM ID + ATLAS + compliance controls.
         for rule in rules:
             props = rule["properties"]
@@ -88,13 +86,17 @@ class TestExitGate1SarifMapsEveryFinding:
             assert props["compliance_controls"], f"rule {rule['id']} has no compliance controls"
             for c in props["compliance_controls"]:
                 assert c["framework"] in {
-                    "NIST_AI_RMF", "EU_AI_ACT", "ISO_42001", "SOC2", "CSA_MAESTRO",
-                    "OWASP_ASI", "OWASP_LLM", "MITRE_ATLAS",
+                    "NIST_AI_RMF",
+                    "EU_AI_ACT",
+                    "ISO_42001",
+                    "SOC2",
+                    "CSA_MAESTRO",
+                    "OWASP_ASI",
+                    "OWASP_LLM",
+                    "MITRE_ATLAS",
                 }
 
-    def test_every_result_maps_to_a_rule_with_asi_llm_atlas_and_control(
-        self, full_corpus_run
-    ) -> None:
+    def test_every_result_maps_to_a_rule_with_asi_llm_atlas_and_control(self, full_corpus_run) -> None:
         sarif = to_sarif(full_corpus_run)
         doc = json.loads(sarif)
         rules = {r["id"]: r for r in doc["runs"][0]["tool"]["driver"]["rules"]}
@@ -183,8 +185,6 @@ class TestExitGate4HonestVerdicts:
         assert run.overall_succeeded > 0, "no succeeded findings; the fixture was not driven"
         # Canary-only scenarios cannot be satisfied by the fixture -> Inconclusive
         # (coverage gaps, surfaced, not coerced to PASS).
-        assert run.overall_inconclusive > 0, (
-            "no inconclusive findings; coverage gaps were coerced to PASS"
-        )
+        assert run.overall_inconclusive > 0, "no inconclusive findings; coverage gaps were coerced to PASS"
         # Coverage is honest: conclusive / total, neither 0 nor necessarily 100%.
         assert 0.0 < run.coverage <= 1.0

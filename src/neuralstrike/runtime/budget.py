@@ -31,13 +31,9 @@ class Budget:
         self.spent_usd += cost_usd
         self.tokens_used += tokens
         if self.max_cost_usd is not None and self.spent_usd > self.max_cost_usd:
-            raise BudgetExceeded(
-                f"cost budget exceeded: ${self.spent_usd:.4f} > ${self.max_cost_usd:.4f}"
-            )
+            raise BudgetExceeded(f"cost budget exceeded: ${self.spent_usd:.4f} > ${self.max_cost_usd:.4f}")
         if self.max_tokens is not None and self.tokens_used > self.max_tokens:
-            raise BudgetExceeded(
-                f"token budget exceeded: {self.tokens_used} > {self.max_tokens}"
-            )
+            raise BudgetExceeded(f"token budget exceeded: {self.tokens_used} > {self.max_tokens}")
 
     def summary(self) -> dict[str, float | int | None]:
         return {

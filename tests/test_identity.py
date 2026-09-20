@@ -51,7 +51,11 @@ class TestJWSVerify:
         header = {"alg": "HS256", "typ": "JWT"}
         header_b64 = base64.urlsafe_b64encode(json.dumps(header).encode()).decode().rstrip("=")
         signing_input = f"{header_b64}.{payload_b64}".encode()
-        signature = base64.urlsafe_b64encode(hmac.new(b"secret", signing_input, hashlib.sha256).digest()).decode().rstrip("=")
+        signature = (
+            base64.urlsafe_b64encode(hmac.new(b"secret", signing_input, hashlib.sha256).digest())
+            .decode()
+            .rstrip("=")
+        )
         jws = f"{header_b64}.{payload_b64}.{signature}"
         out_header, out_payload = verify_compact_jws(jws, key=b"secret", canonicalize_payload=False)
         assert out_header["alg"] == "HS256"
@@ -63,7 +67,11 @@ class TestJWSVerify:
         header = {"alg": "HS256"}
         header_b64 = base64.urlsafe_b64encode(json.dumps(header).encode()).decode().rstrip("=")
         signing_input = f"{header_b64}.{payload_b64}".encode()
-        signature = base64.urlsafe_b64encode(hmac.new(b"secret", signing_input, hashlib.sha256).digest()).decode().rstrip("=")
+        signature = (
+            base64.urlsafe_b64encode(hmac.new(b"secret", signing_input, hashlib.sha256).digest())
+            .decode()
+            .rstrip("=")
+        )
         jws = f"{header_b64}.{payload_b64}.{signature}"
         with pytest.raises(JWSVerifyError, match="HS256 signature mismatch"):
             verify_compact_jws(jws, key=b"wrong", canonicalize_payload=False)
@@ -74,10 +82,14 @@ class TestJWSVerify:
 
     def test_rs256_valid(self) -> None:
         private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-        public_pem = private_key.public_key().public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
-        ).decode()
+        public_pem = (
+            private_key.public_key()
+            .public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            .decode()
+        )
         payload = {"sub": "agent-1"}
         canonical_payload = canonicalize(payload)
         payload_b64 = base64.urlsafe_b64encode(canonical_payload.encode()).decode().rstrip("=")
@@ -85,6 +97,7 @@ class TestJWSVerify:
         header_b64 = base64.urlsafe_b64encode(json.dumps(header).encode()).decode().rstrip("=")
         signing_input = f"{header_b64}.{payload_b64}".encode()
         from cryptography.hazmat.primitives.asymmetric import padding
+
         sig = private_key.sign(signing_input, padding.PKCS1v15(), hashes.SHA256())
         signature_b64 = base64.urlsafe_b64encode(sig).decode().rstrip("=")
         jws = f"{header_b64}.{payload_b64}.{signature_b64}"
@@ -94,10 +107,14 @@ class TestJWSVerify:
 
     def test_es256_valid(self) -> None:
         private_key = ec.generate_private_key(ec.SECP256R1())
-        public_pem = private_key.public_key().public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
-        ).decode()
+        public_pem = (
+            private_key.public_key()
+            .public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            .decode()
+        )
         payload = {"sub": "agent-1"}
         canonical_payload = canonicalize(payload)
         payload_b64 = base64.urlsafe_b64encode(canonical_payload.encode()).decode().rstrip("=")
@@ -105,6 +122,7 @@ class TestJWSVerify:
         header_b64 = base64.urlsafe_b64encode(json.dumps(header).encode()).decode().rstrip("=")
         signing_input = f"{header_b64}.{payload_b64}".encode()
         from cryptography.hazmat.primitives.asymmetric import ec as ec_crypto
+
         sig = private_key.sign(signing_input, ec_crypto.ECDSA(hashes.SHA256()))
         signature_b64 = base64.urlsafe_b64encode(sig).decode().rstrip("=")
         jws = f"{header_b64}.{payload_b64}.{signature_b64}"
@@ -113,15 +131,20 @@ class TestJWSVerify:
 
     def test_tampered_payload_fails(self) -> None:
         private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-        public_pem = private_key.public_key().public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
-        ).decode()
+        public_pem = (
+            private_key.public_key()
+            .public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            .decode()
+        )
         header = {"alg": "RS256"}
         header_b64 = base64.urlsafe_b64encode(json.dumps(header).encode()).decode().rstrip("=")
         payload_b64 = base64.urlsafe_b64encode(b"tampered").decode().rstrip("=")
         signing_input = f"{header_b64}.{payload_b64}".encode()
         from cryptography.hazmat.primitives.asymmetric import padding
+
         sig = private_key.sign(signing_input, padding.PKCS1v15(), hashes.SHA256())
         signature_b64 = base64.urlsafe_b64encode(sig).decode().rstrip("=")
         jws = f"{header_b64}.{payload_b64}.{signature_b64}"
@@ -161,10 +184,14 @@ class TestHTTPMessageSignatures:
 
     def test_rsa_v1_5_sha256_valid(self) -> None:
         private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-        public_pem = private_key.public_key().public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
-        ).decode()
+        public_pem = (
+            private_key.public_key()
+            .public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            .decode()
+        )
         headers = {"host": "example.com"}
         sig_input = 'sig1=("@method");created=1;keyid="k1";alg="rsa-v1_5-sha256"'
         sig = _sign_http_rsa(sig_input, private_key, "POST", "https://example.com/", headers)
@@ -180,10 +207,14 @@ class TestHTTPMessageSignatures:
 
     def test_ed25519_valid(self) -> None:
         private_key = ed25519.Ed25519PrivateKey.generate()
-        public_pem = private_key.public_key().public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
-        ).decode()
+        public_pem = (
+            private_key.public_key()
+            .public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            .decode()
+        )
         headers = {"host": "example.com"}
         sig_input = 'sig1=("@method");created=1;keyid="k1";alg="ed25519"'
         sig = _sign_http_ed25519(sig_input, private_key, "POST", "https://example.com/", headers)
@@ -200,22 +231,29 @@ class TestHTTPMessageSignatures:
 
 def _sign_http_hmac(sig_input: str, secret: bytes, method: str, uri: str, headers: dict[str, str]) -> str:
     from neuralstrike.identity.signatures import _build_signature_base
+
     base = _build_signature_base(sig_input, method=method, target_uri=uri, headers=headers, body=b"")
     sig = hmac.new(secret, base, hashlib.sha256).digest()
     return base64.standard_b64encode(sig).decode()
 
 
-def _sign_http_rsa(sig_input: str, private_key: rsa.RSAPrivateKey, method: str, uri: str, headers: dict[str, str]) -> str:
+def _sign_http_rsa(
+    sig_input: str, private_key: rsa.RSAPrivateKey, method: str, uri: str, headers: dict[str, str]
+) -> str:
     from cryptography.hazmat.primitives.asymmetric import padding
 
     from neuralstrike.identity.signatures import _build_signature_base
+
     base = _build_signature_base(sig_input, method=method, target_uri=uri, headers=headers, body=b"")
     sig = private_key.sign(base, padding.PKCS1v15(), hashes.SHA256())
     return base64.standard_b64encode(sig).decode()
 
 
-def _sign_http_ed25519(sig_input: str, private_key: ed25519.Ed25519PrivateKey, method: str, uri: str, headers: dict[str, str]) -> str:
+def _sign_http_ed25519(
+    sig_input: str, private_key: ed25519.Ed25519PrivateKey, method: str, uri: str, headers: dict[str, str]
+) -> str:
     from neuralstrike.identity.signatures import _build_signature_base
+
     base = _build_signature_base(sig_input, method=method, target_uri=uri, headers=headers, body=b"")
     sig = private_key.sign(base)
     return base64.standard_b64encode(sig).decode()
@@ -232,7 +270,9 @@ class TestDIDResolution:
                 }
             ]
         }
-        mock_transport = httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=did_doc)))
+        mock_transport = httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda request: httpx.Response(200, json=did_doc))
+        )
         resolver = DIDResolver(transport=mock_transport)
         result = await resolver.resolve("did:web:example.com")
         assert result.subject == "did:web:example.com"
@@ -252,6 +292,7 @@ class TestDIDResolution:
     async def test_did_key_ed25519(self) -> None:
         pytest.importorskip("base58")
         import base58
+
         raw = b"\xed\x01" + b"a" * 32
         mb = "z" + base58.b58encode(raw).decode()
         result = await resolve_did(f"did:key:{mb}")

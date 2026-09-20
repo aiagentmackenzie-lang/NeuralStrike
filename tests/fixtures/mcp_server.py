@@ -65,15 +65,17 @@ def _make_app(tools: list[dict[str, Any]]) -> FastAPI:
         method = body.get("method")
         req_id = body.get("id")
         if method == "initialize":
-            return JSONResponse({
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "result": {
-                    "protocolVersion": "2025-06-18",
-                    "capabilities": {"tools": {}},
-                    "serverInfo": {"name": "neuralstrike-vuln-mcp-fixture", "version": "0.1.0"},
-                },
-            })
+            return JSONResponse(
+                {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "result": {
+                        "protocolVersion": "2025-06-18",
+                        "capabilities": {"tools": {}},
+                        "serverInfo": {"name": "neuralstrike-vuln-mcp-fixture", "version": "0.1.0"},
+                    },
+                }
+            )
         if method == "notifications/initialized":
             return JSONResponse({"jsonrpc": "2.0"})
         if method == "tools/list":
@@ -85,10 +87,13 @@ def _make_app(tools: list[dict[str, Any]]) -> FastAPI:
             if not isinstance(args, dict):
                 args = {}
             return JSONResponse({"jsonrpc": "2.0", "id": req_id, "result": _execute_tool(name, args)})
-        return JSONResponse({
-            "jsonrpc": "2.0", "id": req_id,
-            "error": {"code": -32601, "message": f"method not found: {method}"},
-        })
+        return JSONResponse(
+            {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "error": {"code": -32601, "message": f"method not found: {method}"},
+            }
+        )
 
     return app
 

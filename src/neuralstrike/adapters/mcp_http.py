@@ -215,12 +215,14 @@ class MCPHTTPAdapter:
                     except MCPError as exc:
                         canary_calls.append({"tool": t.name, "error": str(exc)})
                         continue
-                    canary_calls.append({
-                        "tool": t.name,
-                        "arguments_sent": _sample_args(t),
-                        "result_text": res.text,
-                        "is_error": res.is_error,
-                    })
+                    canary_calls.append(
+                        {
+                            "tool": t.name,
+                            "arguments_sent": _sample_args(t),
+                            "result_text": res.text,
+                            "is_error": res.is_error,
+                        }
+                    )
         return {
             "tools": [t.raw for t in tools],
             "tool_names": [t.name for t in tools],

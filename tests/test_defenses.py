@@ -26,8 +26,14 @@ class TestRegistries:
     def test_eight_defenses_registered(self) -> None:
         names = list_defenses()
         assert set(names) == {
-            "camel", "delimiter", "injection_detector", "instruction_hierarchy",
-            "sandwiching", "spotlighting", "struq", "tool_filter",
+            "camel",
+            "delimiter",
+            "injection_detector",
+            "instruction_hierarchy",
+            "sandwiching",
+            "spotlighting",
+            "struq",
+            "tool_filter",
         }
 
     def test_two_checkers_registered(self) -> None:
@@ -142,6 +148,7 @@ def _leak_if_not_delimited():
         if m:
             return f"Sure: {m.group(0)}"  # vulnerable victim echoes the canary
         return "ok"
+
     return victim
 
 
@@ -155,7 +162,8 @@ class TestSpotlightingDelta:
         # Canary-leak scenarios with {CANARY} in the payload, so the victim's
         # echo is caught by the deterministic CanaryOracle.
         scenarios = [
-            s for s in load_corpus_dir()
+            s
+            for s in load_corpus_dir()
             if s.delivery_vector == "user_message"
             and any(c.oracle == "canary" for c in s.success_criteria)
             and "{CANARY}" in s.adversarial_payload
@@ -163,9 +171,7 @@ class TestSpotlightingDelta:
         assert scenarios, "corpus must have canary-based user_message scenarios"
 
         victim = _leak_if_not_delimited()
-        delta = await measure_defense_delta(
-            SpotlightingDefense(), victim, scenarios, seed=42
-        )
+        delta = await measure_defense_delta(SpotlightingDefense(), victim, scenarios, seed=42)
         # Baseline: vulnerable victim complies -> high ASR.
         assert delta.baseline_asr > 0.0, "baseline should show leaks (no defense)"
         # Defended: spotlighting wraps the payload in <untrusted> -> victim refuses.
@@ -182,7 +188,8 @@ class TestSpotlightingDelta:
         from neuralstrike.corpus.loader import load_corpus_dir
 
         scenarios = [
-            s for s in load_corpus_dir()
+            s
+            for s in load_corpus_dir()
             if s.delivery_vector == "user_message"
             and any(c.oracle == "canary" for c in s.success_criteria)
             and "{CANARY}" in s.adversarial_payload
@@ -194,9 +201,7 @@ class TestSpotlightingDelta:
                 return f"Sure: {m.group(0)}"
             return "ok"
 
-        delta = await measure_defense_delta(
-            SpotlightingDefense(), always_leak, scenarios, seed=42
-        )
+        delta = await measure_defense_delta(SpotlightingDefense(), always_leak, scenarios, seed=42)
         # Defense had no effect: both arms leak -> delta ~0 (honestly reported).
         assert delta.defended_asr == delta.baseline_asr
         assert delta.delta == 0.0
@@ -206,7 +211,8 @@ class TestSpotlightingDelta:
         from neuralstrike.corpus.loader import load_corpus_dir
 
         scenarios = [
-            s for s in load_corpus_dir()
+            s
+            for s in load_corpus_dir()
             if s.delivery_vector == "user_message"
             and any(c.oracle == "canary" for c in s.success_criteria)
             and "{CANARY}" in s.adversarial_payload

@@ -18,10 +18,14 @@ from neuralstrike.identity import canonicalize
 class TestA2ACardTamper:
     async def test_valid_card_verifies_and_tampered_rejected(self) -> None:
         private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-        public_pem = private_key.public_key().public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
-        ).decode()
+        public_pem = (
+            private_key.public_key()
+            .public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            .decode()
+        )
 
         card = {"name": "TestAgent", "url": "https://example.com/a2a", "version": "1.0"}
         canonical_card = canonicalize(card)
@@ -30,6 +34,7 @@ class TestA2ACardTamper:
         header_b64 = base64.urlsafe_b64encode(json.dumps(header).encode()).decode().rstrip("=")
         signing_input = f"{header_b64}.{payload_b64}".encode()
         from cryptography.hazmat.primitives.asymmetric import padding
+
         sig = private_key.sign(signing_input, padding.PKCS1v15(), hashes.SHA256())
         sig_b64 = base64.urlsafe_b64encode(sig).decode().rstrip("=")
         jws = f"{header_b64}.{payload_b64}.{sig_b64}"
@@ -59,7 +64,10 @@ class TestA2ACardTamper:
 
 class TestDelegationAnalyzer:
     def test_depth_escalation(self) -> None:
-        chain = tuple(DelegationRecord(issuer=f"a{i}", recipient=f"a{i+1}", scope=("read",), depth=i) for i in range(5))
+        chain = tuple(
+            DelegationRecord(issuer=f"a{i}", recipient=f"a{i + 1}", scope=("read",), depth=i)
+            for i in range(5)
+        )
         analyzer = DelegationAnalyzer(max_depth=3)
         findings = analyzer.analyze(chain)
         assert any(f.issue == "depth_escalation" for f in findings)

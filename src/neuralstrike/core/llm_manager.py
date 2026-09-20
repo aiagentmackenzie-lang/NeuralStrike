@@ -42,16 +42,12 @@ class LLMManager:
     ) -> str:
         """Call a local model via Ollama. Raises :class:`LLMError` on failure."""
         try:
-            response: Any = await self.ollama_client.generate(
-                model=model, prompt=prompt, options=options
-            )
+            response: Any = await self.ollama_client.generate(model=model, prompt=prompt, options=options)
         except Exception as exc:
             logger.error("Ollama error for %s: %s", model, exc)
             raise LLMError(model, str(exc)) from exc
         content = (
-            response.get("response")
-            if isinstance(response, dict)
-            else getattr(response, "response", None)
+            response.get("response") if isinstance(response, dict) else getattr(response, "response", None)
         )
         if not isinstance(content, str):
             raise LLMError(model, f"unexpected Ollama response shape: {response!r}")
@@ -94,9 +90,7 @@ class LLMManager:
             logger.error("Ollama list failed: %s", exc)
             raise LLMError("ollama", f"could not list models: {exc}") from exc
         models: list[str] = []
-        models_attr = (
-            getattr(resp, "models", None) if not isinstance(resp, dict) else resp.get("models")
-        )
+        models_attr = getattr(resp, "models", None) if not isinstance(resp, dict) else resp.get("models")
         if models_attr is None:
             return models
         for entry in models_attr:

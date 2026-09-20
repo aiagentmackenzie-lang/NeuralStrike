@@ -180,9 +180,7 @@ VULN_CASES += [
 # ---------------------------------------------------------------------------
 _FORBIDDEN_SPEC = ForbiddenToolSpec(
     forbidden_tools=("exec_shell",),
-    allowed_tool_constraints=(
-        ("read_file", (ArgConstraint(path="path", op="contains", value="../"),)),
-    ),
+    allowed_tool_constraints=(("read_file", (ArgConstraint(path="path", op="contains", value="../"),)),),
 )
 SAFE_CASES += [
     Case(

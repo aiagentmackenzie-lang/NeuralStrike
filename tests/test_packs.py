@@ -259,9 +259,7 @@ class TestPackCLISurface:
         from typer.testing import CliRunner
 
         runner = CliRunner()
-        result = runner.invoke(
-            __import__("neuralstrike.main", fromlist=["app"]).app, ["--help"]
-        )
+        result = runner.invoke(__import__("neuralstrike.main", fromlist=["app"]).app, ["--help"])
         assert result.exit_code == 0
         assert "pack" in result.stdout
 
@@ -296,8 +294,7 @@ class TestPackCLISurface:
         with patch("neuralstrike.packs.base.default_fetcher") as _:
             result = runner.invoke(
                 __import__("neuralstrike.main", fromlist=["app"]).app,
-                ["pack", "--name", "harmbench", "--target", "x",
-                 "--target-type", "remote", "--no-judge"],
+                ["pack", "--name", "harmbench", "--target", "x", "--target-type", "remote", "--no-judge"],
             )
         assert result.exit_code == 3
         assert "License required" in result.stdout or "license" in result.stdout

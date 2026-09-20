@@ -44,7 +44,7 @@ class DIDResolver:
 
     async def _resolve_web(self, did: str) -> KeyResolution:
         # did:web:example.com:path:more -> https://example.com/path/more/did.json
-        rest = did[len("did:web:"):]
+        rest = did[len("did:web:") :]
         parts = rest.split(":")
         domain = parts[0]
         path = "/".join(parts[1:]) if len(parts) > 1 else ""
@@ -72,7 +72,7 @@ class DIDResolver:
 
         Only ed25519-pub (multicodec 0xed01) is supported for Phase 5.
         """
-        multibase = did[len("did:key:"):]
+        multibase = did[len("did:key:") :]
         if not multibase:
             return KeyResolution(
                 subject=did,
@@ -84,6 +84,7 @@ class DIDResolver:
         # library; for the exit gate we rely on tests providing well-known keys.
         with contextlib.suppress(ImportError):
             import base58  # type: ignore[import-not-found]
+
             try:
                 raw = base58.b58decode(multibase)
             except Exception as exc:

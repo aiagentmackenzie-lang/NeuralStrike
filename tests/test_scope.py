@@ -33,7 +33,9 @@ class TestScopeRules:
         assert not s.allows("http://x", "destructive")
 
     def test_testing_window(self) -> None:
-        s = Scope.with_window("*", datetime(2026, 1, 1, tzinfo=timezone.utc), datetime(2026, 12, 31, tzinfo=timezone.utc))
+        s = Scope.with_window(
+            "*", datetime(2026, 1, 1, tzinfo=timezone.utc), datetime(2026, 12, 31, tzinfo=timezone.utc)
+        )
         now = datetime(2026, 7, 1, tzinfo=timezone.utc)
         assert s.allows("http://x", now=now)
         assert not s.allows("http://x", now=datetime(2025, 1, 1, tzinfo=timezone.utc))
@@ -56,7 +58,9 @@ class TestScopeRules:
 class TestLoadScope:
     def test_load_yaml(self, tmp_path: Path) -> None:
         path = tmp_path / "scope.yaml"
-        path.write_text(yaml.safe_dump({"in_scope": {"targets": ["localhost:*"], "intents": ["canary-leak"]}}))
+        path.write_text(
+            yaml.safe_dump({"in_scope": {"targets": ["localhost:*"], "intents": ["canary-leak"]}})
+        )
         s = load_scope(path)
         assert s.allows("localhost:11434", "canary-leak")
 
@@ -102,6 +106,7 @@ def _scope(
     end: datetime | None = None,
 ) -> Scope:
     from neuralstrike.scope.scope import ScopeRule
+
     return Scope(
         in_scope=ScopeRule.from_obj(in_scope),
         intents=ScopeRule.from_obj(intents),
@@ -118,5 +123,7 @@ Scope.in_scope_defaults = classmethod(lambda cls: _scope("*", "*"))
 Scope.in_scope_only = classmethod(lambda cls, pat: _scope(pat, "*"))
 Scope.with_intents = classmethod(lambda cls, pat, intents: _scope(pat, intents))
 Scope.with_exclusions = classmethod(lambda cls, pat, excl: _scope(pat, "*", excl))
-Scope.with_excluded_intents = classmethod(lambda cls, pat, excl_intent: _scope(pat, "*", exclusion_intents=excl_intent))
+Scope.with_excluded_intents = classmethod(
+    lambda cls, pat, excl_intent: _scope(pat, "*", exclusion_intents=excl_intent)
+)
 Scope.with_window = classmethod(lambda cls, pat, start, end: _scope(pat, "*", start=start, end=end))

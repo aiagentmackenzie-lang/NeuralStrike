@@ -157,7 +157,6 @@ def canary_extraction_probe(
     )
 
 
-
 def strongest_fidelity(findings: list[Finding]) -> EvidenceFidelity:
     """The strongest fidelity present among findings (Behavioral > IntentToAct > Verbal)."""
     order = {EvidenceFidelity.VERBAL: 0, EvidenceFidelity.INTENT_TO_ACT: 1, EvidenceFidelity.BEHAVIORAL: 2}

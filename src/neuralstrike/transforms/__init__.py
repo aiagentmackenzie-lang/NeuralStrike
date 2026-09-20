@@ -42,6 +42,4 @@ __all__ = [
 def assert_18_transforms() -> None:
     """Invariant: exactly 18 transforms are registered (the roadmap contract)."""
     names = list_transforms()
-    assert len(names) == 18, (
-        f"Phase-4 contract: 18 transforms; registered {len(names)}: {names}"
-    )
+    assert len(names) == 18, f"Phase-4 contract: 18 transforms; registered {len(names)}: {names}"

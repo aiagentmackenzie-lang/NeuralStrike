@@ -302,15 +302,11 @@ def crosswalk(
     controls: list[ControlRef] = []
     if owasp_category in OWASP_ASI_INDEX:
         controls.append(
-            ControlRef(
-                "OWASP_ASI", owasp_category, OWASP_ASI_INDEX[owasp_category], "Agentic Top 10 (2026)"
-            )
+            ControlRef("OWASP_ASI", owasp_category, OWASP_ASI_INDEX[owasp_category], "Agentic Top 10 (2026)")
         )
     elif owasp_category in OWASP_LLM_INDEX:
         controls.append(
-            ControlRef(
-                "OWASP_LLM", owasp_category, OWASP_LLM_INDEX[owasp_category], "LLM Top 10 (2025)"
-            )
+            ControlRef("OWASP_LLM", owasp_category, OWASP_LLM_INDEX[owasp_category], "LLM Top 10 (2025)")
         )
     else:
         # Unknown category: still surface it so the report is honest.

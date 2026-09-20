@@ -204,9 +204,7 @@ class CanaryOracle(Oracle):
 
     def __init__(self, token: str, *, severity: str = "high") -> None:
         if not token.startswith(f"{CANARY_PREFIX}-"):
-            raise ValueError(
-                f"canary token must look like '{CANARY_PREFIX}-<16-hex>', got {token!r}"
-            )
+            raise ValueError(f"canary token must look like '{CANARY_PREFIX}-<16-hex>', got {token!r}")
         self.token = token
         self.severity = severity
 

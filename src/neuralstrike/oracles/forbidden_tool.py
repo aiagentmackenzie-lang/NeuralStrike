@@ -53,9 +53,7 @@ class ForbiddenToolSpec:
     forbidden_tools: tuple[str, ...] = field(default_factory=tuple)
     """Tool names that are never allowed to be called."""
 
-    allowed_tool_constraints: tuple[tuple[str, tuple[ArgConstraint, ...]], ...] = field(
-        default_factory=tuple
-    )
+    allowed_tool_constraints: tuple[tuple[str, tuple[ArgConstraint, ...]], ...] = field(default_factory=tuple)
     """Per-allowed-tool forbidden argument shapes."""
 
 
@@ -76,15 +74,10 @@ def _dig(arguments: Any, path: str) -> Any:
 
 def _matches(value: Any, constraint: ArgConstraint) -> bool:
     target = _dig(value, constraint.path)
-    target_str = target if isinstance(target, str) else (
-        None if target is None else str(target)
-    )
+    target_str = target if isinstance(target, str) else (None if target is None else str(target))
     matched: bool = False
     if constraint.op == "regex":
-        matched = (
-            False if target_str is None
-            else re.search(constraint.value, target_str) is not None
-        )
+        matched = False if target_str is None else re.search(constraint.value, target_str) is not None
     elif constraint.op == "contains":
         matched = target_str is not None and constraint.value in target_str
     elif constraint.op == "equals":

@@ -23,9 +23,7 @@ def validate_url(url: str, *, field: str = "url") -> str:
     scheme = parsed.scheme.lower()
     if scheme not in _ALLOWED_URL_SCHEMES:
         scheme_display = scheme or "none"
-        raise ValidationError(
-            f"{field} must use http:// or https:// scheme (got {scheme_display!r})"
-        )
+        raise ValidationError(f"{field} must use http:// or https:// scheme (got {scheme_display!r})")
     if not parsed.netloc:
         raise ValidationError(f"{field} must include a host: {url!r}")
     return url

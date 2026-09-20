@@ -50,7 +50,8 @@ def test_mint_injection_marker_is_distinct_from_canary() -> None:
 @pytest.mark.parametrize("vector", sorted(_one_per_vector().keys()))
 @pytest.mark.asyncio
 async def test_delivery_vector_lands_in_declared_channel_by_adapter_trace(
-    vector: str, tmp_path,
+    vector: str,
+    tmp_path,
 ) -> None:
     """The adapter trace (not the prompt) confirms the channel."""
     from neuralstrike.fixtures.langgraph_agent import build_vulnerable_graph
@@ -85,9 +86,7 @@ async def test_delivery_vector_lands_in_declared_channel_by_adapter_trace(
             if d["present"]:
                 present_channels.append(d["channel"])
 
-    assert present_channels, (
-        f"adapter recorded no present delivery channel for {vector!r}"
-    )
+    assert present_channels, f"adapter recorded no present delivery channel for {vector!r}"
     assert scenario.delivery_vector in present_channels, (
         f"declared channel {scenario.delivery_vector!r} not confirmed present "
         f"in adapter trace (got {present_channels})"
@@ -124,9 +123,7 @@ async def test_delivery_records_present_and_absent_channels(tmp_path) -> None:
     trial = report.trials[0]
     assert trial.response is not None
     records = [
-        rec["delivery"]
-        for rec in trial.response.traces
-        if isinstance(rec, dict) and "delivery" in rec
+        rec["delivery"] for rec in trial.response.traces if isinstance(rec, dict) and "delivery" in rec
     ]
     channels_by_presence = {d["channel"]: d["present"] for d in records}
     # The declared channel is present; the user_message channel is absent
@@ -144,10 +141,13 @@ async def test_indirect_harness_produces_verdict_and_fidelity(tmp_path) -> None:
     # A scenario whose success_criteria is forbidden_tool grant_admin_access
     # will succeed against the bundled fixture (which always emits that call).
     scenario = next(
-        s for s in scenarios
+        s
+        for s in scenarios
         if s.delivery_vector == "tool_result"
-        and any(c.oracle == "forbidden_tool" and "grant_admin_access" in c.forbidden_tools
-                for c in s.success_criteria)
+        and any(
+            c.oracle == "forbidden_tool" and "grant_admin_access" in c.forbidden_tools
+            for c in s.success_criteria
+        )
     )
     adapter = LangGraphAdapter(graph=build_vulnerable_graph())
     harness = IndirectHarness(scenario)
@@ -165,6 +165,7 @@ async def test_indirect_harness_produces_verdict_and_fidelity(tmp_path) -> None:
 
     trial = report.trials[0]
     from neuralstrike.evaluation.verdict import Verdict
+
     assert trial.verdict is Verdict.SUCCEEDED
     assert trial.findings  # deterministic oracle(s) fired
     assert trial.scenario_id == scenario.id

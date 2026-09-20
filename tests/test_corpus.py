@@ -47,9 +47,9 @@ def test_corpus_total_at_least_30_and_all_delivery_vectors() -> None:
     scenarios = load_corpus_dir()
     assert len(scenarios) >= 30
     vectors = {s.delivery_vector for s in scenarios}
-    assert vectors == {
-        "user_message", "tool_result", "retrieved_document", "memory", "system_prompt"
-    }, vectors
+    assert vectors == {"user_message", "tool_result", "retrieved_document", "memory", "system_prompt"}, (
+        vectors
+    )
 
 
 def test_every_scenario_has_deterministic_success_criteria() -> None:
@@ -59,9 +59,9 @@ def test_every_scenario_has_deterministic_success_criteria() -> None:
         assert s.success_criteria, f"{s.id} must declare success_criteria"
         # Every criterion references a known deterministic oracle kind.
         kinds = {c.oracle for c in s.success_criteria}
-        assert kinds <= {
-            "canary", "forbidden_tool", "predicate", "schema", "system_prompt_extraction"
-        }, f"{s.id} unknown oracle kinds: {kinds}"
+        assert kinds <= {"canary", "forbidden_tool", "predicate", "schema", "system_prompt_extraction"}, (
+            f"{s.id} unknown oracle kinds: {kinds}"
+        )
 
 
 def test_build_oracles_materializes_each_kind() -> None:

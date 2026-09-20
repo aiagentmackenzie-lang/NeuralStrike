@@ -90,9 +90,7 @@ class TestCohortLoading:
 
 class TestCalibrate:
     def test_z_score_above_cohort(self) -> None:
-        score = score_trials(
-            [_trial(Verdict.SUCCEEDED), _trial(Verdict.SUCCEEDED), _trial(Verdict.RESISTED)]
-        )
+        score = score_trials([_trial(Verdict.SUCCEEDED), _trial(Verdict.SUCCEEDED), _trial(Verdict.RESISTED)])
         cohort = Cohort(name="c", asr=CohortStats(mean=0.4, std=0.1))
         cal = calibrate(score, cohort)
         assert cal.z == pytest.approx((score.asr - 0.4) / 0.1)
@@ -112,21 +110,48 @@ class TestCalibrate:
         cohort = Cohort(name="c", asr=CohortStats(mean=0.5, std=0.1))
         # z = (0.75 - 0.5)/0.1 = 2.5 -> far above (clear of the 2.0 boundary).
         far_above = ScoreCard(
-            total=10, resisted=3, succeeded=7, inconclusive=0,
-            asr=0.75, asr_ci_low=0.4, asr_ci_high=0.9, coverage=1.0, risk_index=70.0, flaky=False,
+            total=10,
+            resisted=3,
+            succeeded=7,
+            inconclusive=0,
+            asr=0.75,
+            asr_ci_low=0.4,
+            asr_ci_high=0.9,
+            coverage=1.0,
+            risk_index=70.0,
+            flaky=False,
         )
         assert calibrate(far_above, cohort).interpretation == "far above cohort average (>+2 sigma)"
 
         consistent = ScoreCard(
-            total=10, resisted=5, succeeded=5, inconclusive=0,
-            asr=0.5, asr_ci_low=0.2, asr_ci_high=0.8, coverage=1.0, risk_index=50.0, flaky=False,
+            total=10,
+            resisted=5,
+            succeeded=5,
+            inconclusive=0,
+            asr=0.5,
+            asr_ci_low=0.2,
+            asr_ci_high=0.8,
+            coverage=1.0,
+            risk_index=50.0,
+            flaky=False,
         )
-        assert calibrate(consistent, cohort).interpretation == "consistent with cohort average (within +/-1 sigma)"
+        assert (
+            calibrate(consistent, cohort).interpretation
+            == "consistent with cohort average (within +/-1 sigma)"
+        )
 
         # z = (0.05 - 0.5)/0.1 = -4.5 -> far below.
         far_below = ScoreCard(
-            total=10, resisted=9, succeeded=1, inconclusive=0,
-            asr=0.05, asr_ci_low=0.0, asr_ci_high=0.4, coverage=1.0, risk_index=10.0, flaky=False,
+            total=10,
+            resisted=9,
+            succeeded=1,
+            inconclusive=0,
+            asr=0.05,
+            asr_ci_low=0.0,
+            asr_ci_high=0.4,
+            coverage=1.0,
+            risk_index=10.0,
+            flaky=False,
         )
         assert calibrate(far_below, cohort).interpretation == "far below cohort average (<-2 sigma)"
 
@@ -134,8 +159,16 @@ class TestCalibrate:
         from neuralstrike.evaluation.statistics import ScoreCard
 
         score = ScoreCard(
-            total=2, resisted=1, succeeded=1, inconclusive=0,
-            asr=0.5, asr_ci_low=0.0, asr_ci_high=1.0, coverage=1.0, risk_index=50.0, flaky=False,
+            total=2,
+            resisted=1,
+            succeeded=1,
+            inconclusive=0,
+            asr=0.5,
+            asr_ci_low=0.0,
+            asr_ci_high=1.0,
+            coverage=1.0,
+            risk_index=50.0,
+            flaky=False,
             per_category={"asi01": 0.8, "asi02": 0.2},
         )
         cohort = Cohort(
@@ -172,9 +205,14 @@ class TestCalibrationCLIInformational:
         from neuralstrike.evaluation.runner import RunMeta, RunReport
 
         trial = TrialResult(
-            trial_index=0, seed=0, temperature=0.0,
-            verdict=Verdict.RESISTED, fidelity=EvidenceFidelity.VERBAL,
-            findings=(), payload="p", scenario_id="asi01-canary-leak",
+            trial_index=0,
+            seed=0,
+            temperature=0.0,
+            verdict=Verdict.RESISTED,
+            fidelity=EvidenceFidelity.VERBAL,
+            findings=(),
+            payload="p",
+            scenario_id="asi01-canary-leak",
         )
         meta = RunMeta("run-test", "asi01-canary-leak", 0, 1, 0.0, 0.7, "t")
         return RunReport(meta=meta, trials=(trial,), score=score_trials([trial]))
@@ -183,26 +221,47 @@ class TestCalibrationCLIInformational:
         runner = CliRunner()
         report = self._report()
 
-        async def fake_run(self, probe, *, trials=1, judge_model=None, attacker_model=None, persist=True, intensity="standard"):
+        async def fake_run(
+            self,
+            probe,
+            *,
+            trials=1,
+            judge_model=None,
+            attacker_model=None,
+            persist=True,
+            intensity="standard",
+        ):
             return report
 
         from neuralstrike.core.runtime import ResolvedModels
 
         fake_resolved = ResolvedModels(
-            attacker_model="deepseek-r1", judge_model="deepseek-v3.1:671b-cloud",
-            judge_fell_back=False, available=("deepseek-r1", "deepseek-v3.1:671b-cloud"),
+            attacker_model="deepseek-r1",
+            judge_model="deepseek-v3.1:671b-cloud",
+            judge_fell_back=False,
+            available=("deepseek-r1", "deepseek-v3.1:671b-cloud"),
         )
         cohort_p = tmp_path / "c.json"
-        cohort_p.write_text(json.dumps({"name": "c", "asr": {"mean": 0.2, "std": 0.1, "n": 5}}), encoding="utf-8")
-        with patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=fake_resolved)), \
-             patch("neuralstrike.evaluation.runner.TrialRunner.run", fake_run), \
-             patch("neuralstrike.evaluation.probes.canary_extraction_probe"):
+        cohort_p.write_text(
+            json.dumps({"name": "c", "asr": {"mean": 0.2, "std": 0.1, "n": 5}}), encoding="utf-8"
+        )
+        with (
+            patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=fake_resolved)),
+            patch("neuralstrike.evaluation.runner.TrialRunner.run", fake_run),
+            patch("neuralstrike.evaluation.probes.canary_extraction_probe"),
+        ):
             result = runner.invoke(
                 app,
                 [
-                    "evaluate", "--target", "victim", "--trials", "1",
-                    "--calibration", str(cohort_p),
-                    "--run-dir", str(tmp_path / "runs"),
+                    "evaluate",
+                    "--target",
+                    "victim",
+                    "--trials",
+                    "1",
+                    "--calibration",
+                    str(cohort_p),
+                    "--run-dir",
+                    str(tmp_path / "runs"),
                 ],
             )
         assert result.exit_code == 0, result.stdout
@@ -212,24 +271,43 @@ class TestCalibrationCLIInformational:
         runner = CliRunner()
         report = self._report()
 
-        async def fake_run(self, probe, *, trials=1, judge_model=None, attacker_model=None, persist=True, intensity="standard"):
+        async def fake_run(
+            self,
+            probe,
+            *,
+            trials=1,
+            judge_model=None,
+            attacker_model=None,
+            persist=True,
+            intensity="standard",
+        ):
             return report
 
         from neuralstrike.core.runtime import ResolvedModels
 
         fake_resolved = ResolvedModels(
-            attacker_model="deepseek-r1", judge_model="deepseek-v3.1:671b-cloud",
-            judge_fell_back=False, available=("deepseek-r1", "deepseek-v3.1:671b-cloud"),
+            attacker_model="deepseek-r1",
+            judge_model="deepseek-v3.1:671b-cloud",
+            judge_fell_back=False,
+            available=("deepseek-r1", "deepseek-v3.1:671b-cloud"),
         )
-        with patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=fake_resolved)), \
-             patch("neuralstrike.evaluation.runner.TrialRunner.run", fake_run), \
-             patch("neuralstrike.evaluation.probes.canary_extraction_probe"):
+        with (
+            patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=fake_resolved)),
+            patch("neuralstrike.evaluation.runner.TrialRunner.run", fake_run),
+            patch("neuralstrike.evaluation.probes.canary_extraction_probe"),
+        ):
             result = runner.invoke(
                 app,
                 [
-                    "evaluate", "--target", "victim", "--trials", "1",
-                    "--calibration", str(tmp_path / "missing.json"),
-                    "--run-dir", str(tmp_path / "runs"),
+                    "evaluate",
+                    "--target",
+                    "victim",
+                    "--trials",
+                    "1",
+                    "--calibration",
+                    str(tmp_path / "missing.json"),
+                    "--run-dir",
+                    str(tmp_path / "runs"),
                 ],
             )
         assert result.exit_code == 0, result.stdout  # gate still passes; calibration skipped

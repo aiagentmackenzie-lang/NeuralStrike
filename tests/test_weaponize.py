@@ -45,11 +45,10 @@ class TestJailbreakForge:
         """Iteration 1 must use a template seed (no attacker LLM call), then victim+judge."""
         captured_payloads: list[str] = []
 
-        with patch(
-            "neuralstrike.modules.weaponize.jailbreak_forge.AdversarialLoop"
-        ) as MockLoop, patch(
-            "neuralstrike.modules.weaponize.jailbreak_forge.llm_manager"
-        ) as mock_llm:
+        with (
+            patch("neuralstrike.modules.weaponize.jailbreak_forge.AdversarialLoop") as MockLoop,
+            patch("neuralstrike.modules.weaponize.jailbreak_forge.llm_manager") as mock_llm,
+        ):
             mock_instance = MockLoop.return_value
             mock_instance.execute_cycle = AsyncMock(
                 return_value={"status": "success", "iteration": 1, "payload": "seed", "response": "r"}

@@ -62,10 +62,14 @@ class TestExitGate1MCPPoison:
 class TestExitGate2A2ACardTamper:
     async def test_signed_agent_card_verifies_and_tampered_rejected(self) -> None:
         private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-        public_pem = private_key.public_key().public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
-        ).decode()
+        public_pem = (
+            private_key.public_key()
+            .public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            .decode()
+        )
 
         card = {"name": "AgentX", "url": "https://example.com/a2a", "version": "1.0"}
         canonical_card = canonicalize(card)
@@ -74,6 +78,7 @@ class TestExitGate2A2ACardTamper:
         header_b64 = base64.urlsafe_b64encode(json.dumps(header).encode()).decode().rstrip("=")
         signing_input = f"{header_b64}.{payload_b64}".encode()
         from cryptography.hazmat.primitives.asymmetric import padding
+
         sig = private_key.sign(signing_input, padding.PKCS1v15(), hashes.SHA256())
         sig_b64 = base64.urlsafe_b64encode(sig).decode().rstrip("=")
         jws = f"{header_b64}.{payload_b64}.{sig_b64}"
@@ -109,6 +114,7 @@ class TestExitGate3MinjaMemoryAugmented:
         # appears anywhere in the conversation (prompt or history).
         async def memory_adapter(prompt: str, **kwargs: object) -> object:
             from neuralstrike.evaluation.verdict import SutResponse
+
             full_text = prompt
             history = kwargs.get("history", ())
             for msg in history:

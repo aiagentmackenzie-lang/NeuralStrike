@@ -239,9 +239,7 @@ def build_corpus_run(
     raises if the counts differ.
     """
     if len(scenarios) != len(reports):
-        raise ValueError(
-            f"scenarios ({len(scenarios)}) and reports ({len(reports)}) must align by index"
-        )
+        raise ValueError(f"scenarios ({len(scenarios)}) and reports ({len(reports)}) must align by index")
 
     overall_s = overall_r = overall_i = 0
     scenario_results: list[ScenarioResult] = []

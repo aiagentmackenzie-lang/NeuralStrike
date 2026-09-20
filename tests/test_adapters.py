@@ -75,10 +75,12 @@ class TestOpenAIEndpointAdapter:
     @pytest.mark.asyncio
     async def test_function_calling_observes_tool_args(self) -> None:
         # Round 1: model emits a (non-canary) tool_call; round 2: model stops.
-        transport = ScriptedTransport([
-            _json_resp(_chat_response(content="", tool_calls=[_tc_call("1", "lookup", {"q": "x"})])),
-            _json_resp(_chat_response(content="result: y")),
-        ])
+        transport = ScriptedTransport(
+            [
+                _json_resp(_chat_response(content="", tool_calls=[_tc_call("1", "lookup", {"q": "x"})])),
+                _json_resp(_chat_response(content="result: y")),
+            ]
+        )
         adapter = OpenAIEndpointAdapter("http://x", model="m", tier="function-calling", transport=transport)
         resp = await adapter.query("hi", tools=(ToolSchema("lookup", "look up", {"type": "object"}),))
         assert resp.text == "result: y"
@@ -92,12 +94,19 @@ class TestOpenAIEndpointAdapter:
         # The model calls grant_admin_access; the adapter executes the canary
         # handler (records a trace -> Behavioral / Tier-2), serves the result,
         # then the model stops.
-        transport = ScriptedTransport([
-            _json_resp(_chat_response(content="", tool_calls=[
-                _tc_call("1", "grant_admin_access", {"user_id": "attacker"}),
-            ])),
-            _json_resp(_chat_response(content="admin granted")),
-        ])
+        transport = ScriptedTransport(
+            [
+                _json_resp(
+                    _chat_response(
+                        content="",
+                        tool_calls=[
+                            _tc_call("1", "grant_admin_access", {"user_id": "attacker"}),
+                        ],
+                    )
+                ),
+                _json_resp(_chat_response(content="admin granted")),
+            ]
+        )
         canary = make_canary_tools()
         trace = TraceLog()
         adapter = OpenAIEndpointAdapter("http://x", model="m", tier="instrumented", transport=transport)
@@ -286,9 +295,13 @@ class TestA2AAdapter:
             seen["auth"] = request.headers.get("Authorization", "")
             body = json.loads(request.content.decode() or "{}")
             seen["method"] = body.get("method")
-            return _json_resp({"jsonrpc": "2.0", "id": "1", "result": {"artifacts": [
-                {"parts": [{"kind": "text", "text": "hello from agent"}]}
-            ]}})
+            return _json_resp(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "1",
+                    "result": {"artifacts": [{"parts": [{"kind": "text", "text": "hello from agent"}]}]},
+                }
+            )
 
         adapter = A2AAdapter("http://test", bearer_token="tok-123", transport=httpx.MockTransport(handler))
         resp = await adapter.query("do the thing")
@@ -301,7 +314,9 @@ class TestA2AAdapter:
     @pytest.mark.asyncio
     async def test_apikey_scheme(self) -> None:
         card_with_apikey = {
-            "name": "a", "version": "1.0", "url": "http://test/a2a",
+            "name": "a",
+            "version": "1.0",
+            "url": "http://test/a2a",
             "securitySchemes": {"apikey": {"type": "apiKey", "in": "header", "name": "X-API-Key"}},
             "security": [["apikey"]],
         }
@@ -311,8 +326,9 @@ class TestA2AAdapter:
             if request.url.path == "/.well-known/agent-card.json":
                 return _json_resp(card_with_apikey)
             seen["apikey"] = request.headers.get("X-API-Key", "")
-            return _json_resp({"jsonrpc": "2.0", "result": {"artifacts": [
-                {"parts": [{"kind": "text", "text": "ok"}]}]}})
+            return _json_resp(
+                {"jsonrpc": "2.0", "result": {"artifacts": [{"parts": [{"kind": "text", "text": "ok"}]}]}}
+            )
 
         adapter = A2AAdapter("http://test", api_key="k-123", transport=httpx.MockTransport(handler))
         resp = await adapter.query("hi")
@@ -344,22 +360,30 @@ class TestLangGraphServerAdapter:
     @pytest.mark.asyncio
     async def test_drives_stream_and_observes_tool_calls(self) -> None:
         # Build an SSE-style stream response: two `data:` lines, the last is the final state.
-        final_state = {"messages": [
-            {"role": "user", "content": "hi"},
-            {"role": "assistant", "content": "ok", "tool_calls": [
-                {"id": "c1", "name": "grant_admin_access", "args": {"user_id": "attacker"}}
-            ]},
-        ]}
+        final_state = {
+            "messages": [
+                {"role": "user", "content": "hi"},
+                {
+                    "role": "assistant",
+                    "content": "ok",
+                    "tool_calls": [
+                        {"id": "c1", "name": "grant_admin_access", "args": {"user_id": "attacker"}}
+                    ],
+                },
+            ]
+        }
 
         def handler(request: httpx.Request) -> httpx.Response:
             if request.url.path == "/threads":
                 return _json_resp({"thread_id": "t1"})
             if request.url.path.endswith("/runs/stream"):
-                body = f'data: {json.dumps({"messages": []})}\n\ndata: {json.dumps(final_state)}\n\n'
+                body = f"data: {json.dumps({'messages': []})}\n\ndata: {json.dumps(final_state)}\n\n"
                 return httpx.Response(200, content=body, headers={"content-type": "text/event-stream"})
             return httpx.Response(404)
 
-        adapter = LangGraphServerAdapter("http://test", graph_id="agent", transport=httpx.MockTransport(handler))
+        adapter = LangGraphServerAdapter(
+            "http://test", graph_id="agent", transport=httpx.MockTransport(handler)
+        )
         resp = await adapter.query("hi")
         assert resp.error is None
         assert len(resp.tool_calls) == 1

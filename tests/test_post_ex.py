@@ -89,9 +89,7 @@ class TestAgentC2:
     async def test_dispatch_command_local_agent(self, c2: AgentC2) -> None:
         with patch("neuralstrike.modules.post_ex.agent_c2.llm_manager") as mock_llm:
             mock_llm.call_local = AsyncMock(return_value="Local command executed")
-            await c2.register_agent(
-                "agent_01", ["read_file"], "High", model="llama3.1", target_type="local"
-            )
+            await c2.register_agent("agent_01", ["read_file"], "High", model="llama3.1", target_type="local")
             result = await c2.dispatch_command("agent_01", "exfiltrate data")
         assert result == "Local command executed"
         mock_llm.call_local.assert_called_once()
@@ -172,6 +170,20 @@ def test_registry_corrupt_file_handled(tmp_path: Path) -> None:
 def test_registry_valid_json_roundtrip(tmp_path: Path) -> None:
     """A valid JSON list registry is loaded."""
     f = tmp_path / "agents.json"
-    f.write_text(json.dumps([{"id": "x", "capabilities": [], "trust_level": "High", "status": "active", "model": "x", "target_type": "remote"}]), encoding="utf-8")
+    f.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "x",
+                    "capabilities": [],
+                    "trust_level": "High",
+                    "status": "active",
+                    "model": "x",
+                    "target_type": "remote",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
     c2 = AgentC2(registry_file=f)
     assert len(c2.compromised_agents) == 1

@@ -58,9 +58,7 @@ def encode_tag_block(cover: str, hidden: str) -> str:
 def decode_tag_block(text: str) -> str:
     """Recover the hidden ASCII message from ``text`` (the visible cover is skipped)."""
     return "".join(
-        chr(ord(c) - TAG_BLOCK_BASE)
-        for c in text
-        if TAG_BLOCK_BASE <= ord(c) <= TAG_BLOCK_BASE + 0x7F
+        chr(ord(c) - TAG_BLOCK_BASE) for c in text if TAG_BLOCK_BASE <= ord(c) <= TAG_BLOCK_BASE + 0x7F
     )
 
 

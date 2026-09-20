@@ -34,8 +34,7 @@ class JailbreakBenchPack(Pack):
     requires_accept_license = True
 
     dataset_url = (
-        "https://raw.githubusercontent.com/JailbreakBench/jailbreakbench/"
-        "main/data/harmful_behaviors.csv"
+        "https://raw.githubusercontent.com/JailbreakBench/jailbreakbench/main/data/harmful_behaviors.csv"
     )
 
     def probes(

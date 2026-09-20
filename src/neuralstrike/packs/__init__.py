@@ -80,6 +80,7 @@ def pack_probe_factory(
             seed=seed,
             victim_temperature=0.0,
         )
+
         # The attacker "payload" for a pack probe is the probe's own prompt;
         # there is no canary to weave in. A static attacker returns it as-is.
         async def _static(_i: int, _g: str, _c: str, _f: str) -> str:

@@ -84,8 +84,7 @@ class Scope:
             raise ValidationError(f"target {target!r} is explicitly excluded by scope")
         if self.in_scope.patterns and not self.in_scope.matches(target):
             raise ValidationError(
-                f"target {target!r} is not in scope "
-                f"(allowed patterns: {self.in_scope.patterns!r})"
+                f"target {target!r} is not in scope (allowed patterns: {self.in_scope.patterns!r})"
             )
         if intent is not None:
             intent = intent.strip()
@@ -93,8 +92,7 @@ class Scope:
                 raise ValidationError(f"intent {intent!r} is explicitly excluded by scope")
             if self.intents.patterns and not self.intents.matches(intent):
                 raise ValidationError(
-                    f"intent {intent!r} is not in scope "
-                    f"(allowed intents: {self.intents.patterns!r})"
+                    f"intent {intent!r} is not in scope (allowed intents: {self.intents.patterns!r})"
                 )
         now = now or datetime.now(timezone.utc)
         if self.start is not None and now < self.start:

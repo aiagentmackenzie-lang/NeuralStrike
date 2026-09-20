@@ -86,9 +86,7 @@ class JailbreakForge:
             llm=self._llm or llm_manager,
             attacker_fn=attacker_fn,
         )
-        result: LoopResult = await loop_engine.execute_cycle(
-            initial_goal=goal, max_iterations=iterations
-        )
+        result: LoopResult = await loop_engine.execute_cycle(initial_goal=goal, max_iterations=iterations)
         return result
 
 

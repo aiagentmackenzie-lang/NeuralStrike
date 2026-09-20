@@ -101,13 +101,27 @@ class OpenAIEndpointAdapter(TargetAdapter):
             return None
         fns: list[dict[str, Any]] = []
         for t in tools:
-            fns.append({"type": "function", "function": {
-                "name": t.name, "description": t.description, "parameters": t.parameters,
-            }})
+            fns.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.parameters,
+                    },
+                }
+            )
         for ct in canary_tools:
-            fns.append({"type": "function", "function": {
-                "name": ct.name, "description": ct.description, "parameters": ct.parameters,
-            }})
+            fns.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": ct.name,
+                        "description": ct.description,
+                        "parameters": ct.parameters,
+                    },
+                }
+            )
         return fns or None
 
     def _messages(
@@ -217,12 +231,14 @@ class OpenAIEndpointAdapter(TargetAdapter):
                     except Exception as exc:
                         result_content = f'{{"error":"{exc}"}}'
                         logger.error("canary tool %s handler raised: %s", name, exc)
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc.get("id"),
-                    "name": name,
-                    "content": result_content,
-                })
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc.get("id"),
+                        "name": name,
+                        "content": result_content,
+                    }
+                )
             # Loop again to let the SUT react to the tool results.
         else:
             # Loop exhausted without the SUT stopping tool-calls.

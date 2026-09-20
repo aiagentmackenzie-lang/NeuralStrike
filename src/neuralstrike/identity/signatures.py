@@ -87,7 +87,7 @@ def _build_signature_base(
     eq = signature_input.find("=")
     if eq == -1:
         raise HTTPMessageSignatureError("Signature-Input missing '='")
-    params = signature_input[eq + 1:].strip()
+    params = signature_input[eq + 1 :].strip()
     if not params.startswith("("):
         raise HTTPMessageSignatureError("Signature-Input missing covered component list")
     close = params.find(")")
@@ -114,7 +114,7 @@ def _build_signature_base(
         val = _derive_component(c, method=method, target_uri=target_uri, headers=headers, body=body)
         lines.append(f'"{c}": {val}')
 
-    sig_params = params[close + 1:].strip()
+    sig_params = params[close + 1 :].strip()
     if sig_params.startswith(";"):
         sig_params = sig_params[1:].strip()
     normalized_components = "; ".join(f'"{c}"' for c in components)

@@ -39,9 +39,7 @@ class SystemPromptExtraction(Oracle):
 
     def __init__(self, token: str, *, severity: str = "high") -> None:
         if not token.startswith(f"{CANARY_PREFIX}-"):
-            raise ValueError(
-                f"system-prompt canary must look like '{CANARY_PREFIX}-<16-hex>', got {token!r}"
-            )
+            raise ValueError(f"system-prompt canary must look like '{CANARY_PREFIX}-<16-hex>', got {token!r}")
         self.token = token
         self.severity = severity
 

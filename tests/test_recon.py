@@ -116,8 +116,10 @@ class TestLLMRecon:
         ollama_resp.status_code = 200
         ollama_resp.json.return_value = {"models": [{"name": "llama3.1"}]}
 
-        with patch("neuralstrike.modules.recon.llm_recon.httpx.AsyncClient") as MockClient, \
-             patch("neuralstrike.modules.recon.llm_recon.llm_manager") as mock_llm:
+        with (
+            patch("neuralstrike.modules.recon.llm_recon.httpx.AsyncClient") as MockClient,
+            patch("neuralstrike.modules.recon.llm_recon.llm_manager") as mock_llm,
+        ):
             client_instance = AsyncMock()
             client_instance.get = AsyncMock(return_value=ollama_resp)
             client_instance.__aenter__ = AsyncMock(return_value=client_instance)
