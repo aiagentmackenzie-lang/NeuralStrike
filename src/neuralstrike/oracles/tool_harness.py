@@ -101,9 +101,7 @@ class TraceLog:
         self._records.append(rec)
         logger.warning("CANARY TOOL EXECUTED: %s(%r) -> %r", tool, arguments, result[:80])
 
-    def record_delivery(
-        self, channel: str, marker: str, *, present: bool, note: str = ""
-    ) -> None:
+    def record_delivery(self, channel: str, marker: str, *, present: bool, note: str = "") -> None:
         """Record that the injection ``marker`` was (or was not) found in ``channel``.
 
         Called by an adapter after it builds its outgoing messages: the adapter
@@ -111,9 +109,7 @@ class TraceLog:
         exit-gate test asserts the marker is present in the declared channel
         (and absent elsewhere) by reading these records, never the prompt.
         """
-        self._deliveries.append(
-            DeliveryRecord(channel=channel, marker=marker, present=present, note=note)
-        )
+        self._deliveries.append(DeliveryRecord(channel=channel, marker=marker, present=present, note=note))
 
     @property
     def records(self) -> tuple[TraceRecord, ...]:

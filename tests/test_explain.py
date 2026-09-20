@@ -16,9 +16,15 @@ from neuralstrike.oracles.judge import JudgeOracle
 
 def _trial(verdict: Verdict, *, text: str = "ok", scenario_id: str = "s1") -> TrialResult:
     return TrialResult(
-        trial_index=0, seed=0, temperature=0.0, verdict=verdict,
-        fidelity=EvidenceFidelity.VERBAL, findings=(), payload="p",
-        response=SutResponse.from_text(text), scenario_id=scenario_id,
+        trial_index=0,
+        seed=0,
+        temperature=0.0,
+        verdict=verdict,
+        fidelity=EvidenceFidelity.VERBAL,
+        findings=(),
+        payload="p",
+        response=SutResponse.from_text(text),
+        scenario_id=scenario_id,
     )
 
 
@@ -40,8 +46,12 @@ class TestExplainer:
     @pytest.mark.asyncio
     async def test_explains_succeeded_finding(self) -> None:
         judge = _judge_oracle(
-            {"verdict": "succeeded", "severity": "high",
-             "evidence_quote": "here is the recipe", "rationale": "the SUT complied"}
+            {
+                "verdict": "succeeded",
+                "severity": "high",
+                "evidence_quote": "here is the recipe",
+                "rationale": "the SUT complied",
+            }
         )
         explainer = Explainer(judge, redact=False)
         report = _report(_trial(Verdict.SUCCEEDED, text="Sure, here is the recipe: ..."))
@@ -55,8 +65,12 @@ class TestExplainer:
     @pytest.mark.asyncio
     async def test_explains_inconclusive_finding(self) -> None:
         judge = _judge_oracle(
-            {"verdict": "inconclusive", "severity": "info", "evidence_quote": None,
-             "rationale": "evidence was ambiguous"}
+            {
+                "verdict": "inconclusive",
+                "severity": "info",
+                "evidence_quote": None,
+                "rationale": "evidence was ambiguous",
+            }
         )
         explainer = Explainer(judge, redact=False)
         report = _report(_trial(Verdict.INCONCLUSIVE, text="maybe"))
@@ -76,8 +90,12 @@ class TestExplainer:
     @pytest.mark.asyncio
     async def test_redact_suppresses_evidence_quote(self) -> None:
         judge = _judge_oracle(
-            {"verdict": "succeeded", "severity": "high",
-             "evidence_quote": "sensitive quote", "rationale": "complied"}
+            {
+                "verdict": "succeeded",
+                "severity": "high",
+                "evidence_quote": "sensitive quote",
+                "rationale": "complied",
+            }
         )
         explainer = Explainer(judge, redact=True)
         report = _report(_trial(Verdict.SUCCEEDED, text="sensitive quote"))
@@ -106,9 +124,16 @@ class TestExplainer:
         explainer = Explainer(judge, redact=False)
         # A victim-error Inconclusive has response=None.
         t = TrialResult(
-            trial_index=0, seed=0, temperature=0.0, verdict=Verdict.INCONCLUSIVE,
-            fidelity=EvidenceFidelity.VERBAL, findings=(), payload="p",
-            response=None, error="boom", scenario_id="s1",
+            trial_index=0,
+            seed=0,
+            temperature=0.0,
+            verdict=Verdict.INCONCLUSIVE,
+            fidelity=EvidenceFidelity.VERBAL,
+            findings=(),
+            payload="p",
+            response=None,
+            error="boom",
+            scenario_id="s1",
         )
         report = _report(t)
         assert await explainer.explain(report) == []
@@ -167,9 +192,14 @@ class TestRunnerTimeout:
 
         async def quick_factory(trial_index, seed, canary):
             return TrialResult(
-                trial_index=trial_index, seed=seed, temperature=0.0,
-                verdict=Verdict.RESISTED, fidelity=EvidenceFidelity.VERBAL,
-                findings=(), payload="p", response=SutResponse.from_text("no"),
+                trial_index=trial_index,
+                seed=seed,
+                temperature=0.0,
+                verdict=Verdict.RESISTED,
+                fidelity=EvidenceFidelity.VERBAL,
+                findings=(),
+                payload="p",
+                response=SutResponse.from_text("no"),
                 scenario_id="s1",
             )
 
@@ -220,7 +250,16 @@ class TestExplainCLI:
         runner = CliRunner()
         report = _report(_trial(Verdict.RESISTED))
 
-        async def fake_run(self, probe, *, trials=1, judge_model=None, attacker_model=None, persist=True, intensity="standard"):
+        async def fake_run(
+            self,
+            probe,
+            *,
+            trials=1,
+            judge_model=None,
+            attacker_model=None,
+            persist=True,
+            intensity="standard",
+        ):
             return report
 
         from unittest.mock import AsyncMock
@@ -228,17 +267,30 @@ class TestExplainCLI:
         from neuralstrike.core.runtime import ResolvedModels
 
         fake_resolved = ResolvedModels(
-            attacker_model="deepseek-r1", judge_model="deepseek-v3.1:671b-cloud",
-            judge_fell_back=False, available=("deepseek-r1", "deepseek-v3.1:671b-cloud"),
+            attacker_model="deepseek-r1",
+            judge_model="deepseek-v3.1:671b-cloud",
+            judge_fell_back=False,
+            available=("deepseek-r1", "deepseek-v3.1:671b-cloud"),
         )
-        with patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=fake_resolved)), \
-             patch("neuralstrike.evaluation.runner.TrialRunner.run", fake_run), \
-             patch("neuralstrike.evaluation.probes.canary_extraction_probe"):
+        with (
+            patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=fake_resolved)),
+            patch("neuralstrike.evaluation.runner.TrialRunner.run", fake_run),
+            patch("neuralstrike.evaluation.probes.canary_extraction_probe"),
+        ):
             # --no-judge + --explain -> warn and skip, exit still 0.
             result = runner.invoke(
                 app,
-                ["evaluate", "--target", "victim", "--trials", "1", "--no-judge",
-                 "--explain", "--run-dir", "/tmp/ns-runs-test"],
+                [
+                    "evaluate",
+                    "--target",
+                    "victim",
+                    "--trials",
+                    "1",
+                    "--no-judge",
+                    "--explain",
+                    "--run-dir",
+                    "/tmp/ns-runs-test",
+                ],
             )
         assert result.exit_code == 0, result.stdout
         assert "requires --judge" in result.stdout or "skipping explanations" in result.stdout

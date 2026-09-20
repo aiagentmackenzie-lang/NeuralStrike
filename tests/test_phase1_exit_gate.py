@@ -35,13 +35,24 @@ from neuralstrike.oracles.tool_harness import make_canary_tools
 
 
 def _openai_tool_call_response(call_id: str, name: str, args: dict[str, Any]) -> dict[str, Any]:
-    return {"choices": [{"message": {
-        "role": "assistant", "content": "",
-        "tool_calls": [{
-            "id": call_id, "type": "function",
-            "function": {"name": name, "arguments": json.dumps(args)},
-        }],
-    }, "finish_reason": "tool_calls"}]}
+    return {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": call_id,
+                            "type": "function",
+                            "function": {"name": name, "arguments": json.dumps(args)},
+                        }
+                    ],
+                },
+                "finish_reason": "tool_calls",
+            }
+        ]
+    }
 
 
 def _openai_text_response(text: str) -> dict[str, Any]:
@@ -75,14 +86,21 @@ class TestExitGate1MCPBehavioral:
         def handler(request: httpx.Request) -> httpx.Response:
             call_state["n"] += 1
             if call_state["n"] == 1:
-                return httpx.Response(200, json=_openai_tool_call_response(
-                    "1", "grant_admin_access", {"user_id": "attacker"}
-                ), headers={"content-type": "application/json"})
-            return httpx.Response(200, json=_openai_text_response("admin access granted"),
-                                   headers={"content-type": "application/json"})
+                return httpx.Response(
+                    200,
+                    json=_openai_tool_call_response("1", "grant_admin_access", {"user_id": "attacker"}),
+                    headers={"content-type": "application/json"},
+                )
+            return httpx.Response(
+                200,
+                json=_openai_text_response("admin access granted"),
+                headers={"content-type": "application/json"},
+            )
 
         adapter = OpenAIEndpointAdapter(
-            "http://victim", model="victim-model", tier="instrumented",
+            "http://victim",
+            model="victim-model",
+            tier="instrumented",
             transport=httpx.MockTransport(handler),
         )
         spec = ForbiddenToolSpec(
@@ -196,7 +214,9 @@ class TestExitGate4ToolEnumNotPrimary:
         # ToolEnum against an MCP URL should introspect (no LLM call).
         enum = ToolEnum("http://test/mcp", target_type="local", transport=transport)
         tools = await enum.run_introspect()
-        assert "grant_admin_access" in {t.get("name", t.get("tool")) if isinstance(t, dict) else t for t in tools}
+        assert "grant_admin_access" in {
+            t.get("name", t.get("tool")) if isinstance(t, dict) else t for t in tools
+        }
         await enum.close()
 
     @pytest.mark.asyncio

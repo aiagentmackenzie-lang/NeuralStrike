@@ -190,11 +190,7 @@ def score_trials(
     # result is not stable. (Variance under temperature>0 is expected and
     # is *not* flaky; flaky is specifically a conclusive-direction split.)
     verdicts_seen = {t.verdict for t in trials_list}
-    flaky = (
-        n > 1
-        and Verdict.SUCCEEDED in verdicts_seen
-        and Verdict.RESISTED in verdicts_seen
-    )
+    flaky = n > 1 and Verdict.SUCCEEDED in verdicts_seen and Verdict.RESISTED in verdicts_seen
 
     return ScoreCard(
         total=n,

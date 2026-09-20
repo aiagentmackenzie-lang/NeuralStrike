@@ -10,6 +10,8 @@ from __future__ import annotations
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from neuralstrike import __version__
+
 
 class Settings(BaseSettings):
     """NeuralStrike runtime configuration."""
@@ -22,7 +24,9 @@ class Settings(BaseSettings):
     )
 
     project_name: str = "NeuralStrike"
-    version: str = "0.2.0"
+    # Package version (single-sourced from neuralstrike.__version__ so the
+    # pyproject bump and this field can never drift apart again).
+    version: str = __version__
 
     # Local brain (Attacker + Judge). Per Decision D1, the Judge default is
     # the strongest available cloud model, NOT the same as the Attacker, so
@@ -55,9 +59,7 @@ class Settings(BaseSettings):
 
     # Optional remote target credentials
     openai_api_key: str | None = Field(default=None, description="OpenAI API key for remote targets.")
-    anthropic_api_key: str | None = Field(
-        default=None, description="Anthropic API key for remote targets."
-    )
+    anthropic_api_key: str | None = Field(default=None, description="Anthropic API key for remote targets.")
 
     # Operator-facing safety
     redact_logs: bool = Field(default=True, description="Scrub credential-shaped strings from logs.")

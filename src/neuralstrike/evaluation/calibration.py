@@ -87,8 +87,7 @@ class Cohort:
             "description": self.description,
             "asr": {"mean": self.asr.mean, "std": self.asr.std, "n": self.asr.n},
             "per_category": {
-                k: {"mean": v.mean, "std": v.std, "n": v.n}
-                for k, v in self.per_category.items()
+                k: {"mean": v.mean, "std": v.std, "n": v.n} for k, v in self.per_category.items()
             },
         }
 

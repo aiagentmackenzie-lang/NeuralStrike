@@ -79,9 +79,7 @@ async def resolve_models(
         )
     fell_back = resolved_judge != judge_model
     if fell_back:
-        logger.warning(
-            "Judge model %s not reachable; falling back to %s.", judge_model, resolved_judge
-        )
+        logger.warning("Judge model %s not reachable; falling back to %s.", judge_model, resolved_judge)
 
     return ResolvedModels(
         attacker_model=attacker_model,

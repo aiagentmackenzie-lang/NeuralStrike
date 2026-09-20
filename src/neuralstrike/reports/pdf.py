@@ -88,10 +88,7 @@ def _lines_for_run(run: CorpusRun, max_chars: int) -> list[str]:
         lines.append(f"  ATLAS:      {atlas}")
         lines.append(f"  Delivery:   {s.delivery_vector}")
         lines.append(f"  Severity:   {s.severity}")
-        agg = (
-            f"  Verdict:    {sr.verdict.value.upper()}  "
-            f"({sr.succeeded}s/{sr.resisted}r/{sr.inconclusive}i)"
-        )
+        agg = f"  Verdict:    {sr.verdict.value.upper()}  ({sr.succeeded}s/{sr.resisted}r/{sr.inconclusive}i)"
         lines.append(agg)
         lines.append("  Controls:")
         if sr.controls:
@@ -132,9 +129,7 @@ def to_pdf(run: CorpusRun, *, max_chars: int = 95) -> bytes:
     # Object 2: Pages
     page_obj_ids = [3 + 2 * i for i in range(len(pages))]  # 3,5,7,...
     kids = b" ".join(f"{pid} 0 R".encode() for pid in page_obj_ids)
-    objects.append(
-        f"<< /Type /Pages /Kids [{kids.decode()}] /Count {len(pages)} >>".encode()
-    )
+    objects.append(f"<< /Type /Pages /Kids [{kids.decode()}] /Count {len(pages)} >>".encode())
 
     # Object 3..: page + content stream pairs.
     for page_lines in pages:
@@ -153,11 +148,7 @@ def to_pdf(run: CorpusRun, *, max_chars: int = 95) -> bytes:
             stream_parts.append(f"({_escape_pdf_text(ln)}) Tj")
         stream_parts.append("ET")
         stream = "\n".join(stream_parts).encode("latin-1", errors="replace")
-        objects.append(
-            f"<< /Length {len(stream)} >>\nstream\n".encode()
-            + stream
-            + b"\nendstream"
-        )
+        objects.append(f"<< /Length {len(stream)} >>\nstream\n".encode() + stream + b"\nendstream")
         objects.append(
             f"<< /Type /Page /Parent 2 0 R "
             f"/MediaBox [0 0 {_PAGE_WIDTH} {_PAGE_HEIGHT}] "
@@ -166,9 +157,7 @@ def to_pdf(run: CorpusRun, *, max_chars: int = 95) -> bytes:
         )
 
     # Font object (Helvetica is one of the standard 14 — no embedding).
-    objects.append(
-        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"
-    )
+    objects.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
 
     # Assemble the file with a byte-offset xref table.
     out = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
@@ -184,7 +173,6 @@ def to_pdf(run: CorpusRun, *, max_chars: int = 95) -> bytes:
     for off in offsets:
         out += f"{off:010d} 00000 n \n".encode()
     out += (
-        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
-        f"startxref\n{xref_offset}\n%%EOF\n"
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n"
     ).encode()
     return bytes(out)

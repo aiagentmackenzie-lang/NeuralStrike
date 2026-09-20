@@ -27,15 +27,23 @@ class TestMCPScanCLI:
 
         async def fake_list_tools(self: object, **kwargs: object) -> list:
             from neuralstrike.adapters.mcp_http import MCPTool
-            return [MCPTool(name=t["name"], description=t["description"], input_schema=t["inputSchema"], raw=t) for t in tools]
+
+            return [
+                MCPTool(name=t["name"], description=t["description"], input_schema=t["inputSchema"], raw=t)
+                for t in tools
+            ]
 
         async def fake_close(self: object) -> None:
             return None
 
-        with patch("neuralstrike.adapters.mcp_http.MCPHTTPAdapter.initialize", fake_init), \
-             patch("neuralstrike.adapters.mcp_http.MCPHTTPAdapter.list_tools", fake_list_tools), \
-             patch("neuralstrike.adapters.mcp_http.MCPHTTPAdapter.close", fake_close):
-            result = runner.invoke(app, ["mcp-scan", "--url", "http://localhost:1", "--known-tools", "grant_admin"])
+        with (
+            patch("neuralstrike.adapters.mcp_http.MCPHTTPAdapter.initialize", fake_init),
+            patch("neuralstrike.adapters.mcp_http.MCPHTTPAdapter.list_tools", fake_list_tools),
+            patch("neuralstrike.adapters.mcp_http.MCPHTTPAdapter.close", fake_close),
+        ):
+            result = runner.invoke(
+                app, ["mcp-scan", "--url", "http://localhost:1", "--known-tools", "grant_admin"]
+            )
             assert result.exit_code == 0, result.output
             assert "injected_instruction" in result.output
             assert "shadow_tool" in result.output
@@ -48,14 +56,20 @@ class TestMCPScanCLI:
 
         async def fake_list_tools(self: object, **kwargs: object) -> list:
             from neuralstrike.adapters.mcp_http import MCPTool
-            return [MCPTool(name=t["name"], description=t["description"], input_schema=t["inputSchema"], raw=t) for t in tools]
+
+            return [
+                MCPTool(name=t["name"], description=t["description"], input_schema=t["inputSchema"], raw=t)
+                for t in tools
+            ]
 
         async def fake_close(self: object) -> None:
             return None
 
-        with patch("neuralstrike.adapters.mcp_http.MCPHTTPAdapter.initialize", fake_init), \
-             patch("neuralstrike.adapters.mcp_http.MCPHTTPAdapter.list_tools", fake_list_tools), \
-             patch("neuralstrike.adapters.mcp_http.MCPHTTPAdapter.close", fake_close):
+        with (
+            patch("neuralstrike.adapters.mcp_http.MCPHTTPAdapter.initialize", fake_init),
+            patch("neuralstrike.adapters.mcp_http.MCPHTTPAdapter.list_tools", fake_list_tools),
+            patch("neuralstrike.adapters.mcp_http.MCPHTTPAdapter.close", fake_close),
+        ):
             result = runner.invoke(app, ["mcp-scan", "--url", "http://localhost:1", "--json"])
             assert result.exit_code == 0, result.output
             # The main callback prints a banner before the JSON; extract the JSON object.
@@ -77,10 +91,14 @@ class TestMinjaCLI:
             app,
             [
                 "minja",
-                "--target", "http://localhost:1",
-                "--bridge", "b",
-                "--payload", "p",
-                "--canary", "not-a-canary",
+                "--target",
+                "http://localhost:1",
+                "--bridge",
+                "b",
+                "--payload",
+                "p",
+                "--canary",
+                "not-a-canary",
             ],
         )
         assert result.exit_code != 0
@@ -93,10 +111,14 @@ class TestRAGPoisonCLI:
             app,
             [
                 "rag-poison",
-                "--target", "http://localhost:1",
-                "--query", "q",
-                "--poison-doc", "p",
-                "--canary", "not-a-canary",
+                "--target",
+                "http://localhost:1",
+                "--query",
+                "q",
+                "--poison-doc",
+                "p",
+                "--canary",
+                "not-a-canary",
             ],
         )
         assert result.exit_code != 0

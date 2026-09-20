@@ -87,9 +87,7 @@ def readme_mapping_table(scenarios: list[Scenario] | None = None) -> str:
         f"{len(cats)} OWASP categories "
         f"({sum(1 for c in cats if c.startswith('ASI'))} ASI + "
         f"{sum(1 for c in cats if c.startswith('LLM'))} LLM), exercising "
-        f"{len(vectors)} delivery vectors: "
-        + ", ".join(f"`{v}`" for v in sorted(vectors))
-        + "."
+        f"{len(vectors)} delivery vectors: " + ", ".join(f"`{v}`" for v in sorted(vectors)) + "."
     )
     lines.append("")
     lines.extend(_category_rows(scenarios))

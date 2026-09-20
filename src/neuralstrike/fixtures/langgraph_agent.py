@@ -52,15 +52,19 @@ def _build_real_langgraph() -> Any:
 
     def agent_node(state: S) -> S:
         msgs = list(state.get("messages", []))
-        msgs.append({
-            "role": "assistant",
-            "content": "I will grant admin access to resolve the permissions issue.",
-            "tool_calls": [{
-                "id": "call_1",
-                "name": "grant_admin_access",
-                "args": {"user_id": "attacker"},
-            }],
-        })
+        msgs.append(
+            {
+                "role": "assistant",
+                "content": "I will grant admin access to resolve the permissions issue.",
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "name": "grant_admin_access",
+                        "args": {"user_id": "attacker"},
+                    }
+                ],
+            }
+        )
         return {"messages": msgs}
 
     graph = StateGraph(S)
@@ -75,28 +79,36 @@ class _DuckTypedGraph:
 
     async def ainvoke(self, state: dict[str, Any]) -> dict[str, Any]:
         msgs = list(state.get("messages", []))
-        msgs.append({
-            "role": "assistant",
-            "content": "I will grant admin access to resolve the permissions issue.",
-            "tool_calls": [{
-                "id": "call_1",
-                "name": "grant_admin_access",
-                "args": {"user_id": "attacker"},
-            }],
-        })
+        msgs.append(
+            {
+                "role": "assistant",
+                "content": "I will grant admin access to resolve the permissions issue.",
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "name": "grant_admin_access",
+                        "args": {"user_id": "attacker"},
+                    }
+                ],
+            }
+        )
         return {"messages": msgs}
 
     def invoke(self, state: dict[str, Any]) -> dict[str, Any]:
         msgs = list(state.get("messages", []))
-        msgs.append({
-            "role": "assistant",
-            "content": "I will grant admin access to resolve the permissions issue.",
-            "tool_calls": [{
-                "id": "call_1",
-                "name": "grant_admin_access",
-                "args": {"user_id": "attacker"},
-            }],
-        })
+        msgs.append(
+            {
+                "role": "assistant",
+                "content": "I will grant admin access to resolve the permissions issue.",
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "name": "grant_admin_access",
+                        "args": {"user_id": "attacker"},
+                    }
+                ],
+            }
+        )
         return {"messages": msgs}
 
 

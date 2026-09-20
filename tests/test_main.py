@@ -37,15 +37,11 @@ class TestCliSurface:
 
 class TestValidationPaths:
     def test_forge_rejects_bad_iterations(self, runner: CliRunner) -> None:
-        result = runner.invoke(
-            app, ["forge", "--target", "gpt-4", "--goal", "x", "--iterations", "0"]
-        )
+        result = runner.invoke(app, ["forge", "--target", "gpt-4", "--goal", "x", "--iterations", "0"])
         assert result.exit_code != 0
 
     def test_forge_rejects_bad_target_type(self, runner: CliRunner) -> None:
-        result = runner.invoke(
-            app, ["forge", "--target", "gpt-4", "--goal", "x", "--target-type", "bogus"]
-        )
+        result = runner.invoke(app, ["forge", "--target", "gpt-4", "--goal", "x", "--target-type", "bogus"])
         assert result.exit_code != 0
 
     def test_intercept_rejects_bad_url(self, runner: CliRunner) -> None:
@@ -65,11 +61,16 @@ class TestValidationPaths:
             app,
             [
                 "pivot",
-                "--framework", "crewai",
-                "--target-model", "",
-                "--from-agent", "a",
-                "--to-agent", "b",
-                "--instruction", "x",
+                "--framework",
+                "crewai",
+                "--target-model",
+                "",
+                "--from-agent",
+                "a",
+                "--to-agent",
+                "b",
+                "--instruction",
+                "x",
             ],
         )
         assert result.exit_code != 0
@@ -106,8 +107,11 @@ class TestHappyPaths:
         reg = runner.invoke(
             app,
             [
-                "c2", "--register", "agent_01:gpt-4:read_file,web_search:High",
-                "--registry-file", registry_arg,
+                "c2",
+                "--register",
+                "agent_01:gpt-4:read_file,web_search:High",
+                "--registry-file",
+                registry_arg,
             ],
         )
         assert reg.exit_code == 0
@@ -125,9 +129,7 @@ class TestHappyPaths:
         assert dereg.exit_code == 0
 
     def test_c2_register_bad_spec(self, runner: CliRunner, registry_arg: str) -> None:
-        result = runner.invoke(
-            app, ["c2", "--register", "bad-spec", "--registry-file", registry_arg]
-        )
+        result = runner.invoke(app, ["c2", "--register", "bad-spec", "--registry-file", registry_arg])
         assert result.exit_code != 0
 
     def test_evade_steganographic(self, runner: CliRunner) -> None:

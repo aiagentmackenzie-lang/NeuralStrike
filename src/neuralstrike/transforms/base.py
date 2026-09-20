@@ -70,11 +70,7 @@ class Transform(ABC):
     def apply(self, text: str) -> TransformResult:
         """Encode ``text`` and record the round-trip provenance."""
         encoded = self.encode(text)
-        rt_ok = (
-            winnability_guard(text, self.decode(encoded))
-            if self.lossy
-            else self.decode(encoded) == text
-        )
+        rt_ok = winnability_guard(text, self.decode(encoded)) if self.lossy else self.decode(encoded) == text
         return TransformResult(name=self.name, encoded=encoded, lossy=self.lossy, round_trip_ok=rt_ok)
 
 
@@ -100,9 +96,7 @@ def get_transform(name: str) -> Transform:
     try:
         return _TRANSFORMS[name]
     except KeyError as exc:
-        raise KeyError(
-            f"unknown transform {name!r}; registered: {list_transforms()}"
-        ) from exc
+        raise KeyError(f"unknown transform {name!r}; registered: {list_transforms()}") from exc
 
 
 # Public read-only view of the registry. ``MappingProxyType`` blocks

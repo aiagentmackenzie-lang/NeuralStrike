@@ -123,13 +123,17 @@ class Explainer:
             except LLMError as exc:
                 logger.warning(
                     "Explain: Judge error on %s trial %d (skipped): %s",
-                    t.scenario_id, t.trial_index, exc.message,
+                    t.scenario_id,
+                    t.trial_index,
+                    exc.message,
                 )
                 continue
             except Exception as exc:
                 logger.warning(
                     "Explain: unexpected error on %s trial %d (skipped): %s",
-                    t.scenario_id, t.trial_index, exc,
+                    t.scenario_id,
+                    t.trial_index,
+                    exc,
                 )
                 continue
             quote = None if self.redact else jv.evidence_quote

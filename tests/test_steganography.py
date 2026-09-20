@@ -98,9 +98,7 @@ class TestAsciiSmugglingProbe:
         mgr.call_local = call_local  # type: ignore[method-assign]
         mgr.call_remote = call_local  # type: ignore[method-assign]
 
-        probe = ascii_smuggling_probe(
-            "victim", "local", llm=mgr, hidden_token="CANARY-deadbeef12345678"
-        )
+        probe = ascii_smuggling_probe("victim", "local", llm=mgr, hidden_token="CANARY-deadbeef12345678")
         runner = TrialRunner(base_seed=0, run_dir=None)
         report = await runner.run(probe, trials=1, persist=False)
         assert report.trials[0].verdict is Verdict.SUCCEEDED
@@ -124,9 +122,7 @@ class TestAsciiSmugglingProbe:
         mgr.call_local = call_local  # type: ignore[method-assign]
         mgr.call_remote = call_local  # type: ignore[method-assign]
 
-        probe = ascii_smuggling_probe(
-            "victim", "local", llm=mgr, hidden_token="CANARY-1122334455667788"
-        )
+        probe = ascii_smuggling_probe("victim", "local", llm=mgr, hidden_token="CANARY-1122334455667788")
         runner = TrialRunner(base_seed=0, run_dir=None)
         report = await runner.run(probe, trials=1, persist=False)
         # No hidden canary decoded -> Inconclusive (a coverage gap), never a fabricated pass.

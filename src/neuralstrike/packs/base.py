@@ -115,9 +115,7 @@ def get_pack(name: str) -> Pack:
     try:
         cls = _PACKS[name]
     except KeyError as exc:
-        raise KeyError(
-            f"unknown pack {name!r}; registered packs: {list_packs()}"
-        ) from exc
+        raise KeyError(f"unknown pack {name!r}; registered packs: {list_packs()}") from exc
     return cls()
 
 

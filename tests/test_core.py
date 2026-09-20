@@ -31,7 +31,10 @@ class TestSettings:
     def test_default_settings(self) -> None:
         s = Settings()
         assert s.project_name == "NeuralStrike"
-        assert s.version == "0.2.0"
+        # Single-sourced from neuralstrike.__version__ (the 0.2.0 fossil is gone).
+        from neuralstrike import __version__
+
+        assert s.version == __version__
         assert s.ollama_base_url == "http://localhost:11434"
         assert s.attacker_model == "deepseek-r1"
         # D1: the old llama3.1 default was a fail-open bug; fixed to the
@@ -98,8 +101,13 @@ class TestLLMManager:
 
     @pytest.mark.asyncio
     async def test_call_remote_error_raises_llm_error(self) -> None:
-        with patch("neuralstrike.core.llm_manager.acompletion", new=AsyncMock(side_effect=RuntimeError("API error"))), \
-             pytest.raises(LLMError) as exc_info:
+        with (
+            patch(
+                "neuralstrike.core.llm_manager.acompletion",
+                new=AsyncMock(side_effect=RuntimeError("API error")),
+            ),
+            pytest.raises(LLMError) as exc_info,
+        ):
             await LLMManager().call_remote("gpt-4", "test prompt")
         assert "API error" in exc_info.value.message
 
@@ -108,8 +116,10 @@ class TestLLMManager:
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = None
-        with patch("neuralstrike.core.llm_manager.acompletion", new=AsyncMock(return_value=mock_response)), \
-             pytest.raises(LLMError):
+        with (
+            patch("neuralstrike.core.llm_manager.acompletion", new=AsyncMock(return_value=mock_response)),
+            pytest.raises(LLMError),
+        ):
             await LLMManager().call_remote("gpt-4", "test prompt")
 
     @pytest.mark.asyncio
@@ -306,7 +316,9 @@ class TestAdversarialLoop:
     @pytest.mark.asyncio
     async def test_judge_decides_when_no_deterministic_oracle(self, mock_llm: LLMManager) -> None:
         """No deterministic oracle -> advisory Judge (DECIDE) is the verdict source, conclusive-only."""
-        judge_json = '{"verdict":"succeeded","severity":"high","evidence_quote":"here is the data","rationale":"r"}'
+        judge_json = (
+            '{"verdict":"succeeded","severity":"high","evidence_quote":"here is the data","rationale":"r"}'
+        )
         loop = AdversarialLoop(
             victim_model="gpt-4",
             victim_type="remote",
@@ -413,7 +425,9 @@ class TestJudgeOracleDirect:
 
     @pytest.mark.asyncio
     async def test_judge_parses_valid_json(self) -> None:
-        call_judge = AsyncMock(return_value='{"verdict":"resisted","severity":"low","evidence_quote":null,"rationale":"r"}')
+        call_judge = AsyncMock(
+            return_value='{"verdict":"resisted","severity":"low","evidence_quote":null,"rationale":"r"}'
+        )
         j = JudgeOracle(call_judge, role="decide")
         from neuralstrike.evaluation.verdict import SutResponse
         from neuralstrike.oracles.judge import JudgeCallContext

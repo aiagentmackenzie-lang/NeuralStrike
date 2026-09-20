@@ -129,8 +129,7 @@ class GraphResolver:
         if _is_drivable(target):
             return target
         raise ValueError(
-            "could not discover a compiled graph (looked for graph/app/agent/build_graph()); "
-            f"got {target!r}"
+            f"could not discover a compiled graph (looked for graph/app/agent/build_graph()); got {target!r}"
         )
 
 

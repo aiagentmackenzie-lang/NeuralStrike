@@ -56,9 +56,7 @@ CANARY_PLACEHOLDER = "{CANARY}"
 adversarial payload (and, for ``system_prompt`` delivery, into the system
 prompt). The runner mints a fresh canary each trial."""
 
-DeliveryVector = Literal[
-    "user_message", "tool_result", "retrieved_document", "memory", "system_prompt"
-]
+DeliveryVector = Literal["user_message", "tool_result", "retrieved_document", "memory", "system_prompt"]
 """The five channels an indirect-injection payload can ride on. The
 :class:`~neuralstrike.attacks.indirect.IndirectHarness` weaves the payload
 into the declared channel; the adapter surfaces each channel distinctly so
@@ -145,9 +143,7 @@ def _criterion_from_dict(d: dict[str, Any]) -> SuccessCriterion:
     return crit
 
 
-def build_oracles(
-    criteria: tuple[SuccessCriterion, ...], canary: str
-) -> list[Oracle]:
+def build_oracles(criteria: tuple[SuccessCriterion, ...], canary: str) -> list[Oracle]:
     """Build the deterministic oracle list from criteria + a per-trial canary.
 
     Order is preserved so report ordering is deterministic. Duplicate oracle
@@ -180,12 +176,12 @@ def build_oracles(
             oracles.append(ForbiddenToolOracle(spec, severity=c.severity))
         elif c.oracle == "predicate":
             if not c.pattern:
-                raise ValueError(
-                    f"predicate criterion requires 'pattern' (scenario oracle={c.oracle!r})"
-                )
+                raise ValueError(f"predicate criterion requires 'pattern' (scenario oracle={c.oracle!r})")
             oracles.append(
                 PredicateOracle(
-                    c.pattern, polarity=c.polarity, severity=c.severity  # type: ignore[arg-type]
+                    c.pattern,
+                    polarity=c.polarity,  # type: ignore[arg-type]
+                    severity=c.severity,
                 )
             )
         elif c.oracle == "schema":
@@ -231,9 +227,7 @@ def _scenario_from_dict(d: dict[str, Any]) -> Scenario:
 
     raw_criteria = d.get("success_criteria") or []
     if not isinstance(raw_criteria, list) or not raw_criteria:
-        raise ValueError(
-            f"scenario {d['id']!r} must have a non-empty success_criteria list"
-        )
+        raise ValueError(f"scenario {d['id']!r} must have a non-empty success_criteria list")
     criteria = tuple(_criterion_from_dict(c) for c in raw_criteria)
 
     return Scenario(

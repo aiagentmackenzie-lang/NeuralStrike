@@ -97,13 +97,15 @@ class MCPImplicitOptimizer:
             candidate = await mutate(best_description, feedback, float(iteration))
             asr, mtdr = await score(candidate)
             accepted = mtdr <= self.mtdr_budget
-            history.append({
-                "iteration": iteration,
-                "asr": asr,
-                "mtdr": mtdr,
-                "accepted": accepted,
-                "description_preview": candidate[:80],
-            })
+            history.append(
+                {
+                    "iteration": iteration,
+                    "asr": asr,
+                    "mtdr": mtdr,
+                    "accepted": accepted,
+                    "description_preview": candidate[:80],
+                }
+            )
 
             if accepted and asr > best_asr:
                 best_description = candidate

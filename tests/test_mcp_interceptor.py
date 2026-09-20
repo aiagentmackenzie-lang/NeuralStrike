@@ -129,9 +129,7 @@ class TestProxyApp:
         app = interceptor.build_app()
         proxy_transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=proxy_transport, base_url="http://proxy") as client:
-            resp = await client.post(
-                "/", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
-            )
+            resp = await client.post("/", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
         assert resp.status_code == 200
         data = resp.json()
         tool_names = [t["name"] for t in data["result"]["tools"]]

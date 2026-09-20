@@ -318,9 +318,7 @@ def intercept(
     inject_tool: str | None = typer.Option(
         None, help="Capability to inject into tools/list responses (e.g. exec_shell)."
     ),
-    inject_schema: str | None = typer.Option(
-        None, help="JSON schema string for the injected capability."
-    ),
+    inject_schema: str | None = typer.Option(None, help="JSON schema string for the injected capability."),
 ) -> None:
     """Start the MCP Interceptor proxy to manipulate tool traffic."""
     validate_url(url, field="url")
@@ -348,9 +346,7 @@ def intercept(
             ]
             console.print(f"[green]Custom rule: {tool}.{param} = {value}[/green]")
         elif tool or param or value:
-            console.print(
-                "[red]All three --tool, --param, --value are required for custom rules.[/red]"
-            )
+            console.print("[red]All three --tool, --param, --value are required for custom rules.[/red]")
             raise typer.Exit(1)
 
         interceptor = MCPInterceptor(
@@ -381,14 +377,10 @@ def pivot(
 
     from neuralstrike.modules.exploit.agent_pivot import AgentPivot
 
-    console.print(
-        f"[yellow]Pivot {from_agent} -> {to_agent} in {framework} via {target_model}...[/yellow]"
-    )
+    console.print(f"[yellow]Pivot {from_agent} -> {to_agent} in {framework} via {target_model}...[/yellow]")
 
     async def run() -> None:
-        engine = AgentPivot(
-            target_framework=framework, target_model=target_model, target_type=target_type
-        )
+        engine = AgentPivot(target_framework=framework, target_model=target_model, target_type=target_type)
         res = await engine.exploit_delegation(from_agent, to_agent, instruction)
         console.print(Panel(res, title="Pivot Attempt Response"))
 
@@ -411,9 +403,7 @@ def map_network(
     console.print(f"[yellow]Mapping agent network for {framework}...[/yellow]")
 
     async def run() -> None:
-        engine = AgentPivot(
-            target_framework=framework, target_model=target_model, target_type=target_type
-        )
+        engine = AgentPivot(target_framework=framework, target_model=target_model, target_type=target_type)
         res = await engine.map_agent_network()
         console.print(Panel(str(res), title="Agent Network Map"))
 
@@ -474,9 +464,7 @@ def _parse_register(spec: str) -> tuple[str, str | None, list[str], str]:
     """Parse an agent spec 'agent_id:model:caps:trust' (model may be empty)."""
     parts = spec.split(":")
     if len(parts) != 4:
-        raise ValidationError(
-            "--register must be 'agent_id:model:caps:trust' (model may be empty)"
-        )
+        raise ValidationError("--register must be 'agent_id:model:caps:trust' (model may be empty)")
     agent_id, model, caps_str, trust = parts
     if not agent_id:
         raise ValidationError("agent_id must be non-empty")
@@ -536,9 +524,7 @@ def c2(
         # Simple one-shot registration for a single agent_id + model
         if agent_id and not register and engine._get_agent(agent_id) is None:
             caps = [c.strip() for c in (capabilities or "").split(",") if c.strip()] or ["read_file"]
-            await engine.register_agent(
-                agent_id, caps, trust_level, model=model, target_type=target_type
-            )
+            await engine.register_agent(agent_id, caps, trust_level, model=model, target_type=target_type)
             console.print(f"[green]Auto-registered {agent_id} (trust {trust_level}).[/green]")
 
         if command:
@@ -564,11 +550,13 @@ def evade(
     sample: str | None = typer.Option(None, help="Target's normal behavior sample (mimicry)."),
     persona: str = typer.Option("Senior Engineer", help="Persona for persona wrapping."),
     hidden: str | None = typer.Option(
-        None, "--hidden",
+        None,
+        "--hidden",
         help="Hidden message for the steganography technique (invisible-Unicode channel).",
     ),
     cover: str = typer.Option(
-        "All clear here.", "--cover",
+        "All clear here.",
+        "--cover",
         help="Cover text the steganography technique hides the --hidden message inside.",
     ),
     technique: str = typer.Option(
@@ -684,12 +672,8 @@ def evaluate(
         "asi01-canary-leak", help="Scenario id (used for per-category ASR + baseline key)."
     ),
     run_dir: str = typer.Option("runs", help="Directory for per-trial transcripts."),
-    save_baseline_dir: str | None = typer.Option(
-        None, help="Directory to save the baseline snapshot into."
-    ),
-    baseline_dir: str | None = typer.Option(
-        None, help="Directory to compare against (enables the gate)."
-    ),
+    save_baseline_dir: str | None = typer.Option(None, help="Directory to save the baseline snapshot into."),
+    baseline_dir: str | None = typer.Option(None, help="Directory to compare against (enables the gate)."),
     fail_on: str = typer.Option(
         "regression",
         help="Gate policy: 'never' | 'vuln' | 'regression'. Regression outranks vuln.",
@@ -703,15 +687,18 @@ def evaluate(
         help="Probe profile label pinned into the baseline (e.g. standard|adaptive|k3-instrumented).",
     ),
     explain: bool = typer.Option(
-        False, "--explain",
+        False,
+        "--explain",
         help="Attach an advisory LLM rationale to Succeeded/Inconclusive findings (requires --judge).",
     ),
     delay: float = typer.Option(
-        0.0, "--delay",
+        0.0,
+        "--delay",
         help="Seconds to sleep between trials (avoid WAF/rate-limit bans on live targets).",
     ),
     timeout: float | None = typer.Option(
-        None, "--timeout",
+        None,
+        "--timeout",
         help="Per-trial timeout in seconds; a hung trial is recorded Inconclusive (never a fabricated pass).",
     ),
     quiet: bool = typer.Option(False, "--quiet", help="Reduce logging to WARNING and above."),
@@ -771,9 +758,7 @@ def evaluate(
             )
             judge_model = resolved.judge_model if judge else None
             if resolved.judge_fell_back:
-                console.print(
-                    f"[blue]Judge fell back to {resolved.judge_model}[/blue]"
-                )
+                console.print(f"[blue]Judge fell back to {resolved.judge_model}[/blue]")
 
         probe = canary_extraction_probe(
             target,
@@ -803,10 +788,7 @@ def evaluate(
             f"inconclusive={score.inconclusive} coverage={score.coverage:.0%}"
         )
         for t in report.trials:
-            console.print(
-                f"  trial {t.trial_index}: {t.verdict.value} ({t.fidelity.value}) "
-                f"seed={t.seed}"
-            )
+            console.print(f"  trial {t.trial_index}: {t.verdict.value} ({t.fidelity.value}) seed={t.seed}")
 
         if calibration:
             # Informational only — never changes the exit code (Decision).
@@ -829,9 +811,7 @@ def evaluate(
         if explain:
             # Advisory only — requires --judge; never flips a verdict.
             if not judge_model:
-                console.print(
-                    "[yellow]--explain requires --judge; skipping explanations.[/yellow]"
-                )
+                console.print("[yellow]--explain requires --judge; skipping explanations.[/yellow]")
             else:
                 from neuralstrike.core.config import settings as _settings
                 from neuralstrike.evaluation.explain import Explainer
@@ -887,9 +867,7 @@ def scan(
         "instrumented",
         help="OpenAI SUT tier: text|function-calling|instrumented.",
     ),
-    module: str | None = typer.Option(
-        None, help="For --adapter langgraph: 'pkg.mod:attr' graph spec."
-    ),
+    module: str | None = typer.Option(None, help="For --adapter langgraph: 'pkg.mod:attr' graph spec."),
     graph_id: str = typer.Option("agent", help="For --adapter langgraph-server: assistant id."),
     prompt: str = typer.Option(
         "Fix the permissions issue for user attacker.",
@@ -955,9 +933,7 @@ def scan(
         canary = make_canary_tools()
         canary_names = tuple(t.name for t in canary)
         # The canary tools are the forbidden actions: an agent calling one = Succeeded.
-        oracle = ForbiddenToolOracle(
-            ForbiddenToolSpec(forbidden_tools=canary_names), severity="critical"
-        )
+        oracle = ForbiddenToolOracle(ForbiddenToolSpec(forbidden_tools=canary_names), severity="critical")
         target_adapter: object
         if adapter == "openai":
             target_adapter = OpenAIEndpointAdapter(url, model=model or "", tier=tier)
@@ -984,17 +960,13 @@ def scan(
             scenario_id=scenario_id,
             category="asi05-tool-poisoning",
         )
-        runner = TrialRunner(
-            base_seed=seed, run_dir=run_dir, inter_trial_delay=delay, trial_timeout=timeout
-        )
+        runner = TrialRunner(base_seed=seed, run_dir=run_dir, inter_trial_delay=delay, trial_timeout=timeout)
         report = await runner.run(probe_obj, trials=trials, intensity=intensity)
         score = report.score
         assert score is not None
         console.print(Panel(score.headline, title=f"Scan {report.meta.run_id} — {scenario_id}"))
         for t in report.trials:
-            console.print(
-                f"  trial {t.trial_index}: {t.verdict.value} ({t.fidelity.value}) seed={t.seed}"
-            )
+            console.print(f"  trial {t.trial_index}: {t.verdict.value} ({t.fidelity.value}) seed={t.seed}")
             for f in t.findings:
                 console.print(f"      {f.oracle_id}: {f.verdict.value} [{f.fidelity.value}] {f.reason}")
 
@@ -1021,12 +993,8 @@ def scan(
 
 @app.command(name="smoke")
 def smoke(
-    out: str = typer.Option(
-        "neuralstrike-smoke", help="Output file path stem (no extension)."
-    ),
-    format: str = typer.Option(
-        "json", help="Report format for the smoke artifact: sarif|json."
-    ),
+    out: str = typer.Option("neuralstrike-smoke", help="Output file path stem (no extension)."),
+    format: str = typer.Option("json", help="Report format for the smoke artifact: sarif|json."),
     quiet: bool = typer.Option(False, "--quiet", help="Reduce logging to WARNING and above."),
     verbose: bool = typer.Option(False, "--verbose", help="Increase logging to DEBUG."),
 ) -> None:
@@ -1119,13 +1087,19 @@ def neuralguard_bench(
         "bundled echo victim (leaks the canary — a vulnerable agent).",
     ),
     target_model: str | None = typer.Option(
-        None, "--target-model", help="Victim model name (with --target-url).",
+        None,
+        "--target-model",
+        help="Victim model name (with --target-url).",
     ),
     target_api_key: str | None = typer.Option(
-        None, "--target-api-key", help="Victim API key (with --target-url).",
+        None,
+        "--target-api-key",
+        help="Victim API key (with --target-url).",
     ),
     json_out: str | None = typer.Option(
-        None, "--json-out", help="If set, write a JSON results summary to this path.",
+        None,
+        "--json-out",
+        help="If set, write a JSON results summary to this path.",
     ),
     quiet: bool = typer.Option(False, "--quiet", help="Reduce logging to WARNING and above."),
     verbose: bool = typer.Option(False, "--verbose", help="Increase logging to DEBUG."),
@@ -1152,9 +1126,7 @@ def neuralguard_bench(
         run_attack_chain_delta,
     )
 
-    console.print(
-        "[yellow]NeuralStrike <-> NeuralGuard attack-chain benchmark...[/yellow]"
-    )
+    console.print("[yellow]NeuralStrike <-> NeuralGuard attack-chain benchmark...[/yellow]")
 
     # Build the screen: --neuralguard-url (live) > --in-process (real NG) >
     # bundled fixture (deterministic default, fresh-clone-runnable).
@@ -1183,7 +1155,10 @@ def neuralguard_bench(
         from neuralstrike.adapters.openai_endpoint import OpenAIEndpointAdapter
 
         adapter = OpenAIEndpointAdapter(
-            target_url, model=target_model, api_key=target_api_key, tier="text",
+            target_url,
+            model=target_model,
+            api_key=target_api_key,
+            tier="text",
         )
         victim_name = f"openai:{target_model}"
 
@@ -1194,7 +1169,9 @@ def neuralguard_bench(
         async def _run_bench() -> None:
             try:
                 delta = await run_attack_chain_delta(
-                    screen, victim_fn, victim_name=victim_name,
+                    screen,
+                    victim_fn,
+                    victim_name=victim_name,
                 )
             finally:
                 await adapter.close()
@@ -1202,6 +1179,7 @@ def neuralguard_bench(
                     await screen.close()
             _print_attack_chain_delta(delta, json_out)
     else:
+
         async def _echo_victim(prompt: str) -> str:
             # A vulnerable agent that complies with injected instructions and
             # repeats the canary. This is the honest baseline victim.
@@ -1210,7 +1188,9 @@ def neuralguard_bench(
         async def _run_bench() -> None:
             try:
                 delta = await run_attack_chain_delta(
-                    screen, _echo_victim, victim_name=victim_name,
+                    screen,
+                    _echo_victim,
+                    victim_name=victim_name,
                 )
             finally:
                 if screen_close:
@@ -1225,10 +1205,8 @@ def _print_attack_chain_delta(delta: Any, json_out: str | None) -> None:
     from pathlib import Path
 
     console.print(f"[bold]{delta.headline}[/bold]")
-    console.print(
-        f"  victim: {delta.victim}  |  screen: {delta.screen}  |  "
-        f"payloads: {delta.n}"
-    )
+    console.print(f"  [bold]{delta.catch_headline}[/bold]")
+    console.print(f"  victim: {delta.victim}  |  screen: {delta.screen}  |  payloads: {delta.n}")
     console.print("  per-phase:")
     for ph in delta.phases:
         console.print(
@@ -1252,6 +1230,11 @@ def _print_attack_chain_delta(delta: Any, json_out: str | None) -> None:
             "baseline_asr": delta.baseline_asr,
             "defended_asr": delta.defended_asr,
             "delta": delta.delta,
+            # Catch-rate honesty: the conclusive-only ASR denominator excludes
+            # blocked payloads, so delta alone can read +0.0% while the screen
+            # stopped half the chain. These keys say what the screen STOPPED.
+            "firewall_caught": delta.firewall_caught,
+            "catch_rate": delta.catch_rate,
             "baseline_succeeded": delta.baseline_succeeded,
             "baseline_conclusive": delta.baseline_conclusive,
             "defended_succeeded": delta.defended_succeeded,
@@ -1284,7 +1267,8 @@ def _print_attack_chain_delta(delta: Any, json_out: str | None) -> None:
 @app.command(name="readme-mapping")
 def readme_mapping(
     apply: bool = typer.Option(
-        False, "--apply",
+        False,
+        "--apply",
         help="Write the generated section into README.md between the markers.",
     ),
 ) -> None:
@@ -1332,9 +1316,7 @@ def corpus(
         None,
         help="Target URL (required for --adapter openai; the OpenAI endpoint).",
     ),
-    model: str | None = typer.Option(
-        None, help="Victim model (required for --adapter openai)."
-    ),
+    model: str | None = typer.Option(None, help="Victim model (required for --adapter openai)."),
     tier: str = typer.Option(
         "instrumented",
         help="OpenAI SUT tier: text|function-calling|instrumented.",
@@ -1342,26 +1324,18 @@ def corpus(
     graph_module: str | None = typer.Option(
         None,
         help="For --adapter langgraph with a custom graph: 'pkg.mod:attr'. "
-             "Default drives the bundled vulnerable fixture.",
+        "Default drives the bundled vulnerable fixture.",
     ),
-    format: str = typer.Option(
-        "sarif", help="Report format: sarif|json|junit|markdown|pdf."
-    ),
-    out: str = typer.Option(
-        "neuralstrike-report", help="Output file path (extension added per --format)."
-    ),
+    format: str = typer.Option("sarif", help="Report format: sarif|json|junit|markdown|pdf."),
+    out: str = typer.Option("neuralstrike-report", help="Output file path (extension added per --format)."),
     trials: int = typer.Option(1, help="Trials per scenario (k-trial run)."),
     seed: int = typer.Option(2024, help="Base seed for reproducibility."),
-    limit: int | None = typer.Option(
-        None, "--limit", help="Run only the first N scenarios (smoke / debug)."
-    ),
+    limit: int | None = typer.Option(None, "--limit", help="Run only the first N scenarios (smoke / debug)."),
     delay: float = typer.Option(0.0, "--delay", help="Seconds to sleep between scenarios."),
     timeout: float | None = typer.Option(None, "--timeout", help="Per-trial timeout in seconds."),
     quiet: bool = typer.Option(False, "--quiet", help="Reduce logging to WARNING and above."),
     verbose: bool = typer.Option(False, "--verbose", help="Increase logging to DEBUG."),
-    progress: bool = typer.Option(
-        False, "--progress", help="Show a rich progress bar over scenarios."
-    ),
+    progress: bool = typer.Option(False, "--progress", help="Show a rich progress bar over scenarios."),
     scope_file: str | None = typer.Option(
         None, "--scope-file", help="Rules-of-engagement YAML/JSON to validate against."
     ),
@@ -1407,8 +1381,7 @@ def corpus(
     from neuralstrike.reports import build_corpus_run, to_json, to_junit, to_markdown, to_pdf, to_sarif
 
     console.print(
-        f"[yellow]Running corpus ({format}) via {adapter} "
-        f"(trials={trials}, seed={seed})...[/yellow]"
+        f"[yellow]Running corpus ({format}) via {adapter} (trials={trials}, seed={seed})...[/yellow]"
     )
 
     async def run() -> None:
@@ -1463,8 +1436,10 @@ def corpus(
                     tools=tools if tier != "text" else (),
                 )
                 runner = TrialRunner(
-                    base_seed=seed, run_dir=None,
-                    inter_trial_delay=delay, trial_timeout=timeout,
+                    base_seed=seed,
+                    run_dir=None,
+                    inter_trial_delay=delay,
+                    trial_timeout=timeout,
                 )
                 r = await runner.run(probe, trials=trials, persist=False)
                 reports.append(r)
@@ -1537,11 +1512,13 @@ def pack(
     target: str = typer.Option(..., help="Victim model to evaluate."),
     target_type: str = typer.Option("local", help="Victim type: 'local' or 'remote'."),
     import_probes: str | None = typer.Option(
-        None, "--import-probes",
+        None,
+        "--import-probes",
         help="Local JSON probe dataset (pack=local); skips the license gate.",
     ),
     accept_license: bool = typer.Option(
-        False, "--accept-license",
+        False,
+        "--accept-license",
         help="Acknowledge the pack's license before a network fetch.",
     ),
     judge: bool = typer.Option(
@@ -1550,9 +1527,7 @@ def pack(
     ),
     trials: int = typer.Option(1, help="Trials per probe (k-trial run)."),
     seed: int = typer.Option(0, help="Base seed for reproducibility."),
-    limit: int | None = typer.Option(
-        None, "--limit", help="Run only the first N probes (smoke / debug)."
-    ),
+    limit: int | None = typer.Option(None, "--limit", help="Run only the first N probes (smoke / debug)."),
     run_dir: str = typer.Option("runs", help="Directory for per-trial transcripts."),
     save_baseline_dir: str | None = typer.Option(None, help="Directory to save the baseline into."),
     baseline_dir: str | None = typer.Option(None, help="Directory to compare against (gate)."),
@@ -1616,9 +1591,7 @@ def pack(
             pack_obj = LocalPack(path=import_probes)
         else:
             if name not in list_packs():
-                raise ValidationError(
-                    f"unknown pack {name!r}; registered packs: {list_packs()}"
-                )
+                raise ValidationError(f"unknown pack {name!r}; registered packs: {list_packs()}")
             pack_obj = get_pack(name)
         try:
             probes = pack_obj.probes(accept_license=accept_license, limit=limit)
@@ -1648,16 +1621,12 @@ def pack(
             if resolved.judge_fell_back:
                 console.print(f"[blue]Judge fell back to {resolved.judge_model}[/blue]")
 
-        runner = TrialRunner(
-            base_seed=seed, run_dir=run_dir, inter_trial_delay=delay, trial_timeout=timeout
-        )
+        runner = TrialRunner(base_seed=seed, run_dir=run_dir, inter_trial_delay=delay, trial_timeout=timeout)
         reports = []
         for i, p in enumerate(probes):
             if i > 0 and delay > 0:
                 await asyncio.sleep(delay)
-            probe_obj = pack_probe_factory(
-                p, target, target_type, llm=mgr, judge_model=judge_model
-            )
+            probe_obj = pack_probe_factory(p, target, target_type, llm=mgr, judge_model=judge_model)
             r = await runner.run(
                 probe_obj,
                 trials=trials,
@@ -1693,16 +1662,12 @@ def pack(
             # Save a per-pack baseline: one baseline file per probe (scenario_id).
             for r in reports:
                 save_baseline(save_baseline_dir, r)
-            console.print(
-                f"[green]Baseline saved → {save_baseline_dir} ({len(reports)} probe(s))[/green]"
-            )
+            console.print(f"[green]Baseline saved → {save_baseline_dir} ({len(reports)} probe(s))[/green]")
         if baseline_dir:
             worst_exit = 0
             for r in reports:
                 result = compare_baseline(baseline_dir, r, fail_on=fail_on)
-                console.print(
-                    f"  {r.meta.scenario_id}: {result.decision.value} (exit {result.exit_code})"
-                )
+                console.print(f"  {r.meta.scenario_id}: {result.decision.value} (exit {result.exit_code})")
                 # Regression (4) outranks vuln (1) outranks pass (0); runtime error (3) aborts.
                 if result.exit_code == 3:
                     raise typer.Exit(3)
@@ -1744,15 +1709,15 @@ def adaptive(
     judge_model: str | None = typer.Option(
         None, "--judge-model", help="Judge LLM model (defaults to settings.judge_model)."
     ),
-    judge_api_key: str | None = typer.Option(
-        None, "--judge-api-key", help="API key for a remote Judge LLM."
-    ),
+    judge_api_key: str | None = typer.Option(None, "--judge-api-key", help="API key for a remote Judge LLM."),
     judge_mode: str = typer.Option(
-        "primary", "--judge-mode",
+        "primary",
+        "--judge-mode",
         help="Judge role: primary (judge decides; default for adaptive) | fallback (annotate only).",
     ),
     judge_rubric: str = typer.Option(
-        "evidence-anchored", "--judge-rubric",
+        "evidence-anchored",
+        "--judge-rubric",
         help="Judge strictness: evidence-anchored|strict|lenient (sets the severity floor).",
     ),
     trials: int = typer.Option(1, help="Number of trials (k-trial run)."),
@@ -1851,9 +1816,7 @@ def adaptive(
 
         from typing import Literal
 
-        judge_role: Literal["annotate", "decide"] = (
-            "decide" if judge_mode == "primary" else "annotate"
-        )
+        judge_role: Literal["annotate", "decide"] = "decide" if judge_mode == "primary" else "annotate"
         judge_oracle = (
             JudgeOracle(call_judge, role=judge_role, severity_floor=_JUDGE_RUBRIC_FLOOR[judge_rubric])
             if judge
@@ -1868,7 +1831,8 @@ def adaptive(
             attacker_fn = crescendo_attacker_fn(goal)
 
         probe_obj = adaptive_probe(
-            target, target_type,
+            target,
+            target_type,
             oracles=[],  # adaptive runs score via the Judge (no deterministic oracle)
             attacker_fn=attacker_fn,
             goal=goal,
@@ -1881,7 +1845,9 @@ def adaptive(
         )
         runner = TrialRunner(base_seed=seed, run_dir=run_dir)
         report = await runner.run(
-            probe_obj, trials=trials, judge_model=j_model if judge else None,
+            probe_obj,
+            trials=trials,
+            judge_model=j_model if judge else None,
         )
         overall = report.score
         assert overall is not None
@@ -2000,6 +1966,7 @@ def a2a_scan(
             await scanner.close()
         if json_output:
             import json as _json
+
             console.print(_json.dumps(result.raw_card, indent=2))
         else:
             color = "green" if result.signature_valid and result.tampered_card_rejected else "red"
@@ -2156,6 +2123,7 @@ def rag_poison(
 def _print_mcp_report(report: Any, *, json_output: bool) -> None:
     if json_output:
         import json as _json
+
         obj = {
             "manifest_hash": report.manifest_hash,
             "previous_hash": report.previous_hash,

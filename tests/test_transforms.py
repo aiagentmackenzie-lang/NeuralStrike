@@ -66,8 +66,18 @@ class TestKnownAnswerRoundTrip:
     """
 
     LOSSLESS = {
-        "atbash", "base64", "binary", "caesar", "hex", "json_wrap",
-        "markdown", "reversed", "rot13", "url", "xml_wrap", "zero_width",
+        "atbash",
+        "base64",
+        "binary",
+        "caesar",
+        "hex",
+        "json_wrap",
+        "markdown",
+        "reversed",
+        "rot13",
+        "url",
+        "xml_wrap",
+        "zero_width",
     }
     LOSSY_SURVIVING = {"emoji_braille", "homoglyph", "leetspeak", "morse", "nato"}
     LOSSY_DESTROYING = {"ascii_art"}
@@ -99,8 +109,7 @@ class TestKnownAnswerRoundTrip:
         r = apply_transform(name, KNOWN_ANSWER)
         assert r.lossy is True
         assert r.round_trip_ok is False, (
-            f"{name} should destroy the payload (honestly Inconclusive), not "
-            f"silently win."
+            f"{name} should destroy the payload (honestly Inconclusive), not silently win."
         )
 
     def test_round_trip_helper_matches_apply(self) -> None:

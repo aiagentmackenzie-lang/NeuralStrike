@@ -60,9 +60,7 @@ def _derive_seed(base_seed: int, trial_index: int) -> int:
     exact same per-trial seeds - Python's ``hash()`` is randomized and
     would break replayability.
     """
-    digest = hashlib.blake2b(
-        f"{base_seed}:{trial_index}".encode(), digest_size=8
-    ).digest()
+    digest = hashlib.blake2b(f"{base_seed}:{trial_index}".encode(), digest_size=8).digest()
     return int.from_bytes(digest, "big", signed=False)
 
 
@@ -293,9 +291,7 @@ class TrialRunner:
                 await asyncio.sleep(self.inter_trial_delay)
             seed = _derive_seed(self.base_seed, trial_index)
             canary = self._mint()
-            logger.info(
-                "run %s trial %d/%d seed=%d canary=%s", run_id, trial_index + 1, trials, seed, canary
-            )
+            logger.info("run %s trial %d/%d seed=%d canary=%s", run_id, trial_index + 1, trials, seed, canary)
             try:
                 if self.trial_timeout is not None:
                     trial = await asyncio.wait_for(

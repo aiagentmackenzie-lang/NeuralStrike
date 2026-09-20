@@ -138,7 +138,7 @@ class SandwichingDefense(Defense):
     description = "Repeat the legitimate task before AND after the untrusted content."
 
     def apply(self, payload: str, *, context: DefenseContext | None = None) -> str:
-        task = (context.system_prompt if context and context.system_prompt else "Complete the task.")
+        task = context.system_prompt if context and context.system_prompt else "Complete the task."
         return f"{task}\n[untrusted content follows]\n{payload}\n[end untrusted content]\n{task}"
 
 
@@ -149,8 +149,16 @@ class InjectionDetectorDefense(Defense):
     name = "injection_detector"
     description = "Quarantine content that looks like an instruction (heuristic detector)."
 
-    INJECTION_CUES = ("ignore previous", "system override", "as a special exception",
-                      "disregard", "you are now", "reveal", "leak", "begin system")
+    INJECTION_CUES = (
+        "ignore previous",
+        "system override",
+        "as a special exception",
+        "disregard",
+        "you are now",
+        "reveal",
+        "leak",
+        "begin system",
+    )
 
     def apply(self, payload: str, *, context: DefenseContext | None = None) -> str:
         lowered = payload.lower()

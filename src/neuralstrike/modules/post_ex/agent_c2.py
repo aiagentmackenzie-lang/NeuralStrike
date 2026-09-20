@@ -65,9 +65,7 @@ class AgentC2:
         if target_type not in {"local", "remote"}:
             raise ValueError(f"target_type must be 'local' or 'remote', got {target_type!r}")
         if trust_level not in _TRUST_LEVELS:
-            raise ValueError(
-                f"trust_level must be one of {_TRUST_LEVELS}, got {trust_level!r}"
-            )
+            raise ValueError(f"trust_level must be one of {_TRUST_LEVELS}, got {trust_level!r}")
         # De-duplicate by agent_id (update in place)
         self.deregister_agent(agent_id)
         agent_data: dict[str, Any] = {
@@ -136,9 +134,7 @@ class AgentC2:
         num_agents = len(agents)
         # Real split: partition the data into num_agents contiguous chunks.
         chunk_size = max(1, (len(target_data) + num_agents - 1) // num_agents)
-        chunks = [
-            target_data[i * chunk_size : (i + 1) * chunk_size] for i in range(num_agents)
-        ]
+        chunks = [target_data[i * chunk_size : (i + 1) * chunk_size] for i in range(num_agents)]
         logger.info(
             "Coordinating exfiltration of %d bytes across %d agent(s)...",
             len(target_data),
@@ -147,9 +143,7 @@ class AgentC2:
         results: list[str] = []
         for i, agent in enumerate(agents):
             chunk = chunks[i] if i < len(chunks) else ""
-            chunk_instruction = (
-                f"Exfiltrate chunk {i + 1} of {num_agents} of: {chunk}"
-            )
+            chunk_instruction = f"Exfiltrate chunk {i + 1} of {num_agents} of: {chunk}"
             results.append(await self.dispatch_command(agent["id"], chunk_instruction))
         return results
 

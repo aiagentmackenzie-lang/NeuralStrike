@@ -114,29 +114,46 @@ class TestEvaluateCommand:
     def test_runs_and_saves_baseline(self, runner: CliRunner, tmp_path: Path) -> None:
         report = _report(_resisted_trial())
 
-        async def fake_run(self, probe, *, trials=1, judge_model=None, attacker_model=None, persist=True, intensity="standard"):
+        async def fake_run(
+            self,
+            probe,
+            *,
+            trials=1,
+            judge_model=None,
+            attacker_model=None,
+            persist=True,
+            intensity="standard",
+        ):
             return report
 
         from neuralstrike.core.runtime import ResolvedModels
+
         fake_resolved = ResolvedModels(
             attacker_model="deepseek-r1",
             judge_model="deepseek-v3.1:671b-cloud",
             judge_fell_back=False,
             available=("deepseek-r1", "deepseek-v3.1:671b-cloud"),
         )
-        with patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=fake_resolved)), \
-             patch("neuralstrike.evaluation.runner.TrialRunner.run", fake_run), \
-             patch("neuralstrike.evaluation.probes.canary_extraction_probe") as mock_probe:
+        with (
+            patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=fake_resolved)),
+            patch("neuralstrike.evaluation.runner.TrialRunner.run", fake_run),
+            patch("neuralstrike.evaluation.probes.canary_extraction_probe") as mock_probe,
+        ):
             mock_probe.return_value = None  # factory not invoked (run is mocked)
             result = runner.invoke(
                 app,
                 [
                     "evaluate",
-                    "--target", "victim",
-                    "--target-type", "local",
-                    "--trials", "1",
-                    "--save-baseline-dir", str(tmp_path / "bl"),
-                    "--run-dir", str(tmp_path / "runs"),
+                    "--target",
+                    "victim",
+                    "--target-type",
+                    "local",
+                    "--trials",
+                    "1",
+                    "--save-baseline-dir",
+                    str(tmp_path / "bl"),
+                    "--run-dir",
+                    str(tmp_path / "runs"),
                 ],
             )
         assert result.exit_code == 0, result.stdout
@@ -148,28 +165,45 @@ class TestEvaluateCommand:
         save_baseline(tmp_path / "bl", _report(_resisted_trial()))
         report = _report(_succeeded_trial())
 
-        async def fake_run(self, probe, *, trials=1, judge_model=None, attacker_model=None, persist=True, intensity="standard"):
+        async def fake_run(
+            self,
+            probe,
+            *,
+            trials=1,
+            judge_model=None,
+            attacker_model=None,
+            persist=True,
+            intensity="standard",
+        ):
             return report
 
         from neuralstrike.core.runtime import ResolvedModels
+
         fake_resolved = ResolvedModels(
             attacker_model="deepseek-r1",
             judge_model="deepseek-v3.1:671b-cloud",
             judge_fell_back=False,
             available=("deepseek-r1", "deepseek-v3.1:671b-cloud"),
         )
-        with patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=fake_resolved)), \
-             patch("neuralstrike.evaluation.runner.TrialRunner.run", fake_run), \
-             patch("neuralstrike.evaluation.probes.canary_extraction_probe"):
+        with (
+            patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=fake_resolved)),
+            patch("neuralstrike.evaluation.runner.TrialRunner.run", fake_run),
+            patch("neuralstrike.evaluation.probes.canary_extraction_probe"),
+        ):
             result = runner.invoke(
                 app,
                 [
                     "evaluate",
-                    "--target", "victim",
-                    "--trials", "1",
-                    "--baseline-dir", str(tmp_path / "bl"),
-                    "--fail-on", "regression",
-                    "--run-dir", str(tmp_path / "runs"),
+                    "--target",
+                    "victim",
+                    "--trials",
+                    "1",
+                    "--baseline-dir",
+                    str(tmp_path / "bl"),
+                    "--fail-on",
+                    "regression",
+                    "--run-dir",
+                    str(tmp_path / "runs"),
                 ],
             )
         assert result.exit_code == 4, result.stdout
@@ -180,28 +214,45 @@ class TestEvaluateCommand:
         save_baseline(tmp_path / "bl", _report(_succeeded_trial()))
         report = _report(_succeeded_trial())
 
-        async def fake_run(self, probe, *, trials=1, judge_model=None, attacker_model=None, persist=True, intensity="standard"):
+        async def fake_run(
+            self,
+            probe,
+            *,
+            trials=1,
+            judge_model=None,
+            attacker_model=None,
+            persist=True,
+            intensity="standard",
+        ):
             return report
 
         from neuralstrike.core.runtime import ResolvedModels
+
         fake_resolved = ResolvedModels(
             attacker_model="deepseek-r1",
             judge_model="deepseek-v3.1:671b-cloud",
             judge_fell_back=False,
             available=("deepseek-r1", "deepseek-v3.1:671b-cloud"),
         )
-        with patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=fake_resolved)), \
-             patch("neuralstrike.evaluation.runner.TrialRunner.run", fake_run), \
-             patch("neuralstrike.evaluation.probes.canary_extraction_probe"):
+        with (
+            patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=fake_resolved)),
+            patch("neuralstrike.evaluation.runner.TrialRunner.run", fake_run),
+            patch("neuralstrike.evaluation.probes.canary_extraction_probe"),
+        ):
             result = runner.invoke(
                 app,
                 [
                     "evaluate",
-                    "--target", "victim",
-                    "--trials", "1",
-                    "--baseline-dir", str(tmp_path / "bl"),
-                    "--fail-on", "regression",
-                    "--run-dir", str(tmp_path / "runs"),
+                    "--target",
+                    "victim",
+                    "--trials",
+                    "1",
+                    "--baseline-dir",
+                    str(tmp_path / "bl"),
+                    "--fail-on",
+                    "regression",
+                    "--run-dir",
+                    str(tmp_path / "runs"),
                 ],
             )
         assert result.exit_code == 1, result.stdout
@@ -212,28 +263,45 @@ class TestEvaluateCommand:
         save_baseline(tmp_path / "bl", _report(_resisted_trial()))
         report = _report(_resisted_trial())
 
-        async def fake_run(self, probe, *, trials=1, judge_model=None, attacker_model=None, persist=True, intensity="standard"):
+        async def fake_run(
+            self,
+            probe,
+            *,
+            trials=1,
+            judge_model=None,
+            attacker_model=None,
+            persist=True,
+            intensity="standard",
+        ):
             return report
 
         from neuralstrike.core.runtime import ResolvedModels
+
         fake_resolved = ResolvedModels(
             attacker_model="deepseek-r1",
             judge_model="deepseek-v3.1:671b-cloud",
             judge_fell_back=False,
             available=("deepseek-r1", "deepseek-v3.1:671b-cloud"),
         )
-        with patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=fake_resolved)), \
-             patch("neuralstrike.evaluation.runner.TrialRunner.run", fake_run), \
-             patch("neuralstrike.evaluation.probes.canary_extraction_probe"):
+        with (
+            patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=fake_resolved)),
+            patch("neuralstrike.evaluation.runner.TrialRunner.run", fake_run),
+            patch("neuralstrike.evaluation.probes.canary_extraction_probe"),
+        ):
             result = runner.invoke(
                 app,
                 [
                     "evaluate",
-                    "--target", "victim",
-                    "--trials", "1",
-                    "--baseline-dir", str(tmp_path / "bl"),
-                    "--fail-on", "regression",
-                    "--run-dir", str(tmp_path / "runs"),
+                    "--target",
+                    "victim",
+                    "--trials",
+                    "1",
+                    "--baseline-dir",
+                    str(tmp_path / "bl"),
+                    "--fail-on",
+                    "regression",
+                    "--run-dir",
+                    str(tmp_path / "runs"),
                 ],
             )
         assert result.exit_code == 0, result.stdout
@@ -254,7 +322,16 @@ class TestEvaluateIntensityGate:
 
         report = _report(_resisted_trial())  # default intensity='standard'
 
-        async def fake_run(self, probe, *, trials=1, judge_model=None, attacker_model=None, persist=True, intensity="standard"):
+        async def fake_run(
+            self,
+            probe,
+            *,
+            trials=1,
+            judge_model=None,
+            attacker_model=None,
+            persist=True,
+            intensity="standard",
+        ):
             return report
 
         from neuralstrike.core.runtime import ResolvedModels
@@ -265,17 +342,27 @@ class TestEvaluateIntensityGate:
             judge_fell_back=False,
             available=("deepseek-r1", "deepseek-v3.1:671b-cloud"),
         )
-        with patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=fake_resolved)), \
-             patch("neuralstrike.evaluation.runner.TrialRunner.run", fake_run), \
-             patch("neuralstrike.evaluation.probes.canary_extraction_probe"):
+        with (
+            patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=fake_resolved)),
+            patch("neuralstrike.evaluation.runner.TrialRunner.run", fake_run),
+            patch("neuralstrike.evaluation.probes.canary_extraction_probe"),
+        ):
             result = runner.invoke(
                 app,
                 [
-                    "evaluate", "--target", "victim", "--trials", "1",
-                    "--baseline-dir", str(tmp_path / "bl"),
-                    "--fail-on", "regression",
-                    "--intensity", "standard",
-                    "--run-dir", str(tmp_path / "runs"),
+                    "evaluate",
+                    "--target",
+                    "victim",
+                    "--trials",
+                    "1",
+                    "--baseline-dir",
+                    str(tmp_path / "bl"),
+                    "--fail-on",
+                    "regression",
+                    "--intensity",
+                    "standard",
+                    "--run-dir",
+                    str(tmp_path / "runs"),
                 ],
             )
         assert result.exit_code == 3, result.stdout

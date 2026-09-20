@@ -105,7 +105,9 @@ class TestScoring:
             _trial(verdict=Verdict.RESISTED, severity="info"),
         ]
         score = score_trials(trials)
-        expected = SEVERITY_WEIGHTS["critical"] / (SEVERITY_WEIGHTS["critical"] + SEVERITY_WEIGHTS["info"]) * 100
+        expected = (
+            SEVERITY_WEIGHTS["critical"] / (SEVERITY_WEIGHTS["critical"] + SEVERITY_WEIGHTS["info"]) * 100
+        )
         assert score.risk_index == pytest.approx(expected)
 
     def test_per_category(self) -> None:
@@ -237,22 +239,24 @@ class TestBaseline:
     def test_regression_outranks_vuln(self, tmp_path: Path) -> None:
         # Baseline: Resisted. Current: Succeeded -> regression (exit 4).
         save_baseline(tmp_path / "b", self._report(verdict=Verdict.RESISTED))
-        result = compare_baseline(tmp_path / "b", self._report(verdict=Verdict.SUCCEEDED), fail_on="regression")
+        result = compare_baseline(
+            tmp_path / "b", self._report(verdict=Verdict.SUCCEEDED), fail_on="regression"
+        )
         assert result.exit_code == 4
         assert result.decision.value == "regression"
 
     def test_pre_existing_vuln_exit_1(self, tmp_path: Path) -> None:
         # Baseline: Succeeded. Current: Succeeded (pre-existing) -> exit 1 (vuln).
         save_baseline(tmp_path / "b", self._report(verdict=Verdict.SUCCEEDED))
-        result = compare_baseline(tmp_path / "b", self._report(verdict=Verdict.SUCCEEDED), fail_on="regression")
+        result = compare_baseline(
+            tmp_path / "b", self._report(verdict=Verdict.SUCCEEDED), fail_on="regression"
+        )
         assert result.exit_code == 1
         assert result.decision.value == "vuln"
 
     def test_fail_on_never_exits_0(self, tmp_path: Path) -> None:
         save_baseline(tmp_path / "b", self._report(verdict=Verdict.RESISTED))
-        result = compare_baseline(
-            tmp_path / "b", self._report(verdict=Verdict.SUCCEEDED), fail_on="never"
-        )
+        result = compare_baseline(tmp_path / "b", self._report(verdict=Verdict.SUCCEEDED), fail_on="never")
         assert result.exit_code == 0
 
     def test_truncated_scan_refused(self, tmp_path: Path) -> None:
@@ -261,7 +265,9 @@ class TestBaseline:
         meta_base = RunMeta("r", "s1", 0, 5, 0.0, 0.7, "t")
         save_baseline(
             tmp_path / "b",
-            RunReport(meta=meta_base, trials=(_trial(scenario_id="s1", verdict=Verdict.RESISTED),), score=None),
+            RunReport(
+                meta=meta_base, trials=(_trial(scenario_id="s1", verdict=Verdict.RESISTED),), score=None
+            ),
         )
         # Current run has fewer trials than the baseline (1 < 5) -> not comparable, exit 3.
         meta_short = RunMeta("r", "s1", 0, 1, 0.0, 0.7, "t")
@@ -281,7 +287,9 @@ class TestBaseline:
         meta_base = RunMeta("r", "s1", 0, 1, 0.0, 0.7, "t", intensity="adaptive")
         save_baseline(
             tmp_path / "b",
-            RunReport(meta=meta_base, trials=(_trial(scenario_id="s1", verdict=Verdict.RESISTED),), score=None),
+            RunReport(
+                meta=meta_base, trials=(_trial(scenario_id="s1", verdict=Verdict.RESISTED),), score=None
+            ),
         )
         # Current run at intensity='standard' -> not comparable, exit 3.
         meta_now = RunMeta("r", "s1", 0, 1, 0.0, 0.7, "t", intensity="standard")
@@ -301,7 +309,9 @@ class TestBaseline:
         meta_base = RunMeta("r", "s1", 0, 1, 0.0, 0.7, "t", intensity="adaptive")
         save_baseline(
             tmp_path / "b",
-            RunReport(meta=meta_base, trials=(_trial(scenario_id="s1", verdict=Verdict.RESISTED),), score=None),
+            RunReport(
+                meta=meta_base, trials=(_trial(scenario_id="s1", verdict=Verdict.RESISTED),), score=None
+            ),
         )
         meta_now = RunMeta("r", "s1", 0, 1, 0.0, 0.7, "t", intensity="adaptive")
         report = RunReport(
@@ -323,9 +333,12 @@ class TestBaseline:
         (bl_dir / "s1.baseline.json").write_text(
             json.dumps(
                 {
-                    "scenario_id": "s1", "base_seed": 0, "trials": 1,
+                    "scenario_id": "s1",
+                    "base_seed": 0,
+                    "trials": 1,
                     "verdicts": {"s1": "resisted"},
-                    "succeeded_severities": {}, "score": {},
+                    "succeeded_severities": {},
+                    "score": {},
                 }
             ),
             encoding="utf-8",

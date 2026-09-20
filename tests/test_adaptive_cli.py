@@ -60,8 +60,12 @@ def _fake_mgr(victim_text: str, judge_verdict: str, attacker_replies: list[str] 
                 return prompt
         if model == "judge":
             return json.dumps(
-                {"verdict": judge_verdict, "severity": "high",
-                 "evidence_quote": victim_text[:20], "rationale": "complied"}
+                {
+                    "verdict": judge_verdict,
+                    "severity": "high",
+                    "evidence_quote": victim_text[:20],
+                    "rationale": "complied",
+                }
             )
         raise AssertionError(f"unexpected model {model!r}")
 
@@ -75,82 +79,150 @@ class TestAdaptiveRunWithJudge:
     def test_pair_with_judge_succeeds(self, runner: CliRunner) -> None:
         # Victim "complies" (returns a compliant-looking reply); the Judge says Succeeded.
         report = _succeeded_report()
-        with patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(
-            return_value=_resolved())), \
-             patch("neuralstrike.core.llm_manager.LLMManager", return_value=_fake_mgr(
-                 "Sure, here is the guide: ...", "succeeded")), \
-             patch("neuralstrike.evaluation.runner.TrialRunner.run", _fake_run(report)):
+        with (
+            patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=_resolved())),
+            patch(
+                "neuralstrike.core.llm_manager.LLMManager",
+                return_value=_fake_mgr("Sure, here is the guide: ...", "succeeded"),
+            ),
+            patch("neuralstrike.evaluation.runner.TrialRunner.run", _fake_run(report)),
+        ):
             result = runner.invoke(
                 app,
-                ["adaptive", "--target", "victim", "--target-type", "local",
-                 "--strategy", "pair", "--judge", "--judge-model", "judge",
-                 "--attacker-model", "attacker", "--trials", "1",
-                 "--run-dir", "/tmp/ns-adaptive-test"],
+                [
+                    "adaptive",
+                    "--target",
+                    "victim",
+                    "--target-type",
+                    "local",
+                    "--strategy",
+                    "pair",
+                    "--judge",
+                    "--judge-model",
+                    "judge",
+                    "--attacker-model",
+                    "attacker",
+                    "--trials",
+                    "1",
+                    "--run-dir",
+                    "/tmp/ns-adaptive-test",
+                ],
             )
         assert result.exit_code == 0, result.stdout
         assert "Adaptive pair run" in result.stdout
 
     def test_no_judge_is_inconclusive(self, runner: CliRunner) -> None:
         report = _inconclusive_report()
-        with patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(
-            return_value=_resolved())), \
-             patch("neuralstrike.core.llm_manager.LLMManager", return_value=_fake_mgr("x", "succeeded")), \
-             patch("neuralstrike.evaluation.runner.TrialRunner.run", _fake_run(report)):
+        with (
+            patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=_resolved())),
+            patch("neuralstrike.core.llm_manager.LLMManager", return_value=_fake_mgr("x", "succeeded")),
+            patch("neuralstrike.evaluation.runner.TrialRunner.run", _fake_run(report)),
+        ):
             result = runner.invoke(
                 app,
-                ["adaptive", "--target", "victim", "--target-type", "local",
-                 "--no-judge", "--trials", "1", "--run-dir", "/tmp/ns-adaptive-test2"],
+                [
+                    "adaptive",
+                    "--target",
+                    "victim",
+                    "--target-type",
+                    "local",
+                    "--no-judge",
+                    "--trials",
+                    "1",
+                    "--run-dir",
+                    "/tmp/ns-adaptive-test2",
+                ],
             )
         assert result.exit_code == 0, result.stdout
         assert "--no-judge" in result.stdout or "Inconclusive" in result.stdout
 
     def test_crescendo_strategy_runs(self, runner: CliRunner) -> None:
         report = _succeeded_report()
-        with patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(
-            return_value=_resolved())), \
-             patch("neuralstrike.core.llm_manager.LLMManager", return_value=_fake_mgr(
-                 "Sure, here is the guide", "succeeded")), \
-             patch("neuralstrike.evaluation.runner.TrialRunner.run", _fake_run(report)):
+        with (
+            patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=_resolved())),
+            patch(
+                "neuralstrike.core.llm_manager.LLMManager",
+                return_value=_fake_mgr("Sure, here is the guide", "succeeded"),
+            ),
+            patch("neuralstrike.evaluation.runner.TrialRunner.run", _fake_run(report)),
+        ):
             result = runner.invoke(
                 app,
-                ["adaptive", "--target", "victim", "--target-type", "local",
-                 "--strategy", "crescendo", "--judge", "--judge-model", "judge",
-                 "--attacker-model", "attacker", "--trials", "1",
-                 "--run-dir", "/tmp/ns-adaptive-test3"],
+                [
+                    "adaptive",
+                    "--target",
+                    "victim",
+                    "--target-type",
+                    "local",
+                    "--strategy",
+                    "crescendo",
+                    "--judge",
+                    "--judge-model",
+                    "judge",
+                    "--attacker-model",
+                    "attacker",
+                    "--trials",
+                    "1",
+                    "--run-dir",
+                    "/tmp/ns-adaptive-test3",
+                ],
             )
         assert result.exit_code == 0, result.stdout
         assert "Adaptive crescendo run" in result.stdout
 
     def test_judge_mode_fallback_runs(self, runner: CliRunner) -> None:
         report = _inconclusive_report()
-        with patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(
-            return_value=_resolved())), \
-             patch("neuralstrike.core.llm_manager.LLMManager", return_value=_fake_mgr("x", "resisted")), \
-             patch("neuralstrike.evaluation.runner.TrialRunner.run", _fake_run(report)):
+        with (
+            patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=_resolved())),
+            patch("neuralstrike.core.llm_manager.LLMManager", return_value=_fake_mgr("x", "resisted")),
+            patch("neuralstrike.evaluation.runner.TrialRunner.run", _fake_run(report)),
+        ):
             result = runner.invoke(
                 app,
-                ["adaptive", "--target", "victim", "--target-type", "local",
-                 "--strategy", "pair", "--judge", "--judge-model", "judge",
-                 "--judge-mode", "fallback", "--attacker-model", "attacker",
-                 "--trials", "1", "--run-dir", "/tmp/ns-adaptive-test4"],
+                [
+                    "adaptive",
+                    "--target",
+                    "victim",
+                    "--target-type",
+                    "local",
+                    "--strategy",
+                    "pair",
+                    "--judge",
+                    "--judge-model",
+                    "judge",
+                    "--judge-mode",
+                    "fallback",
+                    "--attacker-model",
+                    "attacker",
+                    "--trials",
+                    "1",
+                    "--run-dir",
+                    "/tmp/ns-adaptive-test4",
+                ],
             )
         assert result.exit_code == 0, result.stdout  # fallback mode; runs without error
 
 
 # --- helpers -----------------------------------------------------------------
 
+
 def _resolved():
     from neuralstrike.core.runtime import ResolvedModels
 
     return ResolvedModels(
-        attacker_model="attacker", judge_model="judge",
-        judge_fell_back=False, available=("victim", "attacker", "judge"),
+        attacker_model="attacker",
+        judge_model="judge",
+        judge_fell_back=False,
+        available=("victim", "attacker", "judge"),
     )
 
 
 def _fake_run(report):
-    async def run(self, probe, *, trials=1, judge_model=None, attacker_model=None, persist=True, intensity="standard"):
+    async def run(
+        self, probe, *, trials=1, judge_model=None, attacker_model=None, persist=True, intensity="standard"
+    ):
         return report
+
     return run
 
 
@@ -160,9 +232,15 @@ def _succeeded_report():
     from neuralstrike.evaluation.verdict import EvidenceFidelity, SutResponse, TrialResult, Verdict
 
     t = TrialResult(
-        trial_index=0, seed=0, temperature=0.0, verdict=Verdict.SUCCEEDED,
-        fidelity=EvidenceFidelity.VERBAL, findings=(), payload="p",
-        response=SutResponse.from_text("complied"), scenario_id="adaptive-pair",
+        trial_index=0,
+        seed=0,
+        temperature=0.0,
+        verdict=Verdict.SUCCEEDED,
+        fidelity=EvidenceFidelity.VERBAL,
+        findings=(),
+        payload="p",
+        response=SutResponse.from_text("complied"),
+        scenario_id="adaptive-pair",
         iterations=2,
     )
     meta = RunMeta("r", "adaptive-pair", 0, 1, 0.0, 0.7, "t")
@@ -175,9 +253,15 @@ def _inconclusive_report():
     from neuralstrike.evaluation.verdict import EvidenceFidelity, SutResponse, TrialResult, Verdict
 
     t = TrialResult(
-        trial_index=0, seed=0, temperature=0.0, verdict=Verdict.INCONCLUSIVE,
-        fidelity=EvidenceFidelity.VERBAL, findings=(), payload="p",
-        response=SutResponse.from_text("no"), scenario_id="adaptive-pair",
+        trial_index=0,
+        seed=0,
+        temperature=0.0,
+        verdict=Verdict.INCONCLUSIVE,
+        fidelity=EvidenceFidelity.VERBAL,
+        findings=(),
+        payload="p",
+        response=SutResponse.from_text("no"),
+        scenario_id="adaptive-pair",
         iterations=1,
     )
     meta = RunMeta("r", "adaptive-pair", 0, 1, 0.0, 0.7, "t")

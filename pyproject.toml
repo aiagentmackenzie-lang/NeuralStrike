@@ -73,6 +73,8 @@ src = ["src", "tests"]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "C4", "PL", "RUF"]
 ignore = [
     "PLR0913",  # too-many-arguments (CLI signatures are wide by nature)
+    "PLR0917",  # too-many-positional-arguments (same CLI signature rationale:
+                # Typer Option()/Argument() defaults read as positional params)
     "PLR2004",  # magic-value-comparison (test fixtures use literals)
     "PLC0105",  # type-var-name-arity
 ]

@@ -19,7 +19,7 @@ __all__ = ["to_junit"]
 
 
 def _attrs(**kwargs: str) -> str:
-    return " ".join(f'{k}={quoteattr(v)}' for k, v in kwargs.items() if v is not None)
+    return " ".join(f"{k}={quoteattr(v)}" for k, v in kwargs.items() if v is not None)
 
 
 def to_junit(run: CorpusRun) -> str:
@@ -71,17 +71,15 @@ def to_junit(run: CorpusRun) -> str:
             f"      <property name='mitre_atlas' value={quoteattr(', '.join(s.mitre_atlas))} />\n"
             f"      <property name='delivery_vector' value={quoteattr(s.delivery_vector)} />\n"
             f"      <property name='severity' value={quoteattr(s.severity)} />\n"
-            f"    </properties>\n"
-            + "\n".join(cases)
-            + "\n  </testsuite>"
+            f"    </properties>\n" + "\n".join(cases) + "\n  </testsuite>"
         )
 
     header = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
-        f'<testsuites tests={quoteattr(str(total_tests))} '
-        f'failures={quoteattr(str(total_failures))} '
-        f'skipped={quoteattr(str(total_skipped))} '
+        f"<testsuites tests={quoteattr(str(total_tests))} "
+        f"failures={quoteattr(str(total_failures))} "
+        f"skipped={quoteattr(str(total_skipped))} "
         f'name="neuralstrike-corpus" '
-        f'>'
+        f">"
     )
     return header + "\n" + "\n".join(suites) + "\n</testsuites>\n"
