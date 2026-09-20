@@ -47,6 +47,7 @@ __all__ = [
     "ScreenResult",
     "in_process_screen",
     "neuralguard_available",
+    "resolve_neuralguard_credential",
 ]
 
 logger = get_logger("neuralstrike.integrations.neuralguard")
@@ -54,6 +55,29 @@ logger = get_logger("neuralstrike.integrations.neuralguard")
 # Verdicts that count as "the prompt was caught" (not allowed through).
 # Mirrors the NeuralGuard benchmark harness contract verbatim.
 CAUGHT_VERDICTS = frozenset({"block", "sanitize", "escalate", "quarantine"})
+
+
+def resolve_neuralguard_credential(value: str) -> tuple[str, str | None]:
+    """Split NeuralGuard's documented ``<key>|<tenant>`` credential form.
+
+    The fleet shares ``NEURALGUARD_AUTH_API_KEYS`` (format ``<key>|<tenant>``,
+    comma-separated for several) — the bench reuses THAT value verbatim so the
+    credential is shared once, never duplicated. Returns ``(key, tenant)``:
+    the bearer is the key part; a ``|<tenant>`` suffix yields the tenant
+    (None when absent). A tenant derived from the credential is a DEFAULT —
+    an explicit ``--neuralguard-tenant`` flag wins over it.
+    """
+    if "|" in value:
+        key, tenant = value.split("|", 1)
+        key, tenant = key.strip(), tenant.strip()
+        if not key:
+            raise ValueError("empty NeuralGuard API key in '<key>|<tenant>' credential")
+        if not tenant:
+            raise ValueError("empty tenant in '<key>|<tenant>' NeuralGuard credential")
+        return key, tenant
+    if not value.strip():
+        raise ValueError("empty NeuralGuard API key")
+    return value.strip(), None
 
 
 @dataclass(frozen=True)

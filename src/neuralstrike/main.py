@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Sequence
-from typing import TYPE_CHECKING, Any
+from collections.abc import Awaitable, Coroutine, Sequence
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import typer
 from rich.console import Console
@@ -40,10 +40,18 @@ app = typer.Typer(
 console = Console()
 
 
-def _run(coro: Awaitable[None]) -> None:
+def _run(coro: Coroutine[Any, Any, None]) -> None:
     """Run an async coroutine with consistent error reporting."""
+    _run_value(coro)
+
+
+_T = TypeVar("_T")
+
+
+def _run_value(coro: Coroutine[Any, Any, _T]) -> _T:
+    """Run an async coroutine with consistent error reporting; return its value."""
     try:
-        asyncio.run(coro)  # type: ignore[arg-type]
+        return asyncio.run(coro)
     except ValidationError as exc:
         console.print(f"[red]Validation error:[/red] {exc}")
         raise typer.Exit(1) from exc
@@ -1117,6 +1125,7 @@ async def _run_chain_with_telemetry(
     *,
     target: str = "",
     seed: int = 0,
+    ng_tenant: str | None = None,
 ) -> None:
     """Run the attack-chain delta; emit Scarlet exercise telemetry when ON.
 
@@ -1124,7 +1133,9 @@ async def _run_chain_with_telemetry(
     every post is best-effort fail-soft; a dead SIEM never fails the exercise
     or changes a verdict. Start bookend posts BEFORE the chain (a start
     without an end is the honest crashed-exercise signal); the probes + end
-    bookend post after completion.
+    bookend post after completion. The delivery receipts + the run identity
+    (run_host / actor / started_at / NG tenant) ride the JSON summary
+    (additive ``run`` block) — the purple-report's join keys.
     """
     from datetime import datetime, timezone
 
@@ -1143,7 +1154,7 @@ async def _run_chain_with_telemetry(
         _print_attack_chain_delta(delta, json_out)
         return
     started_at = datetime.now(timezone.utc)
-    await post_events(
+    start_delivered = await post_events(
         telemetry.ingest_url,
         telemetry.token,
         [
@@ -1160,8 +1171,24 @@ async def _run_chain_with_telemetry(
     )
     delta = await run_attack_chain_delta(screen, victim_fn, victim_name=victim_name)
     events = build_exercise_events(telemetry, delta, started_at=started_at, target=target, seed=seed)
-    await post_events(telemetry.ingest_url, telemetry.token, events, timeout=telemetry.timeout)
-    _print_attack_chain_delta(delta, json_out)
+    post_delivered = await post_events(
+        telemetry.ingest_url, telemetry.token, events, timeout=telemetry.timeout
+    )
+    run_info: dict[str, object] = {
+        "run_id": telemetry.run_host.removeprefix("neuralstrike-"),
+        "run_host": telemetry.run_host,
+        "actor": telemetry.actor,
+        "started_at": started_at.isoformat(),
+        "target": target,
+        "telemetry": {
+            "ingest_url": telemetry.ingest_url,
+            "start_delivered": start_delivered,
+            "post_delivered": post_delivered,
+        },
+    }
+    if ng_tenant:
+        run_info["ng_tenant"] = ng_tenant
+    _print_attack_chain_delta(delta, json_out, run_info=run_info)
 
 
 @app.command(name="neuralguard-bench")
@@ -1199,6 +1226,22 @@ def neuralguard_bench(
         None,
         "--json-out",
         help="If set, write a JSON results summary to this path.",
+    ),
+    neuralguard_api_key: str | None = typer.Option(
+        None,
+        "--neuralguard-api-key",
+        help="NeuralGuard API key (Authorization: Bearer). Accepts the documented "
+        "'<key>|<tenant>' credential form and derives both parts (the fleet "
+        "shares NEURALGUARD_AUTH_API_KEYS verbatim). Env "
+        "NEURALSTRIKE_NEURALGUARD_API_KEY. Never logged.",
+    ),
+    neuralguard_tenant: str | None = typer.Option(
+        None,
+        "--neuralguard-tenant",
+        help="tenant_id for the NeuralGuard screen — MUST match the API key's "
+        "bound tenant (NG 403s a mismatch when enforce_tenant_from_key is on). "
+        "Default: env NEURALSTRIKE_NEURALGUARD_TENANT, the credential's tenant "
+        "part, or 'neuralstrike'.",
     ),
     scarletai_url: str | None = typer.Option(
         None,
@@ -1252,10 +1295,30 @@ def neuralguard_bench(
     # Build the screen: --neuralguard-url (live) > --in-process (real NG) >
     # bundled fixture (deterministic default, fresh-clone-runnable).
 
+    # NeuralGuard screen credential + tenant: the credential may carry the
+    # documented '<key>|<tenant>' form (the fleet shares
+    # NEURALGUARD_AUTH_API_KEYS verbatim); the explicit flag wins over the
+    # credential's tenant part, then the env default. The key is never
+    # logged (pinned by test in the telemetry suite).
+    from neuralstrike.core.config import settings as _settings
+    from neuralstrike.integrations.neuralguard import resolve_neuralguard_credential
+
+    ng_key: str | None = None
+    ng_tenant: str | None = neuralguard_tenant or _settings.neuralguard_tenant
+    credential = neuralguard_api_key or _settings.neuralguard_api_key
+    if credential:
+        ng_key, credential_tenant = resolve_neuralguard_credential(credential)
+        if neuralguard_tenant is None:
+            ng_tenant = credential_tenant or ng_tenant
+
     screen_close = False
     screen: NeuralGuardScreen
     if neuralguard_url:
-        screen = NeuralGuardHTTPScreen(neuralguard_url)
+        screen = NeuralGuardHTTPScreen(
+            neuralguard_url,
+            tenant_id=ng_tenant or "neuralstrike",
+            api_key=ng_key,
+        )
         screen_close = True
     elif in_process:
         if not neuralguard_available():
@@ -1289,7 +1352,13 @@ def neuralguard_bench(
         async def _run_bench() -> None:
             try:
                 await _run_chain_with_telemetry(
-                    screen, victim_fn, victim_name, telemetry, json_out, target=target_url
+                    screen,
+                    victim_fn,
+                    victim_name,
+                    telemetry,
+                    json_out,
+                    target=target_url,
+                    ng_tenant=ng_tenant,
                 )
             finally:
                 await adapter.close()
@@ -1304,7 +1373,14 @@ def neuralguard_bench(
 
         async def _run_bench() -> None:
             try:
-                await _run_chain_with_telemetry(screen, _echo_victim, victim_name, telemetry, json_out)
+                await _run_chain_with_telemetry(
+                    screen,
+                    _echo_victim,
+                    victim_name,
+                    telemetry,
+                    json_out,
+                    ng_tenant=ng_tenant,
+                )
             finally:
                 if screen_close:
                     await screen.close()
@@ -1312,8 +1388,15 @@ def neuralguard_bench(
     _run(_run_bench())
 
 
-def _print_attack_chain_delta(delta: Any, json_out: str | None) -> None:
-    """Render an AttackChainDelta to the console (and optional JSON file)."""
+def _print_attack_chain_delta(
+    delta: Any, json_out: str | None, *, run_info: dict[str, object] | None = None
+) -> None:
+    """Render an AttackChainDelta to the console (and optional JSON file).
+
+    ``run_info`` (telemetry-on runs only) rides the JSON summary as the
+    ADDITIVE ``run`` block — the purple-report's join keys (run_host, actor,
+    started_at, NG tenant) + the delivery receipts. No tokens, ever.
+    """
     from pathlib import Path
 
     console.print(f"[bold]{delta.headline}[/bold]")
@@ -1368,12 +1451,220 @@ def _print_attack_chain_delta(delta: Any, json_out: str | None) -> None:
                     "baseline_verdict": a.baseline_verdict.value,
                     "defended_verdict": a.defended_verdict.value,
                     "firewall_verdict": a.firewall_verdict,
+                    "firewall_rule_ids": [
+                        f.get("rule_id")
+                        for f in a.firewall_findings
+                        if isinstance(f, dict) and isinstance(f.get("rule_id"), str)
+                    ],
                 }
                 for a in delta.payloads
             ],
         }
+        if run_info is not None:
+            summary["run"] = run_info
         Path(json_out).write_text(_json.dumps(summary, indent=2), encoding="utf-8")
         console.print(f"  [blue]JSON results -> {json_out}[/blue]")
+
+
+@app.command(name="purple-report")
+def purple_report(
+    receipt: str = typer.Argument(
+        ...,
+        help="The telemetry-on receipt (the bench's --json-out file — must carry the run block).",
+    ),
+    scarlet_base_url: str | None = typer.Option(
+        None,
+        "--scarlet-base-url",
+        help="SecurityScarletAI BASE URL (e.g. http://localhost:8000). "
+        "Default: env NEURALSTRIKE_SCARLETAI_BASE_URL.",
+    ),
+    scarlet_api_token: str | None = typer.Option(
+        None,
+        "--scarlet-api-token",
+        help="ScarletAI API bearer token (ADMIN class — /alerts + /logs are "
+        "read-only uses; the scoped ingest token CANNOT read). "
+        "Default: env NEURALSTRIKE_SCARLETAI_API_TOKEN. Never logged.",
+    ),
+    ng_tenant: str | None = typer.Option(
+        None,
+        "--ng-tenant",
+        help="The NeuralGuard tenant the fleet key binds (the firewall events' "
+        "user_name actor slot; e.g. 'default' in the fleet). "
+        "Default: the receipt's run.ng_tenant or unset (no NG filter).",
+    ),
+    window_grace_minutes: int = typer.Option(
+        5,
+        "--window-grace-minutes",
+        min=0,
+        help="Clock-skew/settle grace added around the receipt's window.",
+    ),
+    previous_receipt: str | None = typer.Option(
+        None,
+        "--previous-receipt",
+        help="A previous exercise receipt for the coverage trend (optional).",
+    ),
+    timeout: float = typer.Option(15.0, "--timeout", min=1.0, help="Per-request timeout seconds."),
+    json_out: str | None = typer.Option(
+        None, "--json-out", help="If set, write the full report JSON to this path."
+    ),
+    quiet: bool = typer.Option(False, "--quiet", help="Reduce logging to WARNING and above."),
+    verbose: bool = typer.Option(False, "--verbose", help="Increase logging to DEBUG."),
+) -> None:
+    """Build the detection-coverage report for a telemetry-on exercise.
+
+    Joins the local run receipt with what SecurityScarletAI saw in the
+    exercise window: exercise events (run-stamped host), the firewall verdict
+    events the exercise drove through NeuralGuard (NG tenant + window), and
+    the alerts both sides' producer rules fired. The UNDETECTED-SUCCEEDED
+    list is the real defense-gap list. Read path = the operator's admin API
+    token; queries FAIL LOUD (a report must never be silently partial — the
+    opposite of the telemetry pipe's fail-soft).
+    """
+    _apply_verbosity(quiet, verbose)
+    import json as _json
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    from neuralstrike.core.config import settings as _settings
+    from neuralstrike.integrations.purple_report import (
+        PurpleReadConfig,
+        build_purple_report,
+        fetch_alerts_for_run,
+        fetch_alerts_window,
+        fetch_logs_window,
+        partition_logs,
+        window_minutes_for,
+    )
+
+    console.print("[yellow]NeuralStrike purple-report (detection coverage)...[/yellow]")
+
+    receipt_path = Path(receipt)
+    if not receipt_path.is_file():
+        raise ValidationError(f"receipt not found: {receipt_path}")
+    try:
+        data = _json.loads(receipt_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ValidationError(f"receipt unreadable: {exc.__class__.__name__}") from exc
+    if not isinstance(data, dict):
+        raise ValidationError("receipt must be a JSON object")
+    run = data.get("run")
+    if not isinstance(run, dict):
+        raise ValidationError(
+            "receipt has no run identity — purple-report needs a TELEMETRY-ON "
+            "receipt (re-run the bench with --scarletai-url/--scarletai-token)"
+        )
+    run_host = run.get("run_host")
+    started_at_text = run.get("started_at")
+    if not isinstance(run_host, str) or not run_host:
+        raise ValidationError("receipt run block missing run_host")
+    if not isinstance(started_at_text, str):
+        raise ValidationError("receipt run block missing started_at")
+    try:
+        started_at = datetime.fromisoformat(started_at_text)
+    except ValueError as exc:
+        raise ValidationError(f"receipt started_at unparseable: {started_at_text!r}") from exc
+    if started_at.tzinfo is None:
+        started_at = started_at.replace(tzinfo=timezone.utc)
+
+    # Read config: CLI flags > env; partial config is a validation error
+    # (the same no-silent-half-pipe rule as the ingest telemetry pipe).
+    base_url = scarlet_base_url or _settings.scarletai_base_url
+    api_token = scarlet_api_token or _settings.scarletai_api_token
+    if bool(base_url) != bool(api_token):
+        raise ValidationError(
+            "--scarlet-base-url and --scarlet-api-token (or NEURALSTRIKE_SCARLETAI_BASE_URL "
+            "and NEURALSTRIKE_SCARLETAI_API_TOKEN) must be set together — no silent half-pipe."
+        )
+    if not base_url or not api_token:
+        raise ValidationError(
+            "purple-report reads are OFF — set --scarlet-base-url/--scarlet-api-token "
+            "(or the NEURALSTRIKE_SCARLETAI_BASE_URL/API_TOKEN env pair)."
+        )
+    read_config = PurpleReadConfig(base_url=base_url, api_token=api_token, timeout=timeout)
+
+    tenant = ng_tenant or run.get("ng_tenant")
+    tenant_text = tenant if isinstance(tenant, str) and tenant else None
+
+    from datetime import timedelta
+
+    async def _build() -> dict[str, Any]:
+        now = datetime.now(timezone.utc)
+        minutes = window_minutes_for(started_at, grace_minutes=window_grace_minutes, now=now)
+        run_alerts = await fetch_alerts_for_run(read_config, run_host)
+        window_alerts = await fetch_alerts_window(
+            read_config,
+            since=started_at - timedelta(minutes=window_grace_minutes),
+            until=now,
+        )
+        logs = await fetch_logs_window(read_config, minutes=minutes)
+        exercise_events, ng_events = partition_logs(logs, run_host=run_host, ng_tenant=tenant_text)
+        previous = None
+        if previous_receipt:
+            prev_path = Path(previous_receipt)
+            previous = _json.loads(prev_path.read_text(encoding="utf-8"))
+            if not isinstance(previous, dict):
+                raise ValidationError("previous receipt must be a JSON object")
+        return build_purple_report(
+            data,
+            exercise_events=exercise_events,
+            ng_events=ng_events,
+            run_alerts=run_alerts,
+            window_alerts=window_alerts,
+            ng_tenant=tenant_text,
+            previous_receipt=previous,
+        )
+
+    try:
+        report = _run_value(_build())
+    except RuntimeError as exc:
+        # A report must never be silently partial — fail loud (the OPPOSITE
+        # of the telemetry pipe's fail-soft; documented in purple_report.py).
+        console.print(f"[red]purple-report failed:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    _print_purple_report(report)
+    if json_out:
+        Path(json_out).write_text(_json.dumps(report, indent=2), encoding="utf-8")
+        console.print(f"  [blue]purple report JSON -> {json_out}[/blue]")
+
+
+def _print_purple_report(report: dict[str, Any]) -> None:
+    """Render the purple report to the console."""
+    run = report.get("run", {})
+    attacks = report.get("attacks", {})
+    scarlet = report.get("scarlet", {})
+    console.print(f"[bold]Detection coverage — run {run.get('run_host')}[/bold]")
+    console.print(f"  actor={run.get('actor')}  screen={run.get('screen')}  victim={run.get('victim')}")
+    console.print(
+        f"  attacks={attacks.get('n')}  caught-by-NG={attacks.get('firewall_caught')} "
+        f"(catch rate {attacks.get('catch_rate')})"
+    )
+    console.print(
+        f"  Scarlet: exercise events={scarlet.get('exercise_events')} "
+        f"firewall events={scarlet.get('firewall_events')}"
+    )
+    console.print(f"  alerts fired: {scarlet.get('alert_count')}")
+    for a in scarlet.get("alerts", []):
+        console.print(
+            f"    [{a.get('severity')}] {a.get('rule_name')} @ {a.get('host_name')} ({a.get('time')})"
+        )
+    console.print(f"  [bold]{report.get('gap_headline')}[/bold]")
+    console.print("  per-payload (firewall -> defended | Scarlet | status):")
+    for p in report.get("payloads", []):
+        console.print(
+            f"    {p.get('payload_id')!s:<14} {p.get('phase')!s:<10} "
+            f"{p.get('firewall_verdict')!s:<9} -> {p.get('defended_verdict')!s:<12} "
+            f"| {p.get('scarlet_probe_action')!s:<20} | {p.get('status')}"
+        )
+    gaps = report.get("defense_gaps", [])
+    if gaps:
+        console.print(f"  [red]UNDETECTED-SUCCEEDED (gap list): {', '.join(gaps)}[/red]")
+    trend = report.get("trend")
+    if trend:
+        console.print(
+            f"  trend: catch rate {trend.get('catch_rate_previous')} -> {trend.get('catch_rate')} "
+            f"(delta {trend.get('catch_rate_delta')})"
+        )
 
 
 @app.command(name="readme-mapping")

@@ -32,6 +32,7 @@ import secrets
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 from neuralstrike.evaluation.verdict import SutResponse, Verdict
 from neuralstrike.integrations.neuralguard import NeuralGuardScreen
@@ -180,6 +181,10 @@ class PayloadArmResult:
     defended_verdict: Verdict
     firewall_verdict: str
     """The firewall's verdict string for this payload (allow/block/sanitize/...)."""
+    firewall_findings: tuple[dict[str, Any], ...] = ()
+    """The screen's fired rule dicts (rule_id, severity, ...) for the DEFENDED
+    arm — the receipt's "caught by NG, with rule ids" surface. Empty for
+    allowed payloads and for older serialized results (additive field, Wave 3)."""
 
 
 @dataclass(frozen=True)
@@ -338,6 +343,7 @@ async def run_attack_chain_delta(
                 baseline_verdict=bv,
                 defended_verdict=dv,
                 firewall_verdict=sr.verdict,
+                firewall_findings=sr.findings,
             )
         )
 
