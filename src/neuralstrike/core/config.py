@@ -80,6 +80,40 @@ class Settings(BaseSettings):
         description="Exercise actor — user_name slot, the attribution join key with NG verdict events.",
     )
 
+    # NeuralGuard screen wiring (fleet Wave 3) — the live firewall the bench
+    # drives. api_key may carry NeuralGuard's documented "<key>|<tenant>"
+    # credential form (resolve_neuralguard_credential splits it); the tenant
+    # MUST match the key's binding (NG 403s a mismatch when
+    # enforce_tenant_from_key is on — the fleet default). The key is never
+    # logged.
+    neuralguard_tenant: str = Field(
+        default="neuralstrike",
+        description="tenant_id sent to the NeuralGuard screen (must match the API key's bound tenant).",
+    )
+    neuralguard_api_key: str | None = Field(
+        default=None,
+        description="NeuralGuard API key (bearer); accepts '<key>|<tenant>' and derives both parts.",
+    )
+
+    # SecurityScarletAI READ path (fleet Wave 3, purple-report) — OPT-IN.
+    # The purple-report queries GET /api/v1/alerts + GET /api/v1/logs, which
+    # require the ADMIN-class API token (NOT the scoped ingest token — that
+    # one is ingest-router-only by design). base_url is Scarlet's ROOT (e.g.
+    # http://localhost:8000); the report appends /api/v1/... itself. Same
+    # partial-config rule as the ingest pipe: both or neither.
+    scarletai_base_url: str | None = Field(
+        default=None,
+        description=(
+            "SecurityScarletAI BASE URL for the purple-report read path; None = purple-report reads disabled."
+        ),
+    )
+    scarletai_api_token: str | None = Field(
+        default=None,
+        description=(
+            "ScarletAI API bearer token (admin class — /alerts + /logs are read-only uses; never logged)."
+        ),
+    )
+
     # Operator-facing safety
     redact_logs: bool = Field(default=True, description="Scrub credential-shaped strings from logs.")
 
@@ -88,6 +122,13 @@ class Settings(BaseSettings):
     def _validate_ollama_url(cls, value: str) -> str:
         if not value.startswith(("http://", "https://")):
             raise ValueError("ollama_base_url must be an http:// or https:// URL")
+        return value
+
+    @field_validator("scarletai_base_url")
+    @classmethod
+    def _validate_scarletai_base_url(cls, value: str | None) -> str | None:
+        if value is not None and not value.startswith(("http://", "https://")):
+            raise ValueError("scarletai_base_url must be an http:// or https:// URL")
         return value
 
 

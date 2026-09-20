@@ -26,6 +26,11 @@ LABEL org.opencontainers.image.source="https://github.com/aiagentmackenzie-lang/
 RUN useradd --create-home --uid 1000 neuralstrike
 WORKDIR /home/neuralstrike
 
+# The fleet's one-shot receipt volume: a named volume mounted at /data/runs
+# initializes with the image's directory ownership (copy-on-first-use), so
+# the non-root process can write exercise receipts into it (Wave 3).
+RUN mkdir -p /data/runs && chown -R neuralstrike:neuralstrike /data
+
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder /build/src /opt/neuralstrike-src
 
