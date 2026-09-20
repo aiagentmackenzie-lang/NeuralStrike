@@ -61,6 +61,25 @@ class Settings(BaseSettings):
     openai_api_key: str | None = Field(default=None, description="OpenAI API key for remote targets.")
     anthropic_api_key: str | None = Field(default=None, description="Anthropic API key for remote targets.")
 
+    # SecurityScarletAI exercise telemetry (fleet Wave 2) — OPT-IN.
+    # scarletai_url is the FULL ingest endpoint (e.g.
+    # http://localhost:8000/api/v1/ingest — the same knob semantics as
+    # NeuralGuard's NEURALGUARD_SIEM_SCARLETAI_URL); token = the scoped
+    # INGEST_BEARER_TOKEN (viewer-class, ingest-router-only). Both must be
+    # set for telemetry to flow; a partial config is a validation error,
+    # never a silent half-pipe.
+    scarletai_url: str | None = Field(
+        default=None,
+        description="FULL SecurityScarletAI ingest URL for exercise telemetry; None = telemetry off.",
+    )
+    scarletai_token: str | None = Field(
+        default=None, description="ScarletAI INGEST_BEARER_TOKEN (never logged)."
+    )
+    telemetry_actor: str = Field(
+        default="neuralstrike-operator",
+        description="Exercise actor — user_name slot, the attribution join key with NG verdict events.",
+    )
+
     # Operator-facing safety
     redact_logs: bool = Field(default=True, description="Scrub credential-shaped strings from logs.")
 
