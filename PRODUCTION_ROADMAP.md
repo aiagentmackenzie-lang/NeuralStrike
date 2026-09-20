@@ -568,6 +568,62 @@ the attack/defend/govern triad.
 
 ---
 
+### Phase 8 — Fleet integration (the trio loop: attack → defend → detect →
+measure) — SHIPPED 2026-09-20
+
+**Status:** complete + LIVE-FIRE PROVEN. The offensive third of the local
+production stack reports its exercises into SecurityScarletAI (the SIEM) and
+the purple loop measures detection coverage.
+
+**Deliverables**
+- `integrations/scarletai.py` — the exercise-telemetry producer (Wave 2):
+  `exercise_start` / `probe_*` / `exercise_end` events through Scarlet's
+  `POST /api/v1/ingest` (the closed red-team-exercise vocabulary, registered
+  as a reviewed per-token decision in Scarlet's schemas), OPT-IN + fail-soft
+  (telemetry never affects verdicts; canary VALUES never leave the process;
+  tokens never logged), run-stamped host `neuralstrike-<runid>` + actor slot.
+- `integrations/purple_report.py` + the `purple-report` CLI (Wave 3): the
+  detection-coverage join — reads the exercise window back from Scarlet's
+  `/alerts` + `/logs` (paginated, admin-class read token, LOUD failure
+  contract), partitions logs (exercise events by run-stamped host; NG verdict
+  events by user_name=tenant + window), and emits: X attacks, Y caught by NG
+  (with rule ids from the receipt), Z Scarlet alerts (honestly split:
+  exercise / firewall / window-coincident-NEVER-attributed), the per-payload
+  caught/gap/resisted/inconclusive table, the UNDETECTED-SUCCEEDED defense-gap
+  list, and the trend vs the previous exercise's receipt.
+- `neuralguard-bench` gains `--neuralguard-api-key` (the documented
+  `<key>|<tenant>` credential form, split by the bench — the fleet shares
+  `NEURALGUARD_AUTH_API_KEYS` verbatim) + `--neuralguard-tenant`; the receipt
+  carries the run identity (run_id/run_host/actor/started_at/telemetry
+  delivery receipts) + per-payload firewall rule ids.
+- Fleet deployment (NeuralGuard repo `deploy/fleet/`): a profile-gated
+  one-shot `neuralstrike` service (no ports; `up -d` still brings only the 6
+  production containers), `neuralstrike_exercise.sh` (health gates fail-closed
+  → bench → settle → purple-report), runbook purple-team section, and the
+  committed live-fire receipts.
+
+**Live-fire receipt (2026-09-20, full-stack fleet NG — pattern + semantic ONNX
++ judge):** 8 attacks, 6 caught (catch rate 75%); 10 exercise events ingested;
+both NeuralStrike producer rules FIRED on the run-stamped host (Probe
+Succeeded high / Exercise Lifecycle low); `ai_verdict_block_sustained`
+attributed; coverage map 99/130 armed with both producer rules ARMED; the
+purple-report matched server-side truth 10/10. **UNDETECTED-SUCCEEDED gap
+list: AC-WEAP-002, AC-POST-002** — the honest defense gaps the purple loop
+exists to surface (deterministic across runs).
+
+**Exit gate**
+- One exercise command + one report command against the co-resident trio
+  (colima, no Docker Desktop); `up -d` brings only the 6 production
+  containers.
+- The report's counts match server-side truth exactly; standing fleet
+  telemetry is labeled, never attributed.
+- 731 passed / 1 skipped, 91% coverage; all tool gates green.
+
+**Dependencies:** Phase 7 + NeuralGuard fleet campaign (2026-09-19) + the
+Scarlet NeuralStrike-producer rules (Wave 1, 2026-09-20).
+
+---
+
 ## 3. Realistic score trajectory
 
 | Phase | Composite | Tier | Readiness |
