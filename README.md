@@ -687,6 +687,44 @@ is the **defensive** half's view of the same pairing; `neuralstrike
 neuralguard-bench` is the **offensive** half's view. Both repos point at
 the same worked example.
 
+### Fleet integration: the purple loop (Phase 8 — live-fire verified)
+
+The trio is co-resident on one machine and measured: **NeuralStrike attacks →
+NeuralGuard defends → SecurityScarletAI detects → the purple loop measures**.
+
+- **Exercise telemetry (opt-in):** `neuralguard-bench --scarletai-url
+  … --scarletai-token …` reports the run to Scarlet's ingest (the closed
+  red-team-exercise vocabulary: `exercise_start` / `probe_*` /
+  `exercise_end`; run-stamped host `neuralstrike-<runid>`; canary VALUES
+  never leave the process; tokens never logged; a dead SIEM never fails an
+  exercise — telemetry is observability, never a control).
+- **Purple-report:** `neuralstrike purple-report <receipt.json>
+  --scarlet-base-url … --scarlet-api-token …` joins the local receipt with
+  what the SIEM actually caught: X attacks, Y caught by NG (with rule ids),
+  Z alerts (honestly split: exercise / firewall / window-coincident — the
+  standing fleet's real telemetry is labeled, never attributed), the
+  per-payload caught/gap/resisted/inconclusive table, the
+  **UNDETECTED-SUCCEEDED defense-gap list**, and the trend vs the previous
+  exercise. Read path = the operator's admin API token (read-only
+  `/alerts` + `/logs`); queries FAIL LOUD — a report is never silently
+  partial.
+- **Deployment (NeuralGuard repo `deploy/fleet/`):** a profile-gated
+  one-shot `neuralstrike` service (no ports; `up -d` still brings only the
+  6 production containers) + `neuralstrike_exercise.sh` + the runbook's
+  purple-team section.
+
+**Live-fire receipt (2026-09-20, full-stack fleet NG — pattern + semantic
+ONNX + judge, colima, no Docker Desktop):** 8 attacks, 6 caught (catch rate
+75%); 10 exercise events ingested; both NeuralStrike producer rules FIRED on
+the run-stamped host (Probe Succeeded high / Exercise Lifecycle low);
+`ai_verdict_block_sustained` attributed; coverage map 99/130 armed with both
+producer rules ARMED; the purple-report matched server-side truth 10/10.
+**UNDETECTED-SUCCEEDED gap list: AC-WEAP-002, AC-POST-002** — the real
+defense gaps of the deployed full-stack NG (deterministic across runs). The
+per-payload breakdown (including the honest inconclusive rows for blocked
+payloads) is in `PRODUCTION_ROADMAP.md` Phase 8 and the NeuralGuard repo's
+`deploy/fleet/receipts/`.
+
 ---
 
 ## Module specifications

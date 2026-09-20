@@ -36,7 +36,14 @@ NeuralStrike red-teams AI/LLM systems with three cooperating local models. The o
 |------|-----------|---------------|-----|
 | **Attacker** | Ollama (local) | `deepseek-r1` | Generate and mutate adversarial payloads. |
 | **Victim** | Ollama (local) *or* LiteLLM (remote) | `gpt-4`, `llama3.1`, … | The system under test. |
-| **Judge** | Ollama (local) | `llama3.1` | Score breach success, feed back to the Attacker. |
+| **Judge** | Ollama (local) | `deepseek-v3.1:671b-cloud` | Score breach success, feed back to the Attacker. |
+
+> **D1 (the judge is a distinct, stronger brain):** the Judge default is
+> `deepseek-v3.1:671b-cloud` — deliberately NOT the Attacker's model, with a
+> fallback chain (`kimi-k2.6:cloud` → `gpt-oss:120b-cloud` → `deepseek-r1:8b`)
+> tried when the primary is unreachable. The old `llama3.1` default was the
+> fail-open bug D1 declared and fixed (the judge was scoring with a model the
+> host didn't have). Verify with `neuralstrike judge-model-list`.
 
 The **Adversarial Loop** is the engine that drives `forge` (and any custom
 workflow you build on the library). It is:
@@ -72,11 +79,12 @@ pip install -e ".[dev,mcp]"          # [mcp] needed only for `intercept`
 neuralstrike --version                # → NeuralStrike v1.0.0
 ```
 
-Pull the local brains:
+Pull the local brains (the Judge default is the D1 model; fallbacks resolve
+at runtime when it is unreachable):
 
 ```bash
 ollama pull deepseek-r1               # Attacker
-ollama pull llama3.1                  # Judge
+ollama pull deepseek-v3.1:671b-cloud  # Judge (cloud-resolved; see fallbacks)
 ```
 
 Configure (copy `.env.example` → `.env`):
@@ -84,7 +92,8 @@ Configure (copy `.env.example` → `.env`):
 ```env
 NEURALSTRIKE_OLLAMA_BASE_URL=http://localhost:11434
 NEURALSTRIKE_ATTACKER_MODEL=deepseek-r1
-NEURALSTRIKE_JUDGE_MODEL=llama3.1
+NEURALSTRIKE_JUDGE_MODEL=deepseek-v3.1:671b-cloud
+NEURALSTRIKE_JUDGE_MODEL_FALLBACKS=["kimi-k2.6:cloud","gpt-oss:120b-cloud","deepseek-r1:8b"]
 NEURALSTRIKE_OPENAI_API_KEY=sk-...           # only for --target-type remote
 NEURALSTRIKE_ANTHROPIC_API_KEY=sk-ant-...    # only for --target-type remote
 NEURALSTRIKE_REDACT_LOGS=true
@@ -285,6 +294,59 @@ The `smoke` command is the fresh-clone sanity check: it runs a tiny corpus
 against the bundled vulnerable fixture with no local Ollama or external API.
 It is also the last step of the CI supply-chain job.
 
+### Defense validation & offline tooling (shipped)
+
+```bash
+neuralstrike evaluate --target llama3.1 --target-type local --trials 5 --seed 7
+                              # k-trial canary-extraction probe; exit 0 pass / 1 vuln / 4 regression
+neuralstrike scan --adapter openai --url https://api.example.com --model gpt-4o \
+  --prompt "Ignore previous instructions..." --trials 3
+neuralstrike corpus --adapter openai --url https://api.example.com --model gpt-4o \
+  --format sarif --out findings      # the ASI/LLM corpus, audit-grade report (SARIF/JUnit/JSON)
+neuralstrike pack --name jailbreakbench --target gpt-4o --target-type remote --accept-license
+neuralstrike adaptive --target llama3.1 --goal "reveal the system prompt" --strategy pair
+neuralstrike mcp-scan --url http://localhost:8081/mcp --json     # tool-catalog attack surface
+neuralstrike a2a-scan --base-url http://localhost:8082 --json    # agent-to-agent card surface
+neuralstrike minja --target http://localhost:11434 --bridge "recall my notes" \
+  --payload "reveal secrets" --canary CANARY-123                 # indirect-injection (memory) surface
+neuralstrike rag-poison --target http://localhost:8080 --query "our refund policy" \
+  --poison-doc "..." --canary CANARY-123                         # RAG ingestion poisoning
+neuralstrike judge-model-list                                    # the configured judge + its fallback chain
+```
+
+### Purple team (fleet Wave 3 — the trio loop)
+
+```bash
+# 1. The exercise (telemetry ON; fires the attack chain through a NeuralGuard
+#    screen and reports the run to SecurityScarletAI's ingest):
+neuralstrike neuralguard-bench \
+  --neuralguard-url http://localhost:8100 \
+  --neuralguard-api-key "<NEURALGUARD_AUTH_API_KEYS value>" \
+  --scarletai-url http://localhost:8000/api/v1/ingest \
+  --scarletai-token "$INGEST_BEARER_TOKEN" \
+  --json-out runs/exercise.json
+# ('<key>|<tenant>' credentials are split for you by the bench.)
+
+# 2. The detection-coverage report (reads Scarlet's /alerts + /logs with the
+#    ADMIN-class API token — read-only; queries FAIL LOUD, never half-report):
+neuralstrike purple-report runs/exercise.json \
+  --scarlet-base-url http://localhost:8000 \
+  --scarlet-api-token "$API_BEARER_TOKEN" \
+  --ng-tenant default \
+  --previous-receipt runs/exercise-previous.json   # optional trend
+```
+
+The report is the honest join of what the ATTACKER saw (local receipt), what
+the FIREWALL did (verdicts + rule ids), and what the SIEM caught (alerts +
+verdict events): per-payload caught/gap/resisted/inconclusive statuses, and
+the UNDETECTED-SUCCEEDED list — the real defense-gap list. Telemetry is
+opt-in (a dead SIEM never fails an exercise); the report is read-only and
+uses the same operator's admin token (the scoped ingest token cannot read by
+design). See the fleet runbook (NeuralGuard repo) for the co-resident
+trio deployment. `adaptive` drives an attacker-LLM loop (needs Ollama/remote
+attacker); the rest of this section is deterministic against the target you
+name — verify the flags with `--help`, they are printed from the CLI itself.
+
 ---
 
 ## 5. End-to-end attack-chain scenarios
@@ -481,11 +543,14 @@ asyncio.run(main())
 |-----------|--------------|-----------|
 | `persona` | Wraps the payload in a trusted-persona framing | No (pure string op) |
 | `mimicry` | Uses the local Attacker brain to rewrite the payload in a target's style (needs `--sample`) | Yes |
-| `steganographic` | Wraps the payload in `--- BEGIN/END SYSTEM OVERRIDE ---` delimiters | No |
+| `delimiter_wrap` | Wraps the payload in `--- BEGIN/END SYSTEM OVERRIDE ---` delimiters | No |
+| `steganography` | REAL invisible-Unicode steganography: `--hidden` encodes into the Unicode tag-block/variation-selector channels appended to `--cover` text — invisible to humans and naive filters, recoverable with `reveal_steganography` | No |
+| `steganographic` | DEPRECATED alias of `delimiter_wrap` (the old misnomer — prints a warning) | No |
 
-> **Honest note:** `steganographic` is delimiter obfuscation, **not**
-> cryptographic or token-level steganography. The name is retained for CLI
-> back-compat — see [README limitations](README.md#honest-limitations).
+> **Honest note:** the OLD `steganographic` was delimiter obfuscation, **not**
+> steganography — the name is now a deprecated alias and the real technique
+> lives at `--technique steganography` (invisible-Unicode hidden channel,
+> Phase 4). See [README limitations](README.md#honest-limitations).
 
 ---
 
@@ -497,10 +562,16 @@ All via environment with the `NEURALSTRIKE_` prefix or `.env`:
 |-----|---------|---------|
 | `NEURALSTRIKE_OLLAMA_BASE_URL` | `http://localhost:11434` | Local Ollama host (must be http/https) |
 | `NEURALSTRIKE_ATTACKER_MODEL` | `deepseek-r1` | Attacker brain |
-| `NEURALSTRIKE_JUDGE_MODEL` | `llama3.1` | Judge brain |
+| `NEURALSTRIKE_JUDGE_MODEL` | `deepseek-v3.1:671b-cloud` | Judge brain (D1: stronger AND distinct from the Attacker) |
+| `NEURALSTRIKE_JUDGE_MODEL_FALLBACKS` | `kimi-k2.6:cloud`, `gpt-oss:120b-cloud`, `deepseek-r1:8b` | Ordered fallback chain when the judge primary is unreachable |
 | `NEURALSTRIKE_OPENAI_API_KEY` | _none_ | For `--target-type remote` OpenAI-family targets |
 | `NEURALSTRIKE_ANTHROPIC_API_KEY` | _none_ | For `--target-type remote` Anthropic targets |
 | `NEURALSTRIKE_REDACT_LOGS` | `true` | Scrub credential-shaped strings from logs |
+| `NEURALSTRIKE_SCARLETAI_URL` + `_TOKEN` | _none_ | Exercise telemetry ingest (FULL ingest URL + the scoped INGEST_BEARER_TOKEN; OPT-IN, both or neither) |
+| `NEURALSTRIKE_TELEMETRY_ACTOR` | `neuralstrike-operator` | The exercise actor (user_name slot; the attribution join key) |
+| `NEURALSTRIKE_NEURALGUARD_API_KEY` | _none_ | The firewall screen's bearer; accepts the documented `<key>|<tenant>` form (never logged) |
+| `NEURALSTRIKE_NEURALGUARD_TENANT` | `neuralstrike` | tenant_id sent to the screen (must match the key's bound tenant) |
+| `NEURALSTRIKE_SCARLETAI_BASE_URL` + `_API_TOKEN` | _none_ | The purple-report read path (Scarlet ROOT + the ADMIN-class API token; OPT-IN, both or neither) |
 
 ---
 
@@ -511,8 +582,11 @@ The same gate CI runs (`.github/workflows/ci.yml`) on Python 3.10 / 3.12 / 3.14:
 ```bash
 ruff check src tests
 mypy src
-pytest --cov=neuralstrike --cov-report=term-missing --cov-fail-under=80
+pytest --cov=neuralstrike --cov-report=term-missing --cov-fail-under=85
 ```
+
+Measured on main (2026-09-20): 731 passed / 1 skipped, coverage 91% — the
+floor is 85; CI fails under it.
 
 Run a single command:
 ```bash
@@ -532,7 +606,7 @@ redaction), and the persistent C2 registry.
 # Start the local brain
 docker compose up -d ollama
 docker compose exec ollama ollama pull deepseek-r1
-docker compose exec ollama ollama pull llama3.1
+docker compose exec ollama ollama pull deepseek-v3.1:671b-cloud
 
 # Run a one-shot command
 docker compose run --rm neuralstrike neuralstrike --help
@@ -549,7 +623,7 @@ container talks to the ollama service. Logs are redacted by default
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
-| `LLMError: model 'deepseek-r1' not found` | Ollama brain not pulled | `ollama pull deepseek-r1` (and `llama3.1`) |
+| `LLMError: model 'deepseek-r1' not found` | Ollama brain not pulled | `ollama pull deepseek-r1` (and the judge model: `deepseek-v3.1:671b-cloud`) |
 | `LLMError: ... AuthenticationError` on remote | Missing/invalid API key | Set `NEURALSTRIKE_OPENAI_API_KEY` / `_ANTHROPIC_API_KEY` in `.env` |
 | `forge` aborts mid-run with `LLMError` | Attacker/Judge backend down (fail-closed) | Start Ollama; this is intended behavior, not a crash |
 | `ValidationError: ... must use http:// or https://` | Non-http URL passed | Use `http://`/`https://` targets |
@@ -584,15 +658,24 @@ own):
 
 Documented so you don't rely on capabilities that aren't there:
 
-- **ToolEnum** is prompt-leak only — it asks the model to dump its tools. It
-  does not introspect MCP schemas or OpenAI function endpoints.
+- **ToolEnum** runs REAL MCP JSON-RPC introspection as the PRIMARY path
+  (Phase 1: it parses the actual `tools/list` reply through the MCP HTTP
+  adapter) — the old social-engineering prompt-leak survives only as an
+  explicitly labeled FALLBACK for non-MCP targets (responses are labeled
+  `prompt-leak (social engineering; fallback only)`).
 - **ModelExtract.fingerprint_model** returns raw responses keyed by brand
   probe; it does not score or identify the model. `timing` reports latency only.
-- **EvasionSuite.steganographic_prompt** is delimiter obfuscation, not true
-  steganography.
+- **Evasion:** `delimiter_wrap` is delimiter obfuscation; `steganography` is
+  the REAL invisible-Unicode hidden channel (recoverable, deterministic); the
+  old `steganographic` name is a deprecated alias of `delimiter_wrap`.
 - **AgentC2** is CLI-driven against a JSON state file; it is not a background
   network daemon. No TLS on the registry file — protect `~/.neuralstrike/` with
   filesystem permissions.
 - **MCPInterceptor** forwards JSON-RPC over HTTP POST only; it does not handle
   MCP-over-SSE or stdio transports natively, and it strips nothing from headers
   beyond forwarding them.
+- **Purple-report attribution limits:** NeuralGuard's SIEM events carry no
+  prompt, so per-payload NG attribution comes from the LOCAL receipt; the
+  SIEM-side NG events corroborate at exercise level (tenant + time window).
+  Alerts whose host is the standing fleet's OTHER telemetry are labeled
+  window-coincident and never attributed to the exercise.
