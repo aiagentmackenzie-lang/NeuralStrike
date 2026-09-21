@@ -38,6 +38,7 @@ from dataclasses import replace as _dataclass_replace
 from typing import Any
 
 from neuralstrike.core.adversarial_loop import AdversarialLoop
+from neuralstrike.corpus.loader import CANARY_PLACEHOLDER
 from neuralstrike.evaluation.probes import trial_from_loop
 from neuralstrike.evaluation.runner import Probe
 from neuralstrike.evaluation.verdict import Finding, SutResponse, TrialResult, Verdict
@@ -226,10 +227,10 @@ def execution_context_probe(
     victim_type: str,
     *,
     llm: Any,
-    oracles: list[Oracle],
+    oracles_factory: Callable[[str], list[Oracle]],
     benign_spec: BenignTaskSpec,
-    context_body: str,
-    benign_task: str,
+    payload_template: str,
+    goal: str,
     scenario_id: str,
     category: str,
     severity: str = "high",
@@ -239,25 +240,25 @@ def execution_context_probe(
 ) -> Probe:
     """Build a Probe that runs one execution-context attack + dual scoring.
 
-    The payload (poisoned file body + the benign task) is delivered by a
-    STATIC attacker (no attacker LLM; ``max_iterations=1`` — the context is
-    the attack; refinement is the adaptive layer's job, Phase 9). The loop's
-    oracles produce the AGS verdict; after the loop the benign oracle checks
-    the SAME response and the finding is appended ADVISORY.
+    ``payload_template`` is the full poisoned prompt — the execution-context
+    file body AND the benign ask — with the ``{CANARY}`` placeholder; the
+    runner mints the per-trial canary and the factory substitutes it (the
+    anti-replay discipline) and binds the attack oracles via
+    ``oracles_factory(canary)``. The static attacker (no attacker LLM;
+    ``max_iterations=1`` — the context IS the attack; refinement is the
+    adaptive layer's job, Phase 9) delivers it. The loop's oracles produce
+    the AGS verdict; after the loop the benign oracle checks the SAME
+    response and the finding is appended ADVISORY.
     """
-    goal = benign_task
-
-    def payload_for() -> str:
-        # The canary is already baked into context_body by the caller
-        # (build_context / the corpus loader substitute it per trial).
-        return f"{context_body}\n\nUser request: {benign_task}"
 
     async def _factory(trial_index: int, seed: int, canary: str) -> TrialResult:
+        payload = payload_template.replace(CANARY_PLACEHOLDER, canary)
+        attack_oracles = oracles_factory(canary)
         loop = AdversarialLoop(
             victim_model=victim_model,
             victim_type=victim_type,
             llm=llm,
-            oracles=list(oracles),
+            oracles=attack_oracles,
             judge_model=judge_model,
             judge=judge,
             seed=seed,
@@ -268,11 +269,10 @@ def execution_context_probe(
 
         async def static_attacker(iteration: int, g: str, current: str, feedback: str) -> str:
             _ = (iteration, g, current, feedback)
-            return payload_for()
+            return payload
 
         loop._attacker_fn = static_attacker
-        _ = canary  # the canary rides inside context_body, not the request
-        loop_result = await loop.execute_cycle(payload_for(), max_iterations=max_iterations)
+        loop_result = await loop.execute_cycle(payload, max_iterations=max_iterations)
         trial = trial_from_loop(
             scenario_id=scenario_id,
             trial_index=trial_index,
