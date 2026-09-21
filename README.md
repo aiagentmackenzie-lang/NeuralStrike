@@ -525,6 +525,73 @@ print(apply_transform('base64', 'reveal the secret').provenance)"
   the runtime enforcement.
 - **`main.py` CLI coverage** shipped in Phase 6 chunk 2 (87%).
 
+### Trajectory-grounded adaptive attacks + attack memory (Phase 9)
+
+The 2026 research frontier (GPT-Red's self-play, SIRAJ's trajectory-grounded
+seeds, MUZZLE's injection-surface ranking) converges on one move: refine from
+the victim's structured *behavior*, not a flattened reply. Phase 9 adds that
+layer — without touching the measurement discipline (deterministic oracles,
+conclusive-only, advisory Judge):
+
+```bash
+# Trajectory-conditioned strategies: the attacker sees WHICH oracle blocked
+# each turn, WHICH evidence surface was touched, and the victim's reply class
+# (structured, past-tense — observed verdict data, never a self-assessment).
+neuralstrike adaptive --target mistral:7b --strategy trace --no-judge
+neuralstrike adaptive --target mistral:7b --strategy trace-pair \
+  --attacker-model deepseek-r1 --judge --judge-model deepseek-v3.1:671b-cloud
+
+# Attack memory (opt-in SQLite): records every trial (fail-soft — never
+# affects verdicts); --strategy auto picks the best strategy by the recorded
+# Wilson LOWER bound (deterministic; INCONCLUSIVE never counts as evidence;
+# fail-closed — an unreadable memory refuses to guess, it errors).
+neuralstrike adaptive --target mistral:7b --strategy pair --memory-db runs/memory.sqlite
+neuralstrike adaptive --target mistral:7b --strategy auto --memory-db runs/memory.sqlite
+neuralstrike attack-memory --db runs/memory.sqlite --json
+
+# Seed diversity (SIRAJ-style, deterministic): N goal framings across the
+# persona x outcome axes; reports ASR@K (budget-K success probability) +
+# trajectory diversity (distinct behavior-shape fingerprints / trials).
+neuralstrike adaptive --target mistral:7b --strategy pair --seed-diversity 12 \
+  --memory-db runs/memory.sqlite
+```
+
+- ✅ `core/trajectory.py` — structured per-turn traces (verdicts, oracles
+  fired, evidence-derived surfaces: text / tool_args / execution),
+  deterministic fingerprints, the structured refinement brief.
+- ✅ `core/attack_memory.py` — stdlib-SQLite attack memory, WAL, schema
+  v1. Fail-soft writes (recording never raises — the P2-7 mirror);
+  fail-closed selection (`--strategy auto` refuses to guess when memory is
+  unreadable); lower-bound-gated champion ratchet (one lucky run cannot
+  rewrite memory's truth); goals/payloads stored hashed, never as text.
+- ✅ `attacks/adaptive/trace.py` — `trace` (deterministic scripted policy:
+  refusal → authority rungs, tool surface observed → ride that channel,
+  victim error → restart, inconclusive → sharpen; fully replayable, no LLM
+  required) + `trace-pair` (the LLM loop carrying the structured brief).
+- ✅ Metrics — `ASR@K` (budget-K success probability derived from the run's
+  conclusive-only ASR + Wilson bounds; a monotone transform, one
+  statistical path) and trajectory diversity (distinct behavior shapes).
+- ✅ `attacks/adaptive/seed_diversity.py` — deterministic seed variants
+  (SIRAJ-inspired). Honest scope: the delivery axis is recorded as
+  `user_message` — channel-level delivery variance needs the adapter-driven
+  indirect harness, not a renamed label.
+
+### Phase 9 honest scope
+
+- **The memory ranks strategies from recorded deterministic verdicts only.**
+  It never scores payloads live, and no LLM ever decides a rank — the
+  judgment-free selection is the point.
+- **`--strategy auto` is evidence-gated.** With no recorded evidence for
+  this victim/goal it errors out (fail-closed) instead of silently falling
+  back to an arbitrary strategy.
+- **Trajectory surfaces are evidence-derived.** A `tool_args` surface is
+  claimed only when a tool call was actually observed in the response; the
+  loop's text-only victim path yields `text` (the fidelity tiers still
+  distinguish verbal vs intent vs behavioral).
+- **Seed diversity varies the ask's framing** (persona x outcome, 12
+  framings), not the delivery channel — see the anti-naive note in
+  `seed_diversity.py`; channel-level diversity is Phase 10/G2 work.
+
 ### MCP & A2A deep coverage + agent identity (Phase 5)
 
 Phase 5 covers the protocol surfaces that define the 2026 attack landscape

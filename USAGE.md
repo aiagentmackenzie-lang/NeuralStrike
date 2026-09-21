@@ -305,6 +305,13 @@ neuralstrike corpus --adapter openai --url https://api.example.com --model gpt-4
   --format sarif --out findings      # the ASI/LLM corpus, audit-grade report (SARIF/JUnit/JSON)
 neuralstrike pack --name jailbreakbench --target gpt-4o --target-type remote --accept-license
 neuralstrike adaptive --target llama3.1 --goal "reveal the system prompt" --strategy pair
+neuralstrike adaptive --target llama3.1 --strategy trace --no-judge        # trajectory-conditioned (Phase 9)
+neuralstrike adaptive --target llama3.1 --strategy pair \
+  --memory-db runs/memory.sqlite                            # record trials (opt-in)
+neuralstrike adaptive --target llama3.1 --strategy auto \
+  --memory-db runs/memory.sqlite                            # memory-ranked best strategy (fail-closed)
+neuralstrike adaptive --target llama3.1 --strategy pair --seed-diversity 12 # N framing variants + ASR@K + diversity
+neuralstrike attack-memory --db runs/memory.sqlite --json   # read-only memory view
 neuralstrike mcp-scan --url http://localhost:8081/mcp --json     # tool-catalog attack surface
 neuralstrike a2a-scan --base-url http://localhost:8082 --json    # agent-to-agent card surface
 neuralstrike minja --target http://localhost:11434 --bridge "recall my notes" \
@@ -313,6 +320,38 @@ neuralstrike rag-poison --target http://localhost:8080 --query "our refund polic
   --poison-doc "..." --canary CANARY-123                         # RAG ingestion poisoning
 neuralstrike judge-model-list                                    # the configured judge + its fallback chain
 ```
+
+### Trajectory-grounded adaptive attacks (Phase 9)
+
+The Phase-9 layer refines from the victim's structured *behavior*: which
+oracle blocked each turn, which evidence surface was touched (text /
+tool_args / execution — evidence-derived, never claimed from intent), the
+victim's reply class.
+
+- `--strategy trace` — deterministic scripted policy over the trajectory
+  (no attacker LLM needed; fully replayable): refusal → authority-escalation
+  rungs, tool surface observed → ride that channel, victim error → restart
+  simple, inconclusive → sharpen the ask.
+- `--strategy trace-pair` — the PAIR loop whose prompt carries the
+  structured trajectory brief (requires `--attacker-model`).
+- `--memory-db PATH` — opt-in SQLite attack memory. Records every trial
+  (fail-soft: a storage failure is logged and the run's verdicts are
+  unaffected — the same doctrine as the ScarletAI telemetry pipe). Goals and
+  payloads are stored hashed, never as text.
+- `--strategy auto` — pick the strategy with the best recorded Wilson LOWER
+  bound for this victim/goal (deterministic; INCONCLUSIVE runs are coverage
+  gaps and never count as evidence). FAIL-CLOSED: an unreadable memory or a
+  label the CLI never produced is a validation error, never a silent
+  fallback. The ranking table is printed before the run.
+- `--seed-diversity N` — N deterministic goal-framing variants (persona x
+  outcome axes, SIRAJ-style), one trial each; the summary adds `ASR@K`
+  (the budget-K success probability derived from the run's conclusive-only
+  ASR + Wilson bounds) and `trajectory_diversity` (distinct behavior-shape
+  fingerprints / trials). Honest scope: variants vary the ask's framing;
+  delivery-channel variance needs the adapter-driven indirect harness.
+- `attack-memory --db PATH [--json]` — read-only view of what the recorded
+  evidence says (per victim/strategy: runs, conclusive, succeeded, Wilson
+  lower bound). Read-only: never writes; unreadable memory fails loud.
 
 ### Purple team (fleet Wave 3 — the trio loop)
 

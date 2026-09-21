@@ -4,6 +4,34 @@ All notable changes to NeuralStrike are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added (Phase 9 — Trajectory-Grounded Adaptive Attack Engine)
+- `core/trajectory.py` — structured per-turn attack trajectories extracted
+  purely from the loop's records: verdicts, oracles fired, evidence-derived
+  surfaces (text / tool_args / execution), victim-error flag, deterministic
+  fingerprints, and the structured refinement brief.
+- `core/attack_memory.py` — SQLite attack memory (stdlib, WAL, schema v1):
+  best-effort recording that never affects run verdicts, fail-closed
+  strategy selection (`--strategy auto`), deterministic Wilson-lower-bound
+  ranking over conclusive-only evidence, and the lower-bound-gated champion
+  ratchet. Goals/payloads stored hashed, never as text.
+- `attacks/adaptive/trace.py` — trajectory-conditioned attackers: `trace`
+  (deterministic scripted policy, no LLM required) + `trace-pair` (PAIR with
+  the structured brief). The attacker still only generates; scoring stays
+  with the deterministic oracles + advisory Judge.
+- `core/adversarial_loop.py` — additive trajectory hook (`traj_attacker_fn`,
+  `strategy_label`, `turn_traces`); legacy behavior unchanged when unset.
+- `attacks/adaptive/seed_diversity.py` — deterministic SIRAJ-style seed
+  variants (persona x outcome; the delivery axis is honestly recorded as
+  `user_message`, channel-level variance is Phase 10/G2).
+- Metrics: `ASR@K` (budget-K success probability from the conclusive-only
+  ASR + Wilson bounds, monotone transform) + `trajectory_diversity`
+  (distinct behavior-shape fingerprints / trials).
+- CLI: `adaptive --memory-db`, `--strategy auto` (fail-closed),
+  `--seed-diversity N`, `trace`/`trace-pair` strategies, and the read-only
+  `attack-memory --db [--json]` command.
+
 ## [1.0.0] — 2026-07-07
 
 ### Added (Phase 7 — NeuralGuard pairing)

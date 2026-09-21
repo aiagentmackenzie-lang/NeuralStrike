@@ -624,6 +624,66 @@ Scarlet NeuralStrike-producer rules (Wave 1, 2026-09-20).
 
 ---
 
+### Phase 9 — Trajectory-Grounded Adaptive Attack Engine — SHIPPED 2026-09-21
+
+**Status:** complete. The G1 gap from the 2026-09-20 bleeding-edge research
+(GPT-Red / SIRAJ / MUZZLE / AutoRedTeamer): attackers refine from the
+victim's structured *behavior*, from recorded attack memory, with diversity
++ budget metrics — without touching the measurement discipline.
+
+**Deliverables**
+- `core/trajectory.py` — the structured trajectory: per-turn traces
+  (verdict, fidelity, oracles fired, evidence-derived surfaces
+  text/tool_args/execution, victim-error flag) extracted purely from the
+  loop's own records; deterministic fingerprints (the diversity unit, and
+  deliberately payload-text-free — behavior shape only); the structured
+  refinement brief (`summarize_for_attacker`).
+- `core/attack_memory.py` — stdlib-sqlite attack memory (WAL, schema v1):
+  fail-soft writes (recording never raises — the P2-7 mirror: memory never
+  affects run verdicts), fail-closed selection reads (`--strategy auto`
+  raises rather than silently falls back), deterministic Wilson-LOWER-bound
+  ranking (conclusive-only; INCONCLUSIVE is never evidence), the
+  lower-bound-gated champion ratchet (one lucky run cannot rewrite memory's
+  truth), goals/payloads stored hashed only.
+- `attacks/adaptive/trace.py` — the trajectory-conditioned attackers:
+  `trace` (deterministic scripted policy over the trajectory: refusal →
+  authority rungs, tool surface → ride that channel, victim error →
+  restart, inconclusive → sharpen; no LLM required, fully replayable) and
+  `trace-pair` (the PAIR loop carrying the structured brief).
+- `core/adversarial_loop.py` — the ADDITIVE trajectory hook: optional
+  `strategy_label` + `traj_attacker_fn`, `turn_traces` accumulation, and the
+  snapshot passed at plan time (observed turns only, never the turn being
+  planned). Legacy behavior byte-identical when unset.
+- Metrics (`evaluation/statistics.py`): `ASR@K` (budget-K success
+  probability derived from the run's conclusive-only ASR + Wilson bounds —
+  a monotone transform, one statistical path, no simulation) and
+  `trajectory_diversity` (distinct fingerprints / total). Trials carry the
+  fingerprint additively (`TrialResult.trajectory_fingerprint`, empty for
+  pre-Phase-9 callers); the runner emits it additively in trial dicts.
+- `attacks/adaptive/seed_diversity.py` — deterministic SIRAJ-style seed
+  variants (persona x outcome, 12 framings, pinned RNG). Honest scope: the
+  delivery axis is recorded as `user_message` — channel-level delivery
+  variance needs the adapter-driven indirect harness (Phase 10/G2), not a
+  renamed label (the repo's own anti-naive rule).
+- CLI: `adaptive` gains `--memory-db`, `--strategy auto` (fail-closed),
+  `--seed-diversity N` (ASR@K + diversity in the summary), `trace`/
+  `trace-pair` strategies, memory-recording of trials, and the ranking/
+  champion output; new read-only `attack-memory --db [--json]` command.
+
+**Exit gate**
+- Deterministic oracles + advisory Judge untouched; the attacker never
+  scores itself; the trajectory it sees is observed, past-tense data.
+- No LLM anywhere in the memory/ranking/diversity path; strategy selection
+  and ranks are pure functions of recorded evidence + wilson_ci.
+- ruff clean, format clean, mypy strict clean; suite green with the new
+  modules at 97–100% coverage (TOTAL ≥ 90%, floor 85).
+
+**Dependencies:** Phase 4 (adaptive strategies) + the 2026-09-20 bleeding-
+edge research (gap G1); Phase 10 (execution-context attack pack) builds on
+the trajectory layer.
+
+---
+
 ## 3. Realistic score trajectory
 
 | Phase | Composite | Tier | Readiness |

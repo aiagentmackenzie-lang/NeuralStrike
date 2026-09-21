@@ -51,7 +51,7 @@ def adaptive_probe(
     victim_type: str,
     *,
     oracles: list[Any],
-    attacker_fn: AttackerFn,
+    attacker_fn: AttackerFn | None = None,
     goal: str,
     llm: Any | None = None,
     judge_model: str | None = None,
@@ -69,6 +69,10 @@ def adaptive_probe(
     ``max_iterations`` turns, stopping early on a SUCCEEDED verdict. The
     attacker_fn only generates; the oracles + Judge score (separation enforced
     by the loop's type-level contract).
+
+    ``attacker_fn`` may be ``None`` when a trajectory attacker
+    (``traj_attacker_fn``) is supplied — the loop dispatches the trajectory
+    path and never calls the legacy attacker in that run.
 
     ``judge`` is an optional pre-built :class:`JudgeOracle` (configured with a
     role/rubric by the caller); when provided it overrides the loop's
