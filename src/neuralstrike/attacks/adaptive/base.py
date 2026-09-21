@@ -96,6 +96,8 @@ def adaptive_probe(
             seed=seed,
             temperature=0.0,
             loop_result=loop_result,
+            strategy_label=strategy_label,
+            goal=goal,
         )
 
     return Probe(

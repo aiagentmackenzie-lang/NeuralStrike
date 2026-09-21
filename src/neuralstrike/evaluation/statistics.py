@@ -51,11 +51,14 @@ if TYPE_CHECKING:
 
 __all__ = [
     "SEVERITY_WEIGHTS",
+    "ASRAtK",
     "RunStatistics",
     "ScoreCard",
     "aggregate_corpus_stats",
+    "asr_at_k",
     "k_trial_summary",
     "score_trials",
+    "trajectory_diversity",
     "wilson_ci",
     "z_score",
 ]
@@ -135,6 +138,55 @@ def _severity_of(trial: TrialResult) -> str:
         if f.severity in order and order.index(f.severity) > order.index(best):
             best = f.severity
     return best
+
+
+@dataclass(frozen=True)
+class ASRAtK:
+    """Budget-K attack success probability, derived from a k-trial run.
+
+    Phase 9 (G1). ``estimate`` answers the operator's real question — not
+    "did one attack succeed" but "what is the probability that a budget of
+    K adaptive attempts achieves at least one success" — derived
+    deterministically from the run's conclusive-only ASR and its Wilson
+    bounds (``1 - (1-p)**K``; monotone in ``p`` so the bounds transform
+    exactly). No LLM, no simulation: one statistical path, not two.
+    """
+
+    k: int
+    estimate: float
+    low: float
+    high: float
+
+    @property
+    def headline(self) -> str:
+        """One-line summary for the operator."""
+        return f"ASR@{self.k}={self.estimate:.1%} (CI {self.low:.1%}-{self.high:.1%})"
+
+
+def asr_at_k(asr: float, asr_low: float, asr_high: float, k: int) -> ASRAtK:
+    """Derive :class:`ASRAtK` from a run's conclusive-only ASR + Wilson bounds."""
+    if k < 1:
+        raise ValueError(f"k must be >= 1, got {k}")
+    for label, value in (("asr", asr), ("asr_low", asr_low), ("asr_high", asr_high)):
+        if not 0.0 <= value <= 1.0:
+            raise ValueError(f"{label} must be in [0, 1], got {value}")
+    est = 1.0 - (1.0 - asr) ** k
+    low = 1.0 - (1.0 - asr_low) ** k
+    high = 1.0 - (1.0 - asr_high) ** k
+    return ASRAtK(k=k, estimate=est, low=low, high=high)
+
+
+def trajectory_diversity(fingerprints: Iterable[str]) -> float:
+    """Distinct trajectory fingerprints / total (SIRAJ-style diversity, 0..1).
+
+    The diversity unit is :func:`neuralstrike.core.trajectory.fingerprint`
+    — behavior shape (verdicts + oracles fired + surfaces), not payload
+    text. Empty input is 0.0 (no trajectories, no diversity).
+    """
+    fingerprints_list = list(fingerprints)
+    if not fingerprints_list:
+        return 0.0
+    return len(set(fingerprints_list)) / len(fingerprints_list)
 
 
 def score_trials(

@@ -159,6 +159,7 @@ def _trial_to_dict(t: TrialResult) -> dict[str, Any]:
         ],
         "error": t.error,
         "iterations": t.iterations,
+        "trajectory_fingerprint": t.trajectory_fingerprint,
         "findings": [
             {
                 "oracle_id": f.oracle_id,

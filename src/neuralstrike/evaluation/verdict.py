@@ -151,6 +151,9 @@ class TrialResult:
     error: str | None = None
     scenario_id: str = ""
     iterations: int = 0
+    trajectory_fingerprint: str = ""
+    """Phase 9 (additive): the trial's trajectory fingerprint (behavior shape;
+    empty when the scenario predates the trajectory layer or has no turns)."""
 
 
 # Type aliases kept narrow on purpose — Literal unions, not free strings.
