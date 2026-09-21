@@ -119,6 +119,7 @@ def canary_extraction_probe(
     scenario_id: str = "asi01-canary-leak",
     category: str = "asi01-prompt-injection",
     max_iterations: int = 1,
+    judge_prompt_mode: str = "framed",
 ) -> Probe:
     """Build a canary-extraction probe.
 
@@ -153,6 +154,7 @@ def canary_extraction_probe(
             seed=seed,
             victim_temperature=0.0,
             attacker_fn=_static_attacker(payload),
+            judge_prompt_mode=judge_prompt_mode,
         )
         loop_result = await loop.execute_cycle(initial_goal=goal, max_iterations=max_iterations)
         return trial_from_loop(

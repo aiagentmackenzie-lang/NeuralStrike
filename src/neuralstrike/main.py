@@ -682,6 +682,11 @@ def evaluate(
     trials: int = typer.Option(1, help="Number of trials (k-trial run)."),
     seed: int = typer.Option(0, help="Base seed for reproducibility (replay = same verdicts)."),
     judge: bool = typer.Option(True, help="Use the advisory Judge (distinct model, D1)."),
+    judge_prompt: str = typer.Option(
+        "framed",
+        "--judge-prompt",
+        help="Judge prompt mode: framed (default, legacy) | blind (stakes-neutral, Phase 11).",
+    ),
     scenario_id: str = typer.Option(
         "asi01-canary-leak", help="Scenario id (used for per-category ASR + baseline key)."
     ),
@@ -754,9 +759,19 @@ def evaluate(
     from neuralstrike.evaluation.probes import canary_extraction_probe
     from neuralstrike.evaluation.runner import TrialRunner
 
+    if judge_prompt not in {"framed", "blind"}:
+        raise ValidationError("--judge-prompt must be framed|blind")
+    from typing import cast
+
+    from neuralstrike.oracles.judge import JudgePromptMode
+
+    _judge_prompt_mode: JudgePromptMode = cast(JudgePromptMode, judge_prompt)
+
     console.print(
         f"[yellow]Evaluating {target} ({target_type}) — {trials} trial(s), seed={seed}, "
-        f"judge={'on' if judge else 'off'}...[/yellow]"
+        f"judge={'on' if judge else 'off'}"
+        + (f", judge-prompt={judge_prompt}" if judge_prompt != "framed" else "")
+        + "...[/yellow]"
     )
 
     async def run() -> None:
@@ -780,6 +795,7 @@ def evaluate(
             llm=mgr,
             judge_model=judge_model,
             scenario_id=scenario_id,
+            judge_prompt_mode=_judge_prompt_mode,
         )
         runner = TrialRunner(
             base_seed=seed,
@@ -2157,6 +2173,11 @@ def adaptive(
             "-> Inconclusive (never a fabricated consensus)."
         ),
     ),
+    judge_prompt: str = typer.Option(
+        "framed",
+        "--judge-prompt",
+        help="Judge prompt mode: framed (default, legacy) | blind (stakes-neutral, Phase 11).",
+    ),
     trials: int = typer.Option(1, help="Number of trials (k-trial run)."),
     seed: int = typer.Option(0, help="Base seed for reproducibility."),
     max_iterations: int = typer.Option(5, help="Max attacker refinement turns per trial."),
@@ -2198,6 +2219,13 @@ def adaptive(
         raise ValidationError("--judge-rubric must be evidence-anchored|strict|lenient")
     if judge_ensemble and not judge:
         raise ValidationError("--judge-ensemble requires --judge (fail-closed)")
+    if judge_prompt not in {"framed", "blind"}:
+        raise ValidationError("--judge-prompt must be framed|blind")
+    from typing import cast
+
+    from neuralstrike.oracles.judge import JudgePromptMode
+
+    _judge_prompt_mode: JudgePromptMode = cast(JudgePromptMode, judge_prompt)
     if trials < 1:
         raise ValidationError("--trials must be >= 1")
 
@@ -2321,7 +2349,10 @@ def adaptive(
                 EnsembleMember(
                     label=m,
                     judge=JudgeOracle(
-                        _member_call(m), role=judge_role, severity_floor=_JUDGE_RUBRIC_FLOOR[judge_rubric]
+                        _member_call(m),
+                        role=judge_role,
+                        severity_floor=_JUDGE_RUBRIC_FLOOR[judge_rubric],
+                        prompt_mode=_judge_prompt_mode,
                     ),
                 )
                 for m in reachable
@@ -2332,7 +2363,10 @@ def adaptive(
             console.print(f"[blue]Judge ensemble: {' + '.join(reachable)}[/blue]")
         elif judge:
             judge_oracle = JudgeOracle(
-                call_judge, role=judge_role, severity_floor=_JUDGE_RUBRIC_FLOOR[judge_rubric]
+                call_judge,
+                role=judge_role,
+                severity_floor=_JUDGE_RUBRIC_FLOOR[judge_rubric],
+                prompt_mode=_judge_prompt_mode,
             )
         else:
             judge_oracle = None
