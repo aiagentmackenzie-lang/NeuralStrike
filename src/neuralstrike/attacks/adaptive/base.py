@@ -18,7 +18,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from neuralstrike.core.adversarial_loop import AdversarialLoop, AttackerFn
+from neuralstrike.core.adversarial_loop import AdversarialLoop, AttackerFn, TrajectoryAttackerFn
 from neuralstrike.evaluation.probes import trial_from_loop
 from neuralstrike.evaluation.runner import Probe
 from neuralstrike.evaluation.verdict import TrialResult
@@ -60,6 +60,8 @@ def adaptive_probe(
     category: str = "adaptive",
     severity: str = "high",
     max_iterations: int = 5,
+    strategy_label: str = "unknown",
+    traj_attacker_fn: TrajectoryAttackerFn | None = None,
 ) -> Probe:
     """Build a Probe that runs one adaptive trial through the AdversarialLoop.
 
@@ -84,6 +86,8 @@ def adaptive_probe(
             seed=seed,
             victim_temperature=0.0,
             attacker_fn=attacker_fn,
+            strategy_label=strategy_label,
+            traj_attacker_fn=traj_attacker_fn,
         )
         loop_result = await loop.execute_cycle(initial_goal=goal, max_iterations=max_iterations)
         return trial_from_loop(

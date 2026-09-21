@@ -28,13 +28,21 @@ from neuralstrike.attacks.adaptive.base import (
 from neuralstrike.attacks.adaptive.crescendo import crescendo_attacker_fn
 from neuralstrike.attacks.adaptive.pair import pair_attacker_fn
 from neuralstrike.attacks.adaptive.tap import tap_attacker_fn
+from neuralstrike.attacks.adaptive.trace import (
+    as_legacy_attacker_fn,
+    trace_attacker_fn,
+    trace_pair_attacker_fn,
+)
 
 __all__ = [
     "AdaptiveAttackResult",
     "AttackerCall",
     "JudgeRankCall",
     "adaptive_probe",
+    "as_legacy_attacker_fn",
     "crescendo_attacker_fn",
     "pair_attacker_fn",
     "tap_attacker_fn",
+    "trace_attacker_fn",
+    "trace_pair_attacker_fn",
 ]
