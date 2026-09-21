@@ -96,7 +96,7 @@ def readme_mapping_table(scenarios: list[Scenario] | None = None) -> str:
         "_Each scenario's `success_criteria` reference deterministic oracles "
         "(canary / forbidden-tool / predicate / schema / system-prompt "
         "extraction); the Judge is advisory only and never flips a "
-        "deterministic verdict. See `PRODUCTION_ROADMAP.md` §Phase 2._"
+        "deterministic verdict._"
     )
     return "\n".join(lines)
 
