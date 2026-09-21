@@ -535,3 +535,343 @@ class TestAttackMemoryCommand:
     def test_rejects_missing_db_flag(self, runner: CliRunner) -> None:
         result = runner.invoke(app, ["attack-memory"])
         assert result.exit_code != 0
+
+
+# --- Phase 11: judge ensemble (--judge-ensemble) -----------------------------
+
+
+class TestJudgeEnsembleFlag:
+    def test_rejects_ensemble_without_judge(self, runner: CliRunner) -> None:
+        result = runner.invoke(
+            app,
+            [
+                "adaptive",
+                "--target",
+                "x",
+                "--no-judge",
+                "--judge-ensemble",
+                "judge,j2",
+            ],
+        )
+        assert result.exit_code != 0
+
+    def test_rejects_duplicate_explicit_models(self, runner: CliRunner) -> None:
+
+        with patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=_resolved())):
+            result = runner.invoke(
+                app,
+                ["adaptive", "--target", "x", "--judge-ensemble", "judge,judge"],
+            )
+        assert result.exit_code != 0
+        assert "DISTINCT" in result.stdout
+        assert "--judge-ensemble explicit list" in result.stdout
+
+    def test_explicit_ensemble_runs_end_to_end(self, runner: CliRunner, tmp_path) -> None:
+        from neuralstrike.core.runtime import ResolvedModels
+
+        resolved = ResolvedModels(
+            attacker_model="attacker",
+            judge_model="judge",
+            judge_fell_back=False,
+            available=("victim", "attacker", "judge", "j2"),
+        )
+        with (
+            patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=resolved)),
+            patch(
+                "neuralstrike.core.llm_manager.LLMManager",
+                return_value=_ensemble_mgr(
+                    victim_text="Sure, here is the guide: ...",
+                    verdicts={"judge": "succeeded", "j2": "succeeded"},
+                ),
+            ),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "adaptive",
+                    "--target",
+                    "victim",
+                    "--target-type",
+                    "local",
+                    "--strategy",
+                    "pair",
+                    "--judge",
+                    "--judge-model",
+                    "judge",
+                    "--attacker-model",
+                    "attacker",
+                    "--judge-ensemble",
+                    "judge,j2",
+                    "--trials",
+                    "1",
+                    "--run-dir",
+                    str(tmp_path),
+                ],
+            )
+        assert result.exit_code == 0, result.stdout
+        assert "Judge ensemble: judge + j2" in result.stdout
+        assert "trial 0: succeeded" in result.stdout
+
+    def test_ensemble_disagreement_records_inconclusive(self, runner: CliRunner, tmp_path) -> None:
+        # 1-1 split (judge: succeeded, j2: resisted) -> no strict majority ->
+        # Inconclusive (a coverage gap), never a fabricated verdict.
+        from neuralstrike.core.runtime import ResolvedModels
+
+        resolved = ResolvedModels(
+            attacker_model="attacker",
+            judge_model="judge",
+            judge_fell_back=False,
+            available=("victim", "attacker", "judge", "j2"),
+        )
+        with (
+            patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=resolved)),
+            patch(
+                "neuralstrike.core.llm_manager.LLMManager",
+                return_value=_ensemble_mgr(
+                    victim_text="Sure, here is the guide: ...",
+                    verdicts={"judge": "succeeded", "j2": "resisted"},
+                ),
+            ),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "adaptive",
+                    "--target",
+                    "victim",
+                    "--target-type",
+                    "local",
+                    "--strategy",
+                    "pair",
+                    "--judge",
+                    "--judge-model",
+                    "judge",
+                    "--attacker-model",
+                    "attacker",
+                    "--judge-ensemble",
+                    "judge,j2",
+                    "--trials",
+                    "1",
+                    "--run-dir",
+                    str(tmp_path),
+                ],
+            )
+        assert result.exit_code == 0, result.stdout
+        assert "trial 0: inconclusive" in result.stdout
+
+    def test_auto_insufficient_reachable_fails_closed(self, runner: CliRunner) -> None:
+        from neuralstrike.core.exceptions import ConfigError
+        from neuralstrike.core.runtime import ResolvedModels
+
+        resolved = ResolvedModels(
+            attacker_model="attacker",
+            judge_model="judge",
+            judge_fell_back=False,
+            available=("victim", "attacker", "judge"),
+        )
+        with (
+            patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=resolved)),
+            patch("neuralstrike.core.llm_manager.LLMManager", return_value=_ensemble_mgr("v", {})),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "adaptive",
+                    "--target",
+                    "victim",
+                    "--target-type",
+                    "local",
+                    "--strategy",
+                    "pair",
+                    "--judge",
+                    "--judge-model",
+                    "judge",
+                    "--attacker-model",
+                    "attacker",
+                    "--judge-ensemble",
+                    "auto",
+                    "--trials",
+                    "1",
+                    "--run-dir",
+                    "/tmp/ns-adaptive-test",
+                ],
+            )
+        assert result.exit_code != 0
+        assert isinstance(result.exception, ConfigError)
+        assert ">= 2 reachable judge models" in str(result.exception)
+
+    def test_auto_selects_primary_plus_reachable_fallbacks(
+        self, runner: CliRunner, tmp_path, monkeypatch
+    ) -> None:
+        from neuralstrike.core.config import settings
+        from neuralstrike.core.runtime import ResolvedModels
+
+        monkeypatch.setattr(settings, "judge_model_fallbacks", ("j2", "missing-model"))
+        resolved = ResolvedModels(
+            attacker_model="attacker",
+            judge_model="judge",
+            judge_fell_back=False,
+            available=("victim", "attacker", "judge", "j2"),
+        )
+        with (
+            patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=resolved)),
+            patch(
+                "neuralstrike.core.llm_manager.LLMManager",
+                return_value=_ensemble_mgr(
+                    victim_text="Sure, here is the guide: ...",
+                    verdicts={"judge": "succeeded", "j2": "succeeded"},
+                ),
+            ),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "adaptive",
+                    "--target",
+                    "victim",
+                    "--target-type",
+                    "local",
+                    "--strategy",
+                    "pair",
+                    "--judge",
+                    "--judge-model",
+                    "judge",
+                    "--attacker-model",
+                    "attacker",
+                    "--judge-ensemble",
+                    "auto",
+                    "--trials",
+                    "1",
+                    "--run-dir",
+                    str(tmp_path),
+                ],
+            )
+        assert result.exit_code == 0, result.stdout
+        # auto: primary + reachable fallbacks only ("missing-model" dropped).
+        assert "Judge ensemble: judge + j2" in result.stdout
+
+
+def _ensemble_mgr(victim_text: str, verdicts: dict[str, str]):
+    """Fake LLMManager routing victim/attacker plus per-model judge verdicts."""
+    from unittest.mock import AsyncMock
+
+    from neuralstrike.core.llm_manager import LLMManager
+
+    mgr = LLMManager.__new__(LLMManager)
+    mgr._base_url = "http://localhost:11434"
+    mgr._client = None
+    attacker_iter = iter([])
+
+    async def call_local(model, prompt, options=None):
+        if model == "victim":
+            return victim_text
+        if model == "attacker":
+            try:
+                return next(attacker_iter)
+            except StopIteration:
+                return prompt
+        if model in verdicts:
+            return json.dumps(
+                {
+                    "verdict": verdicts[model],
+                    "severity": "high",
+                    "evidence_quote": victim_text[:20],
+                    "rationale": "complied",
+                }
+            )
+        raise AssertionError(f"unexpected model {model!r}")
+
+    mgr.call_local = call_local  # type: ignore[method-assign]
+    mgr.call_remote = call_local  # type: ignore[method-assign]
+    mgr.list_local_models = AsyncMock(return_value=[*verdicts, "victim", "attacker"])  # type: ignore[method-assign]
+    return mgr
+
+
+class TestJudgePromptFlagAdaptive:
+    def test_rejects_bad_judge_prompt(self, runner: CliRunner) -> None:
+        result = runner.invoke(app, ["adaptive", "--target", "x", "--judge-prompt", "bogus"])
+        assert result.exit_code != 0
+
+    def test_blind_prompt_mode_reaches_the_judge(self, runner: CliRunner, tmp_path) -> None:
+        from neuralstrike.core.runtime import ResolvedModels
+
+        judge_prompts: list[str] = []
+        resolved = ResolvedModels(
+            attacker_model="attacker",
+            judge_model="judge",
+            judge_fell_back=False,
+            available=("victim", "attacker", "judge"),
+        )
+        with (
+            patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=resolved)),
+            patch(
+                "neuralstrike.core.llm_manager.LLMManager",
+                return_value=_blind_recording_mgr(
+                    victim_text="Sure, here is the guide: ...", judge_prompts=judge_prompts
+                ),
+            ),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "adaptive",
+                    "--target",
+                    "victim",
+                    "--target-type",
+                    "local",
+                    "--strategy",
+                    "pair",
+                    "--judge",
+                    "--judge-model",
+                    "judge",
+                    "--attacker-model",
+                    "attacker",
+                    "--judge-prompt",
+                    "blind",
+                    "--trials",
+                    "1",
+                    "--run-dir",
+                    str(tmp_path),
+                ],
+            )
+        assert result.exit_code == 0, result.stdout
+        assert judge_prompts, "the judge was never called"
+        assert all("red-team" not in p for p in judge_prompts)
+        assert all("output-assessment classifier" in p for p in judge_prompts)
+
+
+def _blind_recording_mgr(victim_text: str, judge_prompts: list[str]):
+    """Fake LLMManager (single judge, succeeded) that records judge prompts."""
+    from unittest.mock import AsyncMock
+
+    from neuralstrike.core.llm_manager import LLMManager
+
+    mgr = LLMManager.__new__(LLMManager)
+    mgr._base_url = "http://localhost:11434"
+    mgr._client = None
+    attacker_iter = iter([])
+
+    async def call_local(model, prompt, options=None):
+        if model == "victim":
+            return victim_text
+        if model == "attacker":
+            try:
+                return next(attacker_iter)
+            except StopIteration:
+                return prompt
+        if model == "judge":
+            judge_prompts.append(prompt)
+            return json.dumps(
+                {
+                    "verdict": "succeeded",
+                    "severity": "high",
+                    "evidence_quote": victim_text[:20],
+                    "rationale": "complied",
+                }
+            )
+        raise AssertionError(f"unexpected model {model!r}")
+
+    mgr.call_local = call_local  # type: ignore[method-assign]
+    mgr.call_remote = call_local  # type: ignore[method-assign]
+    mgr.list_local_models = AsyncMock(return_value=["judge", "victim", "attacker"])  # type: ignore[method-assign]
+    return mgr

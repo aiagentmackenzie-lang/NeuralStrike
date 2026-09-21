@@ -55,6 +55,7 @@ from neuralstrike.evaluation.verdict import (
 )
 from neuralstrike.oracles.base import Oracle, OracleResult, combine_oracle_results
 from neuralstrike.oracles.judge import JudgeCallContext, JudgeOracle, JudgeVerdict
+from neuralstrike.oracles.judge_ensemble import JudgeEnsembleOracle
 from neuralstrike.utils.logging import get_logger
 
 logger = get_logger("neuralstrike.core.loop")
@@ -118,15 +119,18 @@ class AdversarialLoop:
         judge_model: str | None = _JUDGE_UNSET,
         attacker_fn: AttackerFn | None = None,
         oracles: list[Oracle] | None = None,
-        judge: JudgeOracle | None = None,
+        judge: JudgeOracle | JudgeEnsembleOracle | None = None,
         seed: int = 0,
         victim_temperature: float = 0.0,
         attacker_temperature: float = 0.7,
         strategy_label: str = "unknown",
         traj_attacker_fn: TrajectoryAttackerFn | None = None,
+        judge_prompt_mode: str = "framed",
     ) -> None:
         if victim_type not in {"local", "remote"}:
             raise ValueError(f"victim_type must be 'local' or 'remote', got {victim_type!r}")
+        if judge_prompt_mode not in {"framed", "blind"}:
+            raise ValueError(f"judge_prompt_mode must be 'framed' or 'blind', got {judge_prompt_mode!r}")
         self.attacker_model = attacker_model or settings.attacker_model
         # Distinct Judge model (D1). The Judge is intentionally a different
         # model from the Attacker so the judge is harder to confuse. Passing
@@ -149,6 +153,10 @@ class AdversarialLoop:
         # to the pre-Phase-9 loop (legacy callers untouched).
         self.strategy_label = str(strategy_label)
         self._traj_attacker_fn = traj_attacker_fn
+        # Phase 11: prompt mode for the LAZILY-BUILT judge (framed = today's
+        # bytes; blind = the stakes-neutral prompt). Callers that pass an
+        # explicit judge object configure the mode on that object instead.
+        self.judge_prompt_mode: str = judge_prompt_mode
         self.turn_traces: list[TurnTrace] = []
         self.history: list[IterationRecord] = []
 
@@ -157,8 +165,13 @@ class AdversarialLoop:
         return self._llm or llm_manager
 
     @property
-    def judge(self) -> JudgeOracle | None:
-        """Lazily-built advisory Judge, bound to the distinct Judge model."""
+    def judge(self) -> JudgeOracle | JudgeEnsembleOracle | None:
+        """Lazily-built advisory Judge, bound to the distinct Judge model.
+
+        May also be a :class:`JudgeEnsembleOracle` when the caller wired one
+        explicitly (Phase 11 ``--judge-ensemble``); the DECIDE/ANNOTATE
+        branches consume the same ``score``/``to_oracle_result`` surface.
+        """
         if self._judge is not None:
             return self._judge
         judge_model = self.judge_model
@@ -173,7 +186,7 @@ class AdversarialLoop:
                 judge_model, prompt, options=_llm_options(loop.seed, 0.0)
             )
 
-        self._judge = JudgeOracle(call_judge, role="decide")
+        self._judge = JudgeOracle(call_judge, role="decide", prompt_mode=self.judge_prompt_mode)  # type: ignore[arg-type]
         return self._judge
 
     async def _default_attacker(self, iteration: int, goal: str, current_prompt: str, feedback: str) -> str:

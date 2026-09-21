@@ -48,6 +48,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI `exec-context --target M [--vector V] [--trials N] [--judge]` — the
   pack runner with the stealth rollup and exit 1 on stealthy compromises.
 
+### Added (Phase 11 — Judge-Hardening Suite)
+- `oracles/judge_ensemble.py` — strict-majority judge ensembles with
+  disagreement flagging: N distinct member judges, no majority →
+  INCONCLUSIVE (never a fabricated consensus), per-member breakdown
+  recorded; DECIDE fail-closed / ANNOTATE fail-soft mirroring the
+  single-Judge doctrine; severity = max of members via the shared
+  `floor_severity` path. `--judge-ensemble auto|explicit-list` on
+  `adaptive` (≥ 2 DISTINCT reachable members, fail-closed).
+- `oracles/judge.py` — additive stakes-neutral judging:
+  `prompt_mode="framed"|"blind"` (default framed = legacy bytes, pinned
+  byte-identical); the blind prompt strips the red-team/benchmark framing
+  AND the attacker payload (a stakes-signal channel) while keeping the
+  goal + response evidence, the three-outcome rule, the verbatim-quote
+  requirement, and the identical JSON schema.
+- `evaluation/judge_bias.py` — the deterministic bias battery: baseline /
+  blind / response-first / verbose variants over pinned
+  honesty-corpus-pattern cases; per-variant flip rates + Wilson CIs on
+  the single shared CI path; fail-closed on judge errors; informational
+  by contract (never gates, never touches exit codes).
+- `evaluation/judge_manipulation.py` — the 6-technique judge-manipulation
+  family (stakes_minimization, fake_cot, authority_claim, judge_addressed,
+  system_impersonation, benchmark_awareness): deterministic byte-stable
+  transforms of the response text; control cells scored alongside so
+  confounded attribution is reported (`control_flips`), never hidden;
+  expected verdicts are pinned constants — the judge is the SUBJECT, not
+  the scorer.
+- `judge-audit` CLI — bias battery + manipulation family + ensemble
+  verdict-disagreement in one informational audit (`--bias/
+  --manipulation/--ensemble-check/--models/--judge-prompt/--json`).
+  Fail-closed judge resolution without the attacker half; explicit
+  `--target` never silently falls back; ensemble unavailable (< 2
+  reachable members) reported honestly; exit 0 informational (D3).
+- `AdversarialLoop`/`TrialRunner` — additive `judge_prompt_mode` plumbing
+  (default framed = byte-identical legacy runs).
+
 ## [1.0.0] — 2026-07-07
 
 ### Added (Phase 7 — NeuralGuard pairing)

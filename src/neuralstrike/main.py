@@ -682,6 +682,11 @@ def evaluate(
     trials: int = typer.Option(1, help="Number of trials (k-trial run)."),
     seed: int = typer.Option(0, help="Base seed for reproducibility (replay = same verdicts)."),
     judge: bool = typer.Option(True, help="Use the advisory Judge (distinct model, D1)."),
+    judge_prompt: str = typer.Option(
+        "framed",
+        "--judge-prompt",
+        help="Judge prompt mode: framed (default, legacy) | blind (stakes-neutral, Phase 11).",
+    ),
     scenario_id: str = typer.Option(
         "asi01-canary-leak", help="Scenario id (used for per-category ASR + baseline key)."
     ),
@@ -754,9 +759,19 @@ def evaluate(
     from neuralstrike.evaluation.probes import canary_extraction_probe
     from neuralstrike.evaluation.runner import TrialRunner
 
+    if judge_prompt not in {"framed", "blind"}:
+        raise ValidationError("--judge-prompt must be framed|blind")
+    from typing import cast
+
+    from neuralstrike.oracles.judge import JudgePromptMode
+
+    _judge_prompt_mode: JudgePromptMode = cast(JudgePromptMode, judge_prompt)
+
     console.print(
         f"[yellow]Evaluating {target} ({target_type}) — {trials} trial(s), seed={seed}, "
-        f"judge={'on' if judge else 'off'}...[/yellow]"
+        f"judge={'on' if judge else 'off'}"
+        + (f", judge-prompt={judge_prompt}" if judge_prompt != "framed" else "")
+        + "...[/yellow]"
     )
 
     async def run() -> None:
@@ -780,6 +795,7 @@ def evaluate(
             llm=mgr,
             judge_model=judge_model,
             scenario_id=scenario_id,
+            judge_prompt_mode=_judge_prompt_mode,
         )
         runner = TrialRunner(
             base_seed=seed,
@@ -2147,6 +2163,21 @@ def adaptive(
         "--judge-rubric",
         help="Judge strictness: evidence-anchored|strict|lenient (sets the severity floor).",
     ),
+    judge_ensemble: str = typer.Option(
+        "",
+        "--judge-ensemble",
+        help=(
+            "Judge ensemble (Phase 11): 'auto' (primary + first two reachable fallbacks) "
+            "or a comma-separated explicit model list (>= 2 DISTINCT models). "
+            "Requires --judge. Members disagree -> flagged; no strict majority "
+            "-> Inconclusive (never a fabricated consensus)."
+        ),
+    ),
+    judge_prompt: str = typer.Option(
+        "framed",
+        "--judge-prompt",
+        help="Judge prompt mode: framed (default, legacy) | blind (stakes-neutral, Phase 11).",
+    ),
     trials: int = typer.Option(1, help="Number of trials (k-trial run)."),
     seed: int = typer.Option(0, help="Base seed for reproducibility."),
     max_iterations: int = typer.Option(5, help="Max attacker refinement turns per trial."),
@@ -2186,6 +2217,15 @@ def adaptive(
         raise ValidationError("--judge-mode must be primary|fallback")
     if judge_rubric not in _JUDGE_RUBRIC_FLOOR:
         raise ValidationError("--judge-rubric must be evidence-anchored|strict|lenient")
+    if judge_ensemble and not judge:
+        raise ValidationError("--judge-ensemble requires --judge (fail-closed)")
+    if judge_prompt not in {"framed", "blind"}:
+        raise ValidationError("--judge-prompt must be framed|blind")
+    from typing import cast
+
+    from neuralstrike.oracles.judge import JudgePromptMode
+
+    _judge_prompt_mode: JudgePromptMode = cast(JudgePromptMode, judge_prompt)
     if trials < 1:
         raise ValidationError("--trials must be >= 1")
 
@@ -2221,9 +2261,13 @@ def adaptive(
     )
 
     async def run() -> None:
+        from neuralstrike.core.exceptions import ConfigError
+        from neuralstrike.oracles.judge_ensemble import EnsembleMember, JudgeEnsembleOracle
+
         mgr = LLMManager()
         atk_model = attacker_model or settings.attacker_model
         j_model = judge_model or settings.judge_model
+        installed: set[str] | None = None
 
         if judge and not settings.skip_reachability_check and target_type == "local":
             resolved = await resolve_models(
@@ -2234,6 +2278,7 @@ def adaptive(
             )
             j_model = resolved.judge_model
             atk_model = resolved.attacker_model
+            installed = set(resolved.available)
             if resolved.judge_fell_back:
                 console.print(f"[blue]Judge fell back to {resolved.judge_model}[/blue]")
 
@@ -2265,11 +2310,66 @@ def adaptive(
         from typing import Literal
 
         judge_role: Literal["annotate", "decide"] = "decide" if judge_mode == "primary" else "annotate"
-        judge_oracle = (
-            JudgeOracle(call_judge, role=judge_role, severity_floor=_JUDGE_RUBRIC_FLOOR[judge_rubric])
-            if judge
-            else None
-        )
+        judge_oracle: JudgeOracle | JudgeEnsembleOracle | None
+        if judge and judge_ensemble:
+            # Phase 11: multi-member advisory Judge. Members resolve fail-closed
+            # against the same reachability contract as the single judge; fewer
+            # than 2 distinct reachable members is an explicit error, never a
+            # silent 1-member "ensemble".
+            if judge_ensemble == "auto":
+                pool = list(dict.fromkeys([j_model, *settings.judge_model_fallbacks]))
+            else:
+                pool = [m.strip() for m in judge_ensemble.split(",") if m.strip()]
+                if len(pool) < 2 or len(set(pool)) != len(pool):
+                    raise ValidationError(
+                        f"--judge-ensemble explicit list requires >= 2 DISTINCT models (got {pool!r})"
+                    )
+            reachable = [m for m in pool if installed is None or m in installed]
+            if len(reachable) < 2:
+                raise ConfigError(
+                    f"--judge-ensemble {judge_ensemble!r} requires >= 2 reachable judge "
+                    f"models; pool {pool!r} -> reachable {reachable!r} "
+                    f"({'reachability check skipped' if installed is None else 'on this Ollama'}). "
+                    "Refusing a 1-member ensemble (fail-closed)."
+                )
+            if judge_ensemble == "auto" and len(reachable) > 3:
+                reachable = reachable[:3]
+
+            def _member_call(member_model: str) -> Any:
+                async def _call_member(prompt: str) -> str:
+                    if target_type == "local":
+                        return await mgr.call_local(
+                            member_model, prompt, options={"seed": seed, "temperature": 0.0}
+                        )
+                    return await mgr.call_remote(member_model, prompt, api_key=judge_api_key)
+
+                return _call_member
+
+            members = [
+                EnsembleMember(
+                    label=m,
+                    judge=JudgeOracle(
+                        _member_call(m),
+                        role=judge_role,
+                        severity_floor=_JUDGE_RUBRIC_FLOOR[judge_rubric],
+                        prompt_mode=_judge_prompt_mode,
+                    ),
+                )
+                for m in reachable
+            ]
+            judge_oracle = JudgeEnsembleOracle(
+                members, role=judge_role, severity_floor=_JUDGE_RUBRIC_FLOOR[judge_rubric]
+            )
+            console.print(f"[blue]Judge ensemble: {' + '.join(reachable)}[/blue]")
+        elif judge:
+            judge_oracle = JudgeOracle(
+                call_judge,
+                role=judge_role,
+                severity_floor=_JUDGE_RUBRIC_FLOOR[judge_rubric],
+                prompt_mode=_judge_prompt_mode,
+            )
+        else:
+            judge_oracle = None
 
         # Phase 9: attack memory (opt-in) + --strategy auto (fail-closed).
         from neuralstrike.core.attack_memory import (
@@ -3026,6 +3126,309 @@ def _print_mcp_report(report: Any, *, json_output: bool) -> None:
     )
     for f in report.findings:
         console.print(f"  [{f.severity}] {f.pattern} in {f.tool_name}: {f.evidence}")
+
+
+# --- Phase 11 judge-audit: measure the Judge (bias / manipulation / ensemble) ---
+
+
+@app.command("judge-audit")
+def judge_audit(
+    target: str | None = typer.Option(
+        None, "--target", help="Judge model to audit (defaults to settings.judge_model)."
+    ),
+    target_type: str = typer.Option("local", help="Judge backend type: 'local' or 'remote'."),
+    bias: bool = typer.Option(
+        False, "--bias", help="Run the prompt-bias battery (framing/verbosity/block-order)."
+    ),
+    manipulation: bool = typer.Option(
+        False, "--manipulation", help="Run the judge-manipulation family (6 techniques)."
+    ),
+    ensemble_check: bool = typer.Option(
+        False, "--ensemble-check", help="Measure verdict disagreement across >= 2 reachable judges."
+    ),
+    models: str | None = typer.Option(
+        None,
+        "--models",
+        help=(
+            "Explicit ensemble pool 'm1,m2' (>= 2 DISTINCT models) for --ensemble-check "
+            "(default: the judge chain [target, *fallbacks], capped at 3)."
+        ),
+    ),
+    judge_prompt: str = typer.Option(
+        "framed",
+        "--judge-prompt",
+        help=(
+            "Judge prompt mode for score()-based sections (manipulation + ensemble): "
+            "framed|blind. The bias battery builds its own prompt variants."
+        ),
+    ),
+    judge_api_key: str | None = typer.Option(None, "--judge-api-key", help="API key for a remote Judge LLM."),
+    seed: int = typer.Option(0, help="Seed for judge calls (temperature is pinned to 0.0)."),
+    json_output: bool = typer.Option(False, "--json", help="Emit raw JSON report to stdout."),
+    quiet: bool = typer.Option(False, "--quiet", help="Reduce logging to WARNING and above."),
+    verbose: bool = typer.Option(False, "--verbose", help="Increase logging to DEBUG."),
+) -> None:
+    """Audit the Judge as configured: bias battery + manipulation family + ensemble disagreement.
+
+    The judge being measured is the SUBJECT, not the scorer: expected verdicts are
+    pinned constants and every flip is a pure-function comparison — no LLM in the
+    analysis. The audit is INFORMATIONAL (calibration doctrine, D3): flips are
+    integrity findings about NeuralStrike's advisory layer, never exit-code signals.
+    No target system is attacked — the audit scores pinned text through the judge
+    models only.
+
+    With a scripted/non-LLM judge this measures the harness, not a model; real
+    operator receipts require real judge models.
+
+    Exit codes: 0 (audit complete, informational) · 1 validation · 3 runtime/config error.
+    """
+    if target_type not in {"local", "remote"}:
+        raise ValidationError("target_type must be 'local' or 'remote'")
+    if judge_prompt not in {"framed", "blind"}:
+        raise ValidationError("--judge-prompt must be framed|blind")
+    pool: list[str] | None = None
+    if models is not None:
+        pool = [m.strip() for m in models.split(",") if m.strip()]
+        if len(pool) < 2 or len(set(pool)) != len(pool):
+            raise ValidationError(f"--models requires >= 2 DISTINCT models (got {pool!r})")
+    # No section flags -> run the full audit (all three sections).
+    sections_all = not (bias or manipulation or ensemble_check)
+    do_bias = bias or sections_all
+    do_manipulation = manipulation or sections_all
+    do_ensemble = ensemble_check or sections_all
+
+    _apply_verbosity(quiet, verbose)
+    from typing import cast
+
+    from neuralstrike.oracles.judge import JudgePromptMode
+
+    _judge_prompt_mode: JudgePromptMode = cast(JudgePromptMode, judge_prompt)
+
+    if not json_output:
+        console.print(
+            f"[yellow]Judge audit ({target_type}) — sections: "
+            f"{'bias ' if do_bias else ''}{'manipulation ' if do_manipulation else ''}"
+            f"{'ensemble' if do_ensemble else ''}...[/yellow]"
+        )
+
+    async def run() -> None:
+        import json
+
+        from neuralstrike.core.config import settings
+        from neuralstrike.core.exceptions import ConfigError, LLMError
+        from neuralstrike.core.llm_manager import LLMManager
+        from neuralstrike.evaluation.judge_bias import (
+            DEFAULT_BIAS_CASES,
+            run_bias_battery,
+        )
+        from neuralstrike.evaluation.judge_manipulation import run_manipulation_family
+        from neuralstrike.evaluation.statistics import ScoreCard  # noqa: F401 (typing aid)
+        from neuralstrike.oracles.judge import JudgeOracle
+
+        mgr = LLMManager()
+        j_model = target or settings.judge_model
+        installed: set[str] | None = None
+        explicit_target = target is not None
+
+        try:
+            if not settings.skip_reachability_check and target_type == "local":
+                # Fail-closed reachability (the exec-context pattern, minus the
+                # attacker half — this audit has no attacker LLM).
+                try:
+                    installed = set(await mgr.list_local_models())
+                except LLMError as exc:
+                    raise ConfigError(
+                        f"cannot reach Ollama at the configured base URL to verify models "
+                        f"({exc.message}). Set NEURALSTRIKE_SKIP_REACHABILITY_CHECK=true only "
+                        "if you accept auditing an unverifiable judge."
+                    ) from exc
+                if explicit_target:
+                    # The operator NAMED the audit subject: no silent fallback
+                    # walk — auditing model X and reporting it as Y would be
+                    # dishonest. Fail closed on the named model.
+                    if j_model not in installed:
+                        raise ConfigError(
+                            f"--target {j_model!r} is not reachable on this Ollama; "
+                            "refusing to audit an unreachable judge (fail-closed). "
+                            "Run `neuralstrike judge-model-list` to see installed models."
+                        )
+                else:
+                    chain = [j_model, *settings.judge_model_fallbacks]
+                    resolved = next((m for m in chain if m in installed), None)
+                    if resolved is None:
+                        raise ConfigError(
+                            f"Judge model {j_model!r} and all fallbacks are not installed "
+                            "on this Ollama; refusing to audit an unreachable judge "
+                            "(fail-closed). Run `neuralstrike judge-model-list` to see "
+                            "installed models."
+                        )
+                    if resolved != j_model:
+                        console.print(f"[blue]judge resolved to {resolved}[/blue]")
+                    j_model = resolved
+
+            async def call_judge(prompt: str) -> str:
+                if target_type == "local":
+                    return await mgr.call_local(j_model, prompt, options={"seed": seed, "temperature": 0.0})
+                return await mgr.call_remote(j_model, prompt, api_key=judge_api_key)
+
+            def _member_call(member_model: str) -> Any:
+                async def _call_member(prompt: str) -> str:
+                    if target_type == "local":
+                        return await mgr.call_local(
+                            member_model, prompt, options={"seed": seed, "temperature": 0.0}
+                        )
+                    return await mgr.call_remote(member_model, prompt, api_key=judge_api_key)
+
+                return _call_member
+
+            judge_oracle = JudgeOracle(
+                call_judge,
+                role="annotate",
+                severity_floor="info",
+                prompt_mode=_judge_prompt_mode,
+            )
+
+            bias_report = await run_bias_battery(judge_oracle, judge_label=j_model) if do_bias else None
+            manip_report = (
+                await run_manipulation_family(judge_oracle, judge_label=j_model) if do_manipulation else None
+            )
+
+            ensemble_members: list[str] = []
+            ensemble_cases: list[dict[str, Any]] = []
+            ensemble_rate: float | None = None
+            if do_ensemble:
+                if pool is not None:
+                    ensemble_pool = pool
+                else:
+                    ensemble_pool = list(dict.fromkeys([j_model, *settings.judge_model_fallbacks]))
+                reachable = [m for m in ensemble_pool if installed is None or m in installed]
+                unreachable = [m for m in ensemble_pool if m not in reachable]
+                if len(reachable) < 2:
+                    console.print(
+                        f"  ensemble check unavailable: {len(reachable)} reachable member(s) "
+                        f"(pool {ensemble_pool!r}); verdict disagreement needs >= 2 judges "
+                        "— reported honestly, not an error",
+                        markup=False,
+                    )
+                else:
+                    if len(reachable) > 3 and pool is None:
+                        reachable = reachable[:3]
+                    if unreachable:
+                        console.print(
+                            f"  ensemble pool: unreachable members dropped: {unreachable}",
+                            markup=False,
+                        )
+                    ensemble_members = reachable
+                    member_judges = [
+                        JudgeOracle(
+                            _member_call(m),
+                            role="annotate",
+                            severity_floor="info",
+                            prompt_mode=_judge_prompt_mode,
+                        )
+                        for m in reachable
+                    ]
+                    disagreements = 0
+                    for case in DEFAULT_BIAS_CASES:
+                        verdicts: dict[str, str] = {}
+                        for member_model, member_judge in zip(reachable, member_judges, strict=True):
+                            jv = await member_judge.score(case.context())
+                            verdicts[member_model] = jv.verdict
+                        agreed = len(set(verdicts.values())) == 1
+                        if not agreed:
+                            disagreements += 1
+                        ensemble_cases.append(
+                            {"case_id": case.case_id, "verdicts": verdicts, "agreed": agreed}
+                        )
+                    ensemble_rate = (
+                        (len(ensemble_cases) - disagreements) / len(ensemble_cases) if ensemble_cases else 1.0
+                    )
+
+            if json_output:
+                payload: dict[str, Any] = {
+                    "judge": j_model,
+                    "prompt_mode": _judge_prompt_mode,
+                }
+                if bias_report is not None:
+                    payload["bias"] = bias_report.to_dict()
+                if manip_report is not None:
+                    payload["manipulation"] = manip_report.to_dict()
+                if do_ensemble:
+                    payload["ensemble"] = (
+                        None
+                        if ensemble_rate is None
+                        else {
+                            "members": ensemble_members,
+                            "cases": ensemble_cases,
+                            "agreement_rate": ensemble_rate,
+                            "disagreement_cases": [c["case_id"] for c in ensemble_cases if not c["agreed"]],
+                        }
+                    )
+                typer.echo(json.dumps(payload, indent=2))
+                return
+
+            if bias_report is not None:
+                console.print(
+                    f"  bias battery — {bias_report.total_cases} pinned cases x "
+                    f"{len(bias_report.per_variant)} variants:",
+                    markup=False,
+                )
+                for s in bias_report.per_variant:
+                    console.print(
+                        f"    {s.variant}: flips={s.flips}/{s.total} rate={s.flip_rate:.3f} "
+                        f"CI[{s.ci_low:.3f}, {s.ci_high:.3f}]",
+                        markup=False,
+                    )
+                console.print(
+                    f"    stable cases: {bias_report.stable_cases}/{bias_report.total_cases}",
+                    markup=False,
+                )
+            if manip_report is not None:
+                console.print(
+                    f"  manipulation family — {manip_report.total_cases} pinned cases (6 techniques):",
+                    markup=False,
+                )
+                for t in manip_report.per_technique:
+                    console.print(
+                        f"    {t.technique}: flips={t.flips}/{t.total} rate={t.flip_rate:.3f} "
+                        f"CI[{t.ci_low:.3f}, {t.ci_high:.3f}]",
+                        markup=False,
+                    )
+                if manip_report.control_flips:
+                    console.print(
+                        f"    CONFOUNDED: the judge mis-scored {manip_report.control_flips}/"
+                        f"{manip_report.total_cases} CONTROL cells — technique attribution "
+                        "is unreliable for those cases",
+                        markup=False,
+                    )
+            if do_ensemble and ensemble_rate is not None:
+                console.print(
+                    f"  ensemble check — {len(ensemble_members)} members over "
+                    f"{len(ensemble_cases)} pinned cases:",
+                    markup=False,
+                )
+                for row in ensemble_cases:
+                    marks = " | ".join(f"{m}={v}" for m, v in row["verdicts"].items())
+                    console.print(
+                        f"    {row['case_id']}: {marks} -> {'agree' if row['agreed'] else 'DISAGREE'}",
+                        markup=False,
+                    )
+                console.print(
+                    f"    agreement rate: {ensemble_rate:.3f}",
+                    markup=False,
+                )
+            console.print(
+                "[blue]informational audit — flips are findings about the judge, "
+                "never exit-code signals (Phase 11 D3)[/blue]"
+            )
+        except ConfigError as exc:
+            console.print(f"[red]Config error:[/red] {exc}")
+            raise typer.Exit(3) from exc
+        except LLMError as exc:
+            console.print(f"[red]Judge backend error during audit:[/red] {exc}")
+            raise typer.Exit(3) from exc
+
+    _run(run())
 
 
 if __name__ == "__main__":

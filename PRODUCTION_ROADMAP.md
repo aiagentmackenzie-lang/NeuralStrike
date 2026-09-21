@@ -734,6 +734,67 @@ model is the measurement shape.
 
 ---
 
+### Phase 11 — Judge-Hardening Suite (G3) — SHIPPED 2026-09-21
+
+**Status:** complete. The G3 gap from the bleeding-edge research: any
+pipeline where the Judge can infer run consequences or benchmark context
+is quietly compromised (stakes-signaling leniency bias up to 9.8pp /
+30% relative, invisible in the judge's own CoT; EvalAwareBench 8-factor
+awareness triggers). Phase 11 measures NeuralStrike's own judge's
+fragility deterministically and hardens the prompt — WITHOUT moving any
+verdict away from the deterministic oracles.
+
+**Deliverables**
+- `oracles/judge_ensemble.py` — `JudgeEnsembleOracle` + `majority_outcome`
+  (strict majority; no-majority → INCONCLUSIVE, never a fabricated
+  consensus; DECIDE fail-closed first-error-aborts; ANNOTATE per-member
+  fail-soft; severity = max of members then floored via the shared
+  `floor_severity` path). `--judge-ensemble auto|explicit-list` on
+  `adaptive` (≥ 2 DISTINCT reachable members fail-closed).
+- `oracles/judge.py` — additive `prompt_mode framed|blind`
+  (`build_blind_prompt` strips the red-team/benchmark framing AND the
+  attacker payload; identical JSON schema + three-outcome rule;
+  framed_blocks decomposition keeps `build_prompt` byte-identical,
+  pinned by test).
+- `evaluation/judge_bias.py` — the deterministic bias battery
+  (baseline/blind/response-first/verbose) over pinned
+  honesty-corpus-pattern cases; flip rates + Wilson CIs via the shared
+  `wilson_ci` path; the battery controls the prompt directly (the
+  judge's own prompt_mode is deliberately bypassed).
+- `evaluation/judge_manipulation.py` — the 6-technique manipulation
+  family (stakes_minimization / fake_cot / authority_claim /
+  judge_addressed / system_impersonation / benchmark_awareness) as
+  deterministic byte-stable transforms; pinned default corpus (6 cases,
+  expected from the unmanipulated control); control cells scored
+  alongside — CONFOUNDED attribution reported via `control_flips`, never
+  hidden; fail-closed on judge errors.
+- CLI `judge-audit` — bias battery + manipulation family + ensemble
+  disagreement (`--bias/--manipulation/--ensemble-check/--models/
+  --judge-prompt/--json`; all sections by default). Fail-closed judge
+  resolution WITHOUT the attacker half; explicit `--target` never
+  silently falls back (auditing X and reporting it as Y would be
+  dishonest); ensemble unavailable (< 2 reachable) reported honestly,
+  not an error; **informational exit 0** (D3 lead default — flips are
+  findings, never exit-code signals; `--gate` deliberately absent until
+  baseline numbers exist on host models).
+
+**Exit gate**
+- Deterministic oracles still score every real attack; the Judge stays
+  advisory; DECIDE unchanged; all Phase 11 defaults byte-identical
+  (legacy paths pinned by tests).
+- The judge being measured is the SUBJECT: expected verdicts are pinned
+  constants; flips are pure-function comparisons — no LLM in the analysis.
+- ruff clean, format clean (186 files), mypy strict 127 files;
+  910 passed / 1 skipped, TOTAL 90% (judge_manipulation 100%,
+  judge_bias 100%, judge_ensemble 100%).
+
+**Dependencies:** Phases 9–10 (honesty-corpus doctrine + the
+fail-closed-judge-resolution precedent) + the 2026-09-20 bleeding-edge
+research (gap G3); the 2026 eval-science judge-fragility findings are the
+measurement shape.
+
+---
+
 ## 3. Realistic score trajectory
 
 | Phase | Composite | Tier | Readiness |

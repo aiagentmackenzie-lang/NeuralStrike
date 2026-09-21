@@ -438,3 +438,109 @@ class TestRuntimeReachability:
         mgr.list_local_models = AsyncMock(side_effect=LLMError("ollama", "down"))  # type: ignore[method-assign]
         with pytest.raises(ConfigError):
             await resolve_models(mgr, attacker_model="x", judge_model="y")
+
+
+# --- Phase 11: --judge-prompt (framed | blind) --------------------------------
+
+
+class TestJudgePromptFlag:
+    def test_evaluate_rejects_bad_judge_prompt(self, runner: CliRunner) -> None:
+        result = runner.invoke(app, ["evaluate", "--target", "x", "--judge-prompt", "bogus"])
+        assert result.exit_code != 0
+
+    def test_evaluate_passes_judge_prompt_mode_through(self, runner: CliRunner, tmp_path: Path) -> None:
+        report = _report(_resisted_trial())
+
+        async def fake_run(
+            self,
+            probe,
+            *,
+            trials=1,
+            judge_model=None,
+            attacker_model=None,
+            persist=True,
+            intensity="standard",
+        ):
+            return report
+
+        from neuralstrike.core.runtime import ResolvedModels
+
+        fake_resolved = ResolvedModels(
+            attacker_model="deepseek-r1",
+            judge_model="deepseek-v3.1:671b-cloud",
+            judge_fell_back=False,
+            available=("deepseek-r1", "deepseek-v3.1:671b-cloud"),
+        )
+        with (
+            patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=fake_resolved)),
+            patch("neuralstrike.evaluation.runner.TrialRunner.run", fake_run),
+            patch("neuralstrike.evaluation.probes.canary_extraction_probe") as mock_probe,
+        ):
+            mock_probe.return_value = None
+            result = runner.invoke(
+                app,
+                [
+                    "evaluate",
+                    "--target",
+                    "victim",
+                    "--target-type",
+                    "local",
+                    "--trials",
+                    "1",
+                    "--judge-prompt",
+                    "blind",
+                    "--run-dir",
+                    str(tmp_path / "runs"),
+                ],
+            )
+        assert result.exit_code == 0, result.stdout
+        assert mock_probe.call_args.kwargs["judge_prompt_mode"] == "blind"
+        assert "judge-prompt=blind" in result.stdout
+
+    def test_evaluate_default_prompt_is_framed_silent(self, runner: CliRunner, tmp_path: Path) -> None:
+        report = _report(_resisted_trial())
+
+        async def fake_run(
+            self,
+            probe,
+            *,
+            trials=1,
+            judge_model=None,
+            attacker_model=None,
+            persist=True,
+            intensity="standard",
+        ):
+            return report
+
+        from neuralstrike.core.runtime import ResolvedModels
+
+        fake_resolved = ResolvedModels(
+            attacker_model="deepseek-r1",
+            judge_model="deepseek-v3.1:671b-cloud",
+            judge_fell_back=False,
+            available=("deepseek-r1", "deepseek-v3.1:671b-cloud"),
+        )
+        with (
+            patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=fake_resolved)),
+            patch("neuralstrike.evaluation.runner.TrialRunner.run", fake_run),
+            patch("neuralstrike.evaluation.probes.canary_extraction_probe") as mock_probe,
+        ):
+            mock_probe.return_value = None
+            result = runner.invoke(
+                app,
+                [
+                    "evaluate",
+                    "--target",
+                    "victim",
+                    "--target-type",
+                    "local",
+                    "--trials",
+                    "1",
+                    "--run-dir",
+                    str(tmp_path / "runs"),
+                ],
+            )
+        assert result.exit_code == 0, result.stdout
+        # Default (framed) must not announce itself — legacy output unchanged.
+        assert "judge-prompt" not in result.stdout
+        assert mock_probe.call_args.kwargs["judge_prompt_mode"] == "framed"
