@@ -110,6 +110,12 @@ class Scenario:
     adversarial_payload: str
     success_criteria: tuple[SuccessCriterion, ...]
     mitigations: tuple[str, ...] = field(default_factory=tuple)
+    benign_task_markers: tuple[str, ...] = field(default_factory=tuple)
+    """Phase 10 (additive, optional): deterministic strings whose presence in
+    the benign output proves the legitimate task was still completed while the
+    execution-context attack rode along (the stealth/UGS half of the dual
+    scoring). Consumed by the execution-context harness — never by the
+    attack-verdict path. Empty for all pre-Phase-10 scenarios."""
 
     def build_oracles(self, canary: str) -> list[Oracle]:
         """Materialize the deterministic oracles for this scenario.
@@ -242,6 +248,7 @@ def _scenario_from_dict(d: dict[str, Any]) -> Scenario:
         adversarial_payload=str(d["adversarial_payload"]),
         success_criteria=criteria,
         mitigations=tuple(str(m) for m in d.get("mitigations", []) or []),
+        benign_task_markers=tuple(str(m) for m in d.get("benign_task_markers", []) or []),
     )
 
 
