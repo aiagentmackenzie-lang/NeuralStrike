@@ -647,6 +647,67 @@ neuralstrike exec-context --target mistral:7b --judge --judge-model \
 - **Noisy ≠ clean.** A leak that broke the benign task is reported NOISY —
   it is a real vulnerability with a detection opportunity, not a pass.
 
+### Judge-hardening suite (Phase 11)
+
+The Judge is a load-bearing advisory layer (DECIDE where no deterministic
+oracle was conclusive, ANNOTATE on succeeded findings) and a documented
+2026 attack surface: stakes-signaling leniency, fake chain-of-thought,
+fabricated authority attestations, notes addressed to the evaluator, fake
+system/moderation tags, benchmark-awareness framing. Phase 11 makes
+NeuralStrike the first OSS harness that MEASURES its own judge's
+fragility — deterministically, the judge being the SUBJECT (expected
+verdicts are pinned constants), never the scorer:
+
+```bash
+# The full audit: bias battery + manipulation family + ensemble disagreement.
+neuralstrike judge-audit --target deepseek-v3.1:671b-cloud
+
+# A single section; blind-prompt judging for the score()-based sections.
+neuralstrike judge-audit --target deepseek-v3.1:671b-cloud \
+  --manipulation --judge-prompt blind
+
+# Explicit ensemble pool for the disagreement check; machine-readable output.
+neuralstrike judge-audit --target deepseek-v3.1:671b-cloud \
+  --models deepseek-v3.1:671b-cloud,kimi-k2.6:cloud --json
+```
+
+- ✅ `evaluation/judge_bias.py` — controlled-prompt battery (baseline /
+  blind / response-first / verbose) over pinned honesty-corpus-pattern
+  cases; per-variant flip rates with Wilson CIs (single shared CI path).
+- ✅ `evaluation/judge_manipulation.py` — the 6-technique manipulation
+  family as deterministic byte-stable transforms riding the response
+  channel; control cells scored alongside so confounded attribution is
+  REPORTED (`control_flips`), never hidden; per-technique flip rates +
+  Wilson bounds.
+- ✅ `oracles/judge_ensemble.py` — strict-majority ensembles with
+  disagreement flagging (no majority → INCONCLUSIVE, never a fabricated
+  consensus); DECIDE fail-closed / ANNOTATE fail-soft, mirroring the
+  single-Judge doctrine; `--judge-ensemble auto|list` on `adaptive`.
+- ✅ Stakes-neutral judging: `--judge-prompt framed|blind` (blind strips
+  the red-team/benchmark framing AND the attacker payload — a
+  stakes-signal channel) while keeping the identical JSON schema and
+  three-outcome rule (pinned byte-identical default).
+- ✅ `judge-audit` CLI — informational exit 0 (flips are findings, never
+  exit-code signals); fail-closed judge resolution without the attacker
+  half; ensemble check with an honest "unavailable" line below 2
+  reachable members; `--json` for receipts.
+
+### Phase 11 honest scope
+
+- **The deterministic oracles still score every real attack.** Nothing in
+  the normal run path moved: the Judge stays advisory; DECIDE exists only
+  where no deterministic oracle was conclusive (unchanged); ensembles,
+  blind prompts, and the audit are opt-in (defaults byte-identical).
+- **Bias/manipulation reports are informational, never gates** (the
+  calibration doctrine). A flip is an integrity finding about the judge,
+  not an exit code; `--gate` thresholds are deliberately absent until
+  baseline numbers exist on host models.
+- **With a scripted (non-LLM) judge the audit measures the harness, not
+  a model.** Real operator receipts require real judge models.
+- **The blind prompt still sees the goal and the response** (it must, to
+  assess compliance). What it never sees is run context: benchmark
+  purpose, outcome semantics, prior verdicts, scenario ids.
+
 ### MCP & A2A deep coverage + agent identity (Phase 5)
 
 Phase 5 covers the protocol surfaces that define the 2026 attack landscape

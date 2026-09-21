@@ -314,6 +314,8 @@ neuralstrike adaptive --target llama3.1 --strategy pair --seed-diversity 12 # N 
 neuralstrike attack-memory --db runs/memory.sqlite --json   # read-only memory view
 neuralstrike exec-context --target llama3.1                  # execution-context pack, dual-scored (Phase 10)
 neuralstrike exec-context --target llama3.1 --vector skill_poison
+neuralstrike judge-audit --target deepseek-v3.1:671b-cloud   # judge bias + manipulation + ensemble audit (Phase 11)
+neuralstrike judge-audit --target deepseek-v3.1:671b-cloud --models m1,m2 --json
 neuralstrike mcp-scan --url http://localhost:8081/mcp --json     # tool-catalog attack surface
 neuralstrike a2a-scan --base-url http://localhost:8082 --json    # agent-to-agent card surface
 neuralstrike minja --target http://localhost:11434 --bridge "recall my notes" \
@@ -372,6 +374,38 @@ DeepTrap AGS/UGS model:
   poisoned file body rides in the prompt (the canary-extraction precedent);
   channel-level delivery claims stay with the adapter-driven indirect
   harness.
+
+- Honest scope: the benign check is marker-based and deterministic; the
+  poisoned file body rides in the prompt (the canary-extraction precedent);
+  channel-level delivery claims stay with the adapter-driven indirect
+  harness.
+
+### Judge hardening (Phase 11)
+
+Measure the advisory Judge's own fragility — the judge is the SUBJECT
+(expected verdicts pinned constants), the analysis is deterministic pure
+functions, and every report is informational (never gates):
+
+- `judge-audit --target M [--bias] [--manipulation] [--ensemble-check]
+  [--models m1,m2] [--judge-prompt framed|blind] [--json]` — the audit:
+  bias battery (baseline/blind/response-first/verbosity variants over
+  pinned cases), the 6-technique manipulation family (fake CoT, authority
+  claims, evaluator-addressed notes, fake system tags, benchmark
+  awareness, stakes minimization), and ensemble verdict-disagreement.
+  No section flags → all three. Exit 0 informational (D3); 3 on
+  config/backend errors; fail-closed judge resolution (no attacker half).
+- `adaptive ... --judge-ensemble auto|m1,m2` — strict-majority ensemble
+  Judge with disagreement flagging (no majority → Inconclusive, never a
+  fabricated consensus). Requires `--judge`; < 2 reachable members is an
+  explicit error, never a silent 1-member ensemble.
+- `adaptive/evaluate ... --judge-prompt framed|blind` — blind judging
+  strips the red-team/benchmark framing AND the attacker payload while
+  keeping the identical JSON schema and three-outcome rule (opt-in;
+  default framed = legacy bytes).
+- The manipulation per-technique line reads: `system_impersonation:
+  flips=1/1 rate=1.000 CI[0.207, 0.998]`; a `CONFOUNDED` line appears when
+  the judge mis-scores CONTROL cells (attribution unreliable — reported,
+  never hidden).
 
 ### Purple team (fleet Wave 3 — the trio loop)
 
