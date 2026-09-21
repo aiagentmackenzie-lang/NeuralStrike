@@ -2147,6 +2147,16 @@ def adaptive(
         "--judge-rubric",
         help="Judge strictness: evidence-anchored|strict|lenient (sets the severity floor).",
     ),
+    judge_ensemble: str = typer.Option(
+        "",
+        "--judge-ensemble",
+        help=(
+            "Judge ensemble (Phase 11): 'auto' (primary + first two reachable fallbacks) "
+            "or a comma-separated explicit model list (>= 2 DISTINCT models). "
+            "Requires --judge. Members disagree -> flagged; no strict majority "
+            "-> Inconclusive (never a fabricated consensus)."
+        ),
+    ),
     trials: int = typer.Option(1, help="Number of trials (k-trial run)."),
     seed: int = typer.Option(0, help="Base seed for reproducibility."),
     max_iterations: int = typer.Option(5, help="Max attacker refinement turns per trial."),
@@ -2186,6 +2196,8 @@ def adaptive(
         raise ValidationError("--judge-mode must be primary|fallback")
     if judge_rubric not in _JUDGE_RUBRIC_FLOOR:
         raise ValidationError("--judge-rubric must be evidence-anchored|strict|lenient")
+    if judge_ensemble and not judge:
+        raise ValidationError("--judge-ensemble requires --judge (fail-closed)")
     if trials < 1:
         raise ValidationError("--trials must be >= 1")
 
@@ -2221,9 +2233,13 @@ def adaptive(
     )
 
     async def run() -> None:
+        from neuralstrike.core.exceptions import ConfigError
+        from neuralstrike.oracles.judge_ensemble import EnsembleMember, JudgeEnsembleOracle
+
         mgr = LLMManager()
         atk_model = attacker_model or settings.attacker_model
         j_model = judge_model or settings.judge_model
+        installed: set[str] | None = None
 
         if judge and not settings.skip_reachability_check and target_type == "local":
             resolved = await resolve_models(
@@ -2234,6 +2250,7 @@ def adaptive(
             )
             j_model = resolved.judge_model
             atk_model = resolved.attacker_model
+            installed = set(resolved.available)
             if resolved.judge_fell_back:
                 console.print(f"[blue]Judge fell back to {resolved.judge_model}[/blue]")
 
@@ -2265,11 +2282,60 @@ def adaptive(
         from typing import Literal
 
         judge_role: Literal["annotate", "decide"] = "decide" if judge_mode == "primary" else "annotate"
-        judge_oracle = (
-            JudgeOracle(call_judge, role=judge_role, severity_floor=_JUDGE_RUBRIC_FLOOR[judge_rubric])
-            if judge
-            else None
-        )
+        judge_oracle: JudgeOracle | JudgeEnsembleOracle | None
+        if judge and judge_ensemble:
+            # Phase 11: multi-member advisory Judge. Members resolve fail-closed
+            # against the same reachability contract as the single judge; fewer
+            # than 2 distinct reachable members is an explicit error, never a
+            # silent 1-member "ensemble".
+            if judge_ensemble == "auto":
+                pool = list(dict.fromkeys([j_model, *settings.judge_model_fallbacks]))
+            else:
+                pool = [m.strip() for m in judge_ensemble.split(",") if m.strip()]
+                if len(pool) < 2 or len(set(pool)) != len(pool):
+                    raise ValidationError(
+                        f"--judge-ensemble explicit list requires >= 2 DISTINCT models (got {pool!r})"
+                    )
+            reachable = [m for m in pool if installed is None or m in installed]
+            if len(reachable) < 2:
+                raise ConfigError(
+                    f"--judge-ensemble {judge_ensemble!r} requires >= 2 reachable judge "
+                    f"models; pool {pool!r} -> reachable {reachable!r} "
+                    f"({'reachability check skipped' if installed is None else 'on this Ollama'}). "
+                    "Refusing a 1-member ensemble (fail-closed)."
+                )
+            if judge_ensemble == "auto" and len(reachable) > 3:
+                reachable = reachable[:3]
+
+            def _member_call(member_model: str) -> Any:
+                async def _call_member(prompt: str) -> str:
+                    if target_type == "local":
+                        return await mgr.call_local(
+                            member_model, prompt, options={"seed": seed, "temperature": 0.0}
+                        )
+                    return await mgr.call_remote(member_model, prompt, api_key=judge_api_key)
+
+                return _call_member
+
+            members = [
+                EnsembleMember(
+                    label=m,
+                    judge=JudgeOracle(
+                        _member_call(m), role=judge_role, severity_floor=_JUDGE_RUBRIC_FLOOR[judge_rubric]
+                    ),
+                )
+                for m in reachable
+            ]
+            judge_oracle = JudgeEnsembleOracle(
+                members, role=judge_role, severity_floor=_JUDGE_RUBRIC_FLOOR[judge_rubric]
+            )
+            console.print(f"[blue]Judge ensemble: {' + '.join(reachable)}[/blue]")
+        elif judge:
+            judge_oracle = JudgeOracle(
+                call_judge, role=judge_role, severity_floor=_JUDGE_RUBRIC_FLOOR[judge_rubric]
+            )
+        else:
+            judge_oracle = None
 
         # Phase 9: attack memory (opt-in) + --strategy auto (fail-closed).
         from neuralstrike.core.attack_memory import (

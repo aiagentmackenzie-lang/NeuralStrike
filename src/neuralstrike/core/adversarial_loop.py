@@ -55,6 +55,7 @@ from neuralstrike.evaluation.verdict import (
 )
 from neuralstrike.oracles.base import Oracle, OracleResult, combine_oracle_results
 from neuralstrike.oracles.judge import JudgeCallContext, JudgeOracle, JudgeVerdict
+from neuralstrike.oracles.judge_ensemble import JudgeEnsembleOracle
 from neuralstrike.utils.logging import get_logger
 
 logger = get_logger("neuralstrike.core.loop")
@@ -118,7 +119,7 @@ class AdversarialLoop:
         judge_model: str | None = _JUDGE_UNSET,
         attacker_fn: AttackerFn | None = None,
         oracles: list[Oracle] | None = None,
-        judge: JudgeOracle | None = None,
+        judge: JudgeOracle | JudgeEnsembleOracle | None = None,
         seed: int = 0,
         victim_temperature: float = 0.0,
         attacker_temperature: float = 0.7,
@@ -157,8 +158,13 @@ class AdversarialLoop:
         return self._llm or llm_manager
 
     @property
-    def judge(self) -> JudgeOracle | None:
-        """Lazily-built advisory Judge, bound to the distinct Judge model."""
+    def judge(self) -> JudgeOracle | JudgeEnsembleOracle | None:
+        """Lazily-built advisory Judge, bound to the distinct Judge model.
+
+        May also be a :class:`JudgeEnsembleOracle` when the caller wired one
+        explicitly (Phase 11 ``--judge-ensemble``); the DECIDE/ANNOTATE
+        branches consume the same ``score``/``to_oracle_result`` surface.
+        """
         if self._judge is not None:
             return self._judge
         judge_model = self.judge_model

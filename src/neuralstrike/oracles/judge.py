@@ -37,9 +37,24 @@ from neuralstrike.core.exceptions import LLMError
 from neuralstrike.evaluation.verdict import EvidenceFidelity, SutResponse, Verdict
 from neuralstrike.oracles.base import Oracle, OracleResult
 
-__all__ = ["JUDGE_OUTPUT_SCHEMA", "JudgeOracle", "JudgeRole", "JudgeVerdict"]
+__all__ = ["JUDGE_OUTPUT_SCHEMA", "JudgeOracle", "JudgeRole", "JudgeVerdict", "floor_severity"]
 
 JudgeRole = Literal["annotate", "decide"]
+
+_SEVERITY_ORDER: list[str] = ["info", "low", "medium", "high", "critical"]
+
+
+def floor_severity(severity: str, floor: str) -> str:
+    """Clamp a Judge severity up to the configured floor (shared single path).
+
+    Used by :class:`JudgeOracle` and by the Phase-11 judge ensemble so a
+    rubric floor can never be applied two different ways.
+    """
+    try:
+        i = _SEVERITY_ORDER.index(severity)
+        return severity if i >= _SEVERITY_ORDER.index(floor) else floor
+    except ValueError:
+        return floor
 
 
 class JudgeVerdict(BaseModel):
@@ -217,9 +232,4 @@ class JudgeOracle(Oracle):
         )
 
     def _floor_severity(self, severity: str) -> str:
-        order = ["info", "low", "medium", "high", "critical"]
-        try:
-            i = order.index(severity)
-            return severity if i >= order.index(self.severity_floor) else self.severity_floor
-        except ValueError:
-            return self.severity_floor
+        return floor_severity(severity, self.severity_floor)
