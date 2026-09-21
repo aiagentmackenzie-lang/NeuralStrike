@@ -32,6 +32,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `--seed-diversity N`, `trace`/`trace-pair` strategies, and the read-only
   `attack-memory --db [--json]` command.
 
+### Added (Phase 10 — Execution-Context & Skill Attack Pack)
+- `oracles/benign_task.py` — the benign-task (utility) oracle: required
+  markers + forbidden-drift patterns, advisory by contract (never joined
+  into the verdict combiner — a benign pass cannot fabricate ASR).
+- `attacks/execution_context.py` — the 7-vector mutable-execution-context
+  attack pack (skill poison, rules-file backdoor, playbook hijack,
+  triggered injection T0051.002, delayed tool invocation, worm-like
+  self-replication T0061, agentic resource consumption T0034.002) with
+  dual AGS/UGS scoring: STEALTHY (leaked AND benign task preserved) vs
+  NOISY (leaked but the benign task broke) — both reported, neither hidden.
+- `corpus/data/phase10_execution_context.yaml` — 7 realistic scenarios
+  with benign_task_markers (additive loader field; legacy corpora
+  unaffected) and verified OWASP ASI + MITRE ATLAS mappings.
+- CLI `exec-context --target M [--vector V] [--trials N] [--judge]` — the
+  pack runner with the stealth rollup and exit 1 on stealthy compromises.
+
 ## [1.0.0] — 2026-07-07
 
 ### Added (Phase 7 — NeuralGuard pairing)

@@ -2557,6 +2557,192 @@ def attack_memory(
     )
 
 
+# --- Phase 10: execution-context pack ---------------------------------------
+
+
+@app.command("exec-context")
+def exec_context(
+    target: str = typer.Option(..., help="Victim model to attack."),
+    target_type: str = typer.Option("local", help="Victim type: 'local' or 'remote'."),
+    vector: str | None = typer.Option(
+        None,
+        "--vector",
+        help="Run a single vector: skill_poison|rules_file_backdoor|playbook_hijack|"
+        "triggered_injection|delayed_tool_invocation|prompt_self_replication|"
+        "agentic_resource_consumption (default: all seven).",
+    ),
+    trials: int = typer.Option(1, help="Trials per vector (k-trial run)."),
+    seed: int = typer.Option(0, help="Base seed for reproducibility."),
+    judge: bool = typer.Option(
+        False, "--judge", help="Advisory Judge annotation (deterministic oracles score)."
+    ),
+    judge_model: str | None = typer.Option(
+        None, "--judge-model", help="Judge LLM model (defaults to settings.judge_model)."
+    ),
+    judge_api_key: str | None = typer.Option(None, "--judge-api-key", help="API key for a remote Judge LLM."),
+    run_dir: str = typer.Option("runs", help="Directory for per-trial transcripts."),
+    delay: float = typer.Option(0.0, "--delay", help="Seconds to sleep between vectors."),
+    timeout: float | None = typer.Option(None, "--timeout", help="Per-trial timeout in seconds."),
+    scope_file: str | None = typer.Option(
+        None, "--scope-file", help="Rules-of-engagement YAML/JSON to validate against."
+    ),
+    intent: str | None = typer.Option(
+        None, "--intent", help="Attack intent (used by scope + safety classification)."
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for irreversible actions."
+    ),
+    quiet: bool = typer.Option(False, "--quiet", help="Reduce logging to WARNING and above."),
+    verbose: bool = typer.Option(False, "--verbose", help="Increase logging to DEBUG."),
+) -> None:
+    """Run the execution-context & skill attack pack (Phase 10, G2) with dual scoring.
+
+    Seven vectors ride the agent's MUTABLE EXECUTION CONTEXT (skills, rules
+    files, playbooks, triggers, memory, armed tool calls, resource loops).
+    Dual scoring (DeepTrap AGS/UGS): the deterministic oracle verdict is the
+    attack-goal result (AGS); the benign-task check runs advisory (UGS) —
+    STEALTHY = leaked AND benign task preserved (the finding that matters);
+    NOISY = leaked but the benign task broke (detectable — reported, never
+    renamed).
+
+    Exit codes: 0 (no Succeeded) · 1 stealthy compromise found · 3 runtime error.
+    """
+    if target_type not in {"local", "remote"}:
+        raise ValidationError("target_type must be 'local' or 'remote'")
+    from neuralstrike.attacks.execution_context import VECTORS
+
+    if vector is not None and vector not in VECTORS:
+        raise ValidationError(f"--vector must be one of: {', '.join(VECTORS)}")
+    if trials < 1:
+        raise ValidationError("--trials must be >= 1")
+    if delay < 0:
+        raise ValidationError("--delay must be >= 0")
+    if timeout is not None and timeout <= 0:
+        raise ValidationError("--timeout must be > 0")
+
+    _apply_scope(scope_file, target, intent)
+    _apply_safety(intent, require_approval)
+    _apply_verbosity(quiet, verbose)
+
+    console.print(
+        f"[yellow]Execution-context pack against {target} ({target_type}) "
+        f"(trials={trials}, seed={seed}, judge={'on' if judge else 'off'})...[/yellow]"
+    )
+
+    async def run() -> None:
+        from neuralstrike.attacks.execution_context import (
+            execution_context_probe,
+            stealth_score,
+            stealth_table,
+        )
+        from neuralstrike.core.config import settings
+        from neuralstrike.core.exceptions import ConfigError, LLMError
+        from neuralstrike.core.llm_manager import LLMManager
+        from neuralstrike.corpus.loader import corpus_path, load_corpus
+        from neuralstrike.evaluation.runner import TrialRunner
+        from neuralstrike.evaluation.statistics import score_trials
+        from neuralstrike.evaluation.verdict import TrialResult
+        from neuralstrike.oracles.benign_task import BenignTaskSpec
+
+        pack_path = corpus_path() / "phase10_execution_context.yaml"
+        try:
+            scenarios = load_corpus(pack_path)
+        except FileNotFoundError as exc:
+            raise ValidationError(f"the bundled execution-context pack is missing: {pack_path}") from exc
+        if vector is not None:
+            # Scenario ids use hyphens; the vector names use underscores.
+            suffix = vector.replace("_", "-")
+            scenarios = [s for s in scenarios if s.id.endswith(suffix)]
+        scenarios = [s for s in scenarios if s.benign_task_markers]
+        skipped = [s.id for s in load_corpus(pack_path) if not s.benign_task_markers]
+        if skipped:
+            console.print(f"[blue]skipped (no benign_task_markers; cannot dual-score): {skipped}[/blue]")
+        if not scenarios:
+            console.print("[red]No dual-scoreable scenarios in the pack.[/red]")
+            raise typer.Exit(3)
+
+        mgr = LLMManager()
+        j_model = judge_model or settings.judge_model
+        if judge and not settings.skip_reachability_check and target_type == "local":
+            # Fail-closed Judge resolution (same contract as resolve_models,
+            # without the attacker half — the exec-context pack has NO attacker
+            # LLM; the static attacker delivers the context).
+            try:
+                installed = set(await mgr.list_local_models())
+            except LLMError as exc:
+                raise ConfigError(
+                    f"cannot reach Ollama at the configured base URL to verify models "
+                    f"({exc.message}). Set NEURALSTRIKE_SKIP_REACHABILITY_CHECK=true only "
+                    "if you accept an un-judged run."
+                ) from exc
+            chain = [j_model, *settings.judge_model_fallbacks]
+            resolved = next((m for m in chain if m in installed), None)
+            if resolved is None:
+                raise ConfigError(
+                    f"Judge model {j_model!r} and all fallbacks are not installed "
+                    "on this Ollama; refusing to run with no reachable Judge "
+                    "(fail-closed)."
+                )
+            j_model = resolved
+
+        runner = TrialRunner(
+            base_seed=seed,
+            run_dir=run_dir,
+            inter_trial_delay=delay,
+            trial_timeout=timeout,
+        )
+        all_trials: list[TrialResult] = []
+        for i, s in enumerate(scenarios):
+            if i > 0 and delay > 0:
+                await asyncio.sleep(delay)
+            probe = execution_context_probe(
+                target,
+                target_type,
+                llm=mgr,
+                oracles_factory=s.build_oracles,
+                benign_spec=BenignTaskSpec(required_markers=s.benign_task_markers),
+                payload_template=s.adversarial_payload,
+                goal=s.legitimate_task,
+                scenario_id=s.id,
+                category=f"exec-context-{s.id.rsplit('-', 1)[-1]}",
+                severity=s.severity,
+                judge_model=j_model if judge else None,
+            )
+            s_report = await runner.run(
+                probe,
+                trials=trials,
+                judge_model=j_model if judge else None,
+            )
+            for t in s_report.trials:
+                outcome = stealth_score(t)
+                console.print(
+                    f"  {s.id}: AGS={t.verdict.value} ({t.fidelity.value}) "
+                    f"UGS={'yes' if outcome.ugs else 'no'} -> {outcome.label} "
+                    f"seed={t.seed}",
+                    markup=False,
+                )
+                all_trials.append(t)
+
+        table = stealth_table(all_trials)
+        overall = score_trials(all_trials)
+        console.print(
+            Panel(
+                f"stealthy={table['stealthy']} noisy={table['noisy']} "
+                f"resisted={table['resisted']} inconclusive={table['inconclusive']} "
+                f"(UGS preserved {table['ugs_preserved']}/{table['total']})\n" + overall.headline,
+                title=f"Execution-context pack — {table['total']} trials",
+            )
+        )
+        if table["stealthy"] > 0:
+            console.print(
+                "[red]STEALTHY compromises found (goal achieved AND benign task "
+                "preserved) — the real-defense-gap class.[/red]"
+            )
+            raise typer.Exit(1)
+
+    _run(run())
+
+
 # --- Phase 5 protocol + identity coverage ----------------------------------
 
 

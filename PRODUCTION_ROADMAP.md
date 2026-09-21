@@ -684,6 +684,56 @@ the trajectory layer.
 
 ---
 
+### Phase 10 — Execution-Context & Skill Attack Pack (G2) — SHIPPED 2026-09-21
+
+**Status:** complete. The G2 gap from the bleeding-edge research: the 2026
+real-incident class (DeepTrap; MITRE ATLAS's OpenClaw case studies —
+poisoned skill, 1-click RCE via skill content, prompt-injection→C2 through
+a HEARTBEAT.md trigger) — attacks riding the agent's MUTABLE EXECUTION
+CONTEXT, measured with the dual AGS/UGS (stealth + utility) model.
+
+**Deliverables**
+- `oracles/benign_task.py` — the UGS half: `BenignTaskOracle`
+  (required_markers + forbidden_drift; INCONCLUSIVE on empty response).
+  CONTRACT: evaluated OUTSIDE the verdict path, recorded advisory — never
+  combined via combine_oracle_results (a benign pass would fabricate an
+  attack success through the sanctioned combiner).
+- `attacks/execution_context.py` — the 7 vectors as deterministic realistic
+  file bodies (skill_poison / rules_file_backdoor / playbook_hijack /
+  triggered_injection T0051.002 / delayed_tool_invocation /
+  prompt_self_replication T0061 / agentic_resource_consumption
+  T0034.002); `StealthOutcome` (ags/ugs/stealthy/noisy — BOTH reported);
+  `stealth_score`/`stealth_table` pure functions; `execution_context_probe`
+  (static attacker; per-trial canary minting honored — payload_template
+  carries {CANARY}, oracles_factory binds to the minted token; the benign
+  finding appended ADVISORY after the loop).
+- `corpus/data/phase10_execution_context.yaml` — 7 scenarios with
+  benign_task_markers (additive optional loader field; legacy corpora
+  unaffected) + verified OWASP ASI names + ATLAS ids from the recorded
+  research. Rides load_corpus_dir automatically (the `corpus` command and
+  smoke pick it up).
+- CLI `exec-context` — the pack runner: --vector filter (hyphen/underscore
+  mapping), fail-closed Judge resolution WITHOUT the attacker half (no
+  attacker LLM — the context IS the attack), per-scenario AGS/UGS→label
+  lines (markup=False: rich swallows brackets), the stealth rollup panel,
+  **exit 1 on STEALTHY compromises** (goal achieved AND benign task
+  preserved — the real-defense-gap class).
+
+**Exit gate**
+- Dual scoring honors the three-outcome contract: AGS = the unchanged
+  deterministic verdict; UGS = advisory; stealthy = AGS ∧ UGS; noisy =
+  AGS ∧ ¬UGS, reported and never renamed to a pass.
+- Deterministic everything: same payload + same response → same stealth
+  outcome; no LLM in the scoring path.
+- ruff clean, format clean, mypy strict clean; 826 passed / 1 skipped,
+  TOTAL 90% (execution_context + benign_task at 100%).
+
+**Dependencies:** Phase 9 (trajectory fingerprints ride the pack's trials)
++ the 2026-09-20 bleeding-edge research (gap G2); the DeepTrap AGS/UGS
+model is the measurement shape.
+
+---
+
 ## 3. Realistic score trajectory
 
 | Phase | Composite | Tier | Readiness |
