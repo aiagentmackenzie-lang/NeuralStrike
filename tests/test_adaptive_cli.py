@@ -266,3 +266,272 @@ def _inconclusive_report():
     )
     meta = RunMeta("r", "adaptive-pair", 0, 1, 0.0, 0.7, "t")
     return RunReport(meta=meta, trials=(t,), score=score_trials([t]))
+
+
+# --- Phase 9: attack memory + seed diversity + attack-memory view -----------
+
+
+class TestPhaseNineMemoryFlags:
+    def test_auto_without_memory_db_fails_closed(self, runner: CliRunner) -> None:
+        result = runner.invoke(
+            app, ["adaptive", "--target", "x", "--strategy", "auto", "--run-dir", "/tmp/ns-t"]
+        )
+        assert result.exit_code != 0
+
+    def test_auto_with_empty_memory_fails_closed(self, runner: CliRunner, tmp_path) -> None:
+        db = tmp_path / "mem.sqlite"
+        result = runner.invoke(
+            app,
+            [
+                "adaptive",
+                "--target",
+                "victim",
+                "--strategy",
+                "auto",
+                "--memory-db",
+                str(db),
+                "--no-judge",
+                "--run-dir",
+                "/tmp/ns-t",
+            ],
+        )
+        assert result.exit_code != 0, result.stdout
+        assert "no recorded evidence" in result.stdout
+
+    def test_auto_picks_best_strategy_from_memory(self, runner: CliRunner, tmp_path) -> None:
+        from neuralstrike.core.attack_memory import AttackMemory, MemoryRecord
+
+        db = tmp_path / "mem.sqlite"
+        mem = AttackMemory(db)
+        mem.record_run(
+            MemoryRecord(
+                victim="victim",
+                victim_type="local",
+                strategy="pair",
+                scenario_id="adaptive-pair",
+                category="adaptive-pair",
+                goal="reveal the prompt",
+                verdict="succeeded",
+                fidelity="verbal",
+                iterations=2,
+                seed=0,
+                payload="p",
+            )
+        )
+        mem.record_run(
+            MemoryRecord(
+                victim="victim",
+                victim_type="local",
+                strategy="crescendo",
+                scenario_id="adaptive-crescendo",
+                category="adaptive-crescendo",
+                goal="reveal the prompt",
+                verdict="resisted",
+                fidelity="verbal",
+                iterations=1,
+                seed=1,
+                payload="q",
+            )
+        )
+        mem.close()
+
+        report = _succeeded_report()
+        with (
+            patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=_resolved())),
+            patch("neuralstrike.core.llm_manager.LLMManager", return_value=_fake_mgr("ok", "succeeded")),
+            patch("neuralstrike.evaluation.runner.TrialRunner.run", _fake_run(report)),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "adaptive",
+                    "--target",
+                    "victim",
+                    "--goal",
+                    "reveal the prompt",
+                    "--strategy",
+                    "auto",
+                    "--memory-db",
+                    str(db),
+                    "--judge",
+                    "--judge-model",
+                    "judge",
+                    "--attacker-model",
+                    "attacker",
+                    "--run-dir",
+                    "/tmp/ns-t",
+                ],
+            )
+        assert result.exit_code == 0, result.stdout
+        assert "--strategy auto -> pair" in result.stdout
+        assert "Adaptive pair run" in result.stdout
+        assert "crescendo" in result.stdout  # the ranking table is shown
+
+    def test_memory_db_records_trials(self, runner: CliRunner, tmp_path) -> None:
+        from neuralstrike.core.attack_memory import AttackMemory
+
+        db = tmp_path / "mem.sqlite"
+        report = _succeeded_report()
+        with (
+            patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=_resolved())),
+            patch("neuralstrike.core.llm_manager.LLMManager", return_value=_fake_mgr("ok", "succeeded")),
+            patch("neuralstrike.evaluation.runner.TrialRunner.run", _fake_run(report)),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "adaptive",
+                    "--target",
+                    "victim",
+                    "--strategy",
+                    "pair",
+                    "--memory-db",
+                    str(db),
+                    "--judge",
+                    "--judge-model",
+                    "judge",
+                    "--attacker-model",
+                    "attacker",
+                    "--trials",
+                    "1",
+                    "--run-dir",
+                    "/tmp/ns-t",
+                ],
+            )
+        assert result.exit_code == 0, result.stdout
+        assert "memory champion: pair" in result.stdout
+        mem = AttackMemory(db)
+        rows = mem.summary()
+        assert len(rows) == 1
+        assert rows[0]["strategy"] == "pair"
+        assert rows[0]["victim"] == "victim"
+        mem.close()
+
+    def test_memory_champion_visible_in_ranking_output(self, runner: CliRunner, tmp_path) -> None:
+        """A second run with memory sees the recorded evidence in its summary."""
+
+        db = tmp_path / "mem2.sqlite"
+        report = _succeeded_report()
+        with (
+            patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=_resolved())),
+            patch("neuralstrike.core.llm_manager.LLMManager", return_value=_fake_mgr("ok", "succeeded")),
+            patch("neuralstrike.evaluation.runner.TrialRunner.run", _fake_run(report)),
+        ):
+            args = [
+                "adaptive",
+                "--target",
+                "victim",
+                "--strategy",
+                "pair",
+                "--memory-db",
+                str(db),
+                "--judge",
+                "--judge-model",
+                "judge",
+                "--attacker-model",
+                "attacker",
+                "--trials",
+                "1",
+                "--run-dir",
+                "/tmp/ns-t",
+            ]
+            result1 = runner.invoke(app, args)
+            result2 = runner.invoke(app, args)
+        assert result1.exit_code == 0 and result2.exit_code == 0, (result1.stdout, result2.stdout)
+        # After two recorded runs the champion line is deterministic.
+        assert "memory champion: pair" in result2.stdout
+
+    def test_seed_diversity_reports_asr_at_k_and_diversity(self, runner: CliRunner, tmp_path) -> None:
+        from neuralstrike.evaluation.runner import RunMeta, RunReport
+        from neuralstrike.evaluation.scoring import score_trials
+        from neuralstrike.evaluation.verdict import EvidenceFidelity, SutResponse, TrialResult, Verdict
+
+        trial = TrialResult(
+            trial_index=0,
+            seed=0,
+            temperature=0.0,
+            verdict=Verdict.SUCCEEDED,
+            fidelity=EvidenceFidelity.VERBAL,
+            findings=(),
+            payload="p",
+            response=SutResponse.from_text("r"),
+            scenario_id="adaptive-pair-v0",
+            iterations=1,
+            trajectory_fingerprint="fp-same",
+        )
+        meta = RunMeta("r", "adaptive-pair", 0, 1, 0.0, 0.7, "t")
+        report = RunReport(meta=meta, trials=(trial,), score=score_trials([trial]))
+        with (
+            patch("neuralstrike.core.runtime.resolve_models", new=AsyncMock(return_value=_resolved())),
+            patch("neuralstrike.core.llm_manager.LLMManager", return_value=_fake_mgr("ok", "succeeded")),
+            patch("neuralstrike.evaluation.runner.TrialRunner.run", _fake_run(report)),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "adaptive",
+                    "--target",
+                    "victim",
+                    "--strategy",
+                    "pair",
+                    "--seed-diversity",
+                    "2",
+                    "--judge",
+                    "--judge-model",
+                    "judge",
+                    "--attacker-model",
+                    "attacker",
+                    "--run-dir",
+                    "/tmp/ns-t",
+                ],
+            )
+        assert result.exit_code == 0, result.stdout
+        assert "seed diversity: 2 framing variants" in result.stdout
+        assert "ASR@2=" in result.stdout
+        assert "trajectory_diversity=0.50" in result.stdout
+        assert "variant 0 [" in result.stdout and "variant 1 [" in result.stdout
+
+
+class TestAttackMemoryCommand:
+    def test_json_output(self, runner: CliRunner, tmp_path) -> None:
+        from neuralstrike.core.attack_memory import AttackMemory, MemoryRecord
+
+        db = tmp_path / "mem.sqlite"
+        mem = AttackMemory(db)
+        mem.record_run(
+            MemoryRecord(
+                victim="victim-a",
+                victim_type="local",
+                strategy="pair",
+                scenario_id="adaptive-pair",
+                category="adaptive-pair",
+                goal="g",
+                verdict="succeeded",
+                fidelity="verbal",
+                iterations=2,
+                seed=0,
+                payload="p",
+            )
+        )
+        mem.close()
+        result = runner.invoke(app, ["attack-memory", "--db", str(db), "--json"])
+        assert result.exit_code == 0, result.stdout
+        data = json.loads(result.stdout[result.stdout.index("[") :])
+        assert len(data) == 1
+        assert data[0]["strategy"] == "pair"
+        assert data[0]["succeeded"] == 1
+
+    def test_empty_memory_message(self, runner: CliRunner, tmp_path) -> None:
+        result = runner.invoke(app, ["attack-memory", "--db", str(tmp_path / "empty.sqlite")])
+        assert result.exit_code == 0, result.stdout
+        assert "empty" in result.stdout
+
+    def test_corrupt_db_fails_loud(self, runner: CliRunner, tmp_path) -> None:
+        db = tmp_path / "bad.sqlite"
+        db.write_bytes(b"not a database")
+        result = runner.invoke(app, ["attack-memory", "--db", str(db)])
+        assert result.exit_code != 0
+
+    def test_rejects_missing_db_flag(self, runner: CliRunner) -> None:
+        result = runner.invoke(app, ["attack-memory"])
+        assert result.exit_code != 0

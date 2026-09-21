@@ -19,6 +19,7 @@ from collections.abc import Awaitable, Callable
 from neuralstrike.adapters.base import Message, TargetAdapter, ToolSchema
 from neuralstrike.core.adversarial_loop import AdversarialLoop, LoopResult
 from neuralstrike.core.llm_manager import LLMManager
+from neuralstrike.core.trajectory import fingerprint, trajectory_from_loop_history
 from neuralstrike.evaluation.runner import Probe
 from neuralstrike.evaluation.verdict import (
     EvidenceFidelity,
@@ -57,8 +58,16 @@ def trial_from_loop(
     seed: int,
     temperature: float,
     loop_result: LoopResult,
+    strategy_label: str = "unknown",
+    goal: str | None = None,
 ) -> TrialResult:
-    """Convert a :class:`LoopResult` into a replayable :class:`TrialResult`."""
+    """Convert a :class:`LoopResult` into a replayable :class:`TrialResult`.
+
+    When ``goal`` is provided (Phase 9, additive), the trial also carries the
+    trajectory fingerprint derived from the loop's recorded history — the
+    trajectory-diversity unit. Omitting ``goal`` preserves the pre-Phase-9
+    behavior exactly.
+    """
     verdict = Verdict(loop_result["verdict"])
     fidelity = EvidenceFidelity(loop_result["fidelity"])
     findings: list[Finding] = []
@@ -81,6 +90,11 @@ def trial_from_loop(
     else:
         response = SutResponse.from_text(loop_result["response"])
 
+    fingerprint_str = ""
+    if goal is not None:
+        traj = trajectory_from_loop_history(loop_result["history"], strategy_label=strategy_label, goal=goal)
+        fingerprint_str = fingerprint(traj)
+
     return TrialResult(
         trial_index=trial_index,
         seed=seed,
@@ -92,6 +106,7 @@ def trial_from_loop(
         response=response,
         scenario_id=scenario_id,
         iterations=loop_result["iteration"],
+        trajectory_fingerprint=fingerprint_str,
     )
 
 

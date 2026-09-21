@@ -41,6 +41,12 @@ from typing import Any, TypedDict
 from neuralstrike.core.config import settings
 from neuralstrike.core.exceptions import LLMError
 from neuralstrike.core.llm_manager import LLMManager, llm_manager
+from neuralstrike.core.trajectory import (
+    Trajectory,
+    TurnTrace,
+    hash_goal,
+    turn_trace_from_parts,
+)
 from neuralstrike.evaluation.verdict import (
     EvidenceFidelity,
     Finding,
@@ -55,6 +61,11 @@ logger = get_logger("neuralstrike.core.loop")
 
 # (iteration, goal, current_prompt, feedback) -> payload
 AttackerFn = Callable[[int, str, str, str], Awaitable[str]]
+
+# Trajectory-aware attacker (Phase 9): the same signature as AttackerFn plus
+# the current :class:`Trajectory` snapshot (observed, past-tense verdict data).
+# The attacker still only GENERATES — scoring stays with oracles + Judge.
+TrajectoryAttackerFn = Callable[[int, str, str, str, Trajectory], Awaitable[str]]
 
 
 class IterationRecord(TypedDict):
@@ -111,6 +122,8 @@ class AdversarialLoop:
         seed: int = 0,
         victim_temperature: float = 0.0,
         attacker_temperature: float = 0.7,
+        strategy_label: str = "unknown",
+        traj_attacker_fn: TrajectoryAttackerFn | None = None,
     ) -> None:
         if victim_type not in {"local", "remote"}:
             raise ValueError(f"victim_type must be 'local' or 'remote', got {victim_type!r}")
@@ -129,6 +142,14 @@ class AdversarialLoop:
         self.seed = int(seed)
         self.victim_temperature = float(victim_temperature)
         self.attacker_temperature = float(attacker_temperature)
+        # Phase 9 (additive): strategy label for the trajectory/memory layer and
+        # the optional trajectory-aware attacker. When ``traj_attacker_fn`` is
+        # set it REPLACES the legacy attacker for the whole run and receives a
+        # per-iteration Trajectory snapshot; when unset, behavior is identical
+        # to the pre-Phase-9 loop (legacy callers untouched).
+        self.strategy_label = str(strategy_label)
+        self._traj_attacker_fn = traj_attacker_fn
+        self.turn_traces: list[TurnTrace] = []
         self.history: list[IterationRecord] = []
 
     @property
@@ -232,6 +253,7 @@ class AdversarialLoop:
         if max_iterations < 1:
             raise ValueError(f"max_iterations must be >= 1, got {max_iterations}")
         self.history = []
+        self.turn_traces = []
         current_prompt = initial_goal
         feedback = ""
         iteration = 0
@@ -245,8 +267,20 @@ class AdversarialLoop:
             iteration += 1
             logger.info("Iteration %d/%d...", iteration, max_iterations)
 
-            # 1. Attacker — fail-closed.
-            payload = await self._attacker_fn(iteration, initial_goal, current_prompt, feedback)
+            # 1. Attacker — fail-closed. Trajectory-aware attackers receive the
+            # snapshot of turns OBSERVED SO FAR (never the turn being planned).
+            if self._traj_attacker_fn is not None:
+                snapshot = Trajectory(
+                    strategy_label=self.strategy_label,
+                    goal_hash=hash_goal(initial_goal),
+                    goal=initial_goal,
+                    turns=tuple(self.turn_traces),
+                )
+                payload = await self._traj_attacker_fn(
+                    iteration, initial_goal, current_prompt, feedback, snapshot
+                )
+            else:
+                payload = await self._attacker_fn(iteration, initial_goal, current_prompt, feedback)
 
             # 2. Victim — record errors as Inconclusive iterations, continue.
             victim_status = "ok"
@@ -267,6 +301,7 @@ class AdversarialLoop:
             last_fidelity = fidelity
             last_findings = findings
 
+            serialized_findings = [_finding_dict(f) for f in findings]
             self.history.append(
                 IterationRecord(
                     iteration=iteration,
@@ -274,9 +309,21 @@ class AdversarialLoop:
                     response=response,
                     verdict=verdict.value,
                     fidelity=fidelity.value,
-                    findings=[_finding_dict(f) for f in findings],
+                    findings=serialized_findings,
                     status=victim_status,
                     feedback=feedback,
+                )
+            )
+            # Phase 9: accumulate the structured turn trace for the
+            # trajectory-aware attacker (no behavioral change otherwise).
+            self.turn_traces.append(
+                turn_trace_from_parts(
+                    iteration,
+                    response,
+                    verdict=verdict.value,
+                    fidelity=fidelity.value,
+                    findings=serialized_findings,
+                    status=victim_status,
                 )
             )
 
@@ -356,4 +403,4 @@ def _result(
     )
 
 
-__all__ = ["AdversarialLoop", "AttackerFn", "IterationRecord", "LoopResult"]
+__all__ = ["AdversarialLoop", "AttackerFn", "IterationRecord", "LoopResult", "TrajectoryAttackerFn"]
