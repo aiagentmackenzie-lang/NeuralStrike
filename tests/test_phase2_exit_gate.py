@@ -1,6 +1,6 @@
 """Phase 2 exit-gate tests — the four requirements, all on the bundled fixture.
 
-The gate (from PRODUCTION_ROADMAP.md §Phase 2):
+The Phase 2 gate:
 
 1. A full corpus run against the bundled vulnerable agent fixture produces a
    SARIF report that maps every finding to an ASI/LLM/ATLAS ID and a
