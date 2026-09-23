@@ -257,8 +257,25 @@ class AttackChainDelta:
         INCONCLUSIVE — the victim never saw the canary), so the overall delta can
         read +0.0% while the firewall stopped half the chain. The catch rate is
         the honest complement: it says what the screen stopped, per run.
+
+        FT-001 (fleet Wave F): ``auth_error`` is NOT a catch — the firewall
+        never evaluated the payload (bad/missing key, tenant_mismatch). The
+        old "not in (allow, error)" form counted NG auth rejections as
+        catches. Use :attr:`firewall_auth_errors` to see how much of the run
+        was credentials noise.
         """
-        return sum(1 for a in self.payloads if a.firewall_verdict not in ("allow", "error"))
+        return sum(1 for a in self.payloads if a.firewall_verdict not in ("allow", "error", "auth_error"))
+
+    @property
+    def firewall_auth_errors(self) -> int:
+        """Payloads rejected by NG auth/config BEFORE any evaluation (FT-001).
+
+        A non-measurement class: the firewall returned no verdict (401
+        unauthorized / missing key, 403 tenant_mismatch). Never counted as
+        a catch; ``firewall_auth_errors == n`` means the run measured
+        NOTHING.
+        """
+        return sum(1 for a in self.payloads if a.firewall_verdict == "auth_error")
 
     @property
     def catch_rate(self) -> float:

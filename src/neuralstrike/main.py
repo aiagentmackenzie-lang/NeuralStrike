@@ -1167,6 +1167,7 @@ async def _run_chain_with_telemetry(
 
     if telemetry is None:
         delta = await run_attack_chain_delta(screen, victim_fn, victim_name=victim_name)
+        _raise_on_all_auth_rejected(delta)
         _print_attack_chain_delta(delta, json_out)
         return
     started_at = datetime.now(timezone.utc)
@@ -1186,6 +1187,7 @@ async def _run_chain_with_telemetry(
         timeout=telemetry.timeout,
     )
     delta = await run_attack_chain_delta(screen, victim_fn, victim_name=victim_name)
+    _raise_on_all_auth_rejected(delta)
     events = build_exercise_events(telemetry, delta, started_at=started_at, target=target, seed=seed)
     post_delivered = await post_events(
         telemetry.ingest_url, telemetry.token, events, timeout=telemetry.timeout
@@ -1404,6 +1406,24 @@ def neuralguard_bench(
     _run(_run_bench())
 
 
+def _raise_on_all_auth_rejected(delta: Any) -> None:
+    """FT-001: an all-auth-rejected run measured NOTHING — fail loudly instead.
+
+    A receipt whose every payload came back ``auth_error`` (bad/missing key,
+    tenant_mismatch) carries zero security information; writing it would
+    repeat the live-fleet failure where 8 auth 403s were reported as
+    "8/8 caught (100%)". Partial auth errors stay exit-0 with the loud
+    warning line; ALL of them is a validation failure.
+    """
+    if delta.n and delta.firewall_auth_errors == delta.n:
+        raise ValidationError(
+            f"ALL {delta.n} payload(s) were rejected by NeuralGuard auth/config "
+            "(auth_error) BEFORE any evaluation — the receipt would measure "
+            "nothing. Check the API key and tenant binding (the bearer is the "
+            "bare key part; the tenant is bound at key registration)."
+        )
+
+
 def _print_attack_chain_delta(
     delta: Any, json_out: str | None, *, run_info: dict[str, object] | None = None
 ) -> None:
@@ -1431,6 +1451,14 @@ def _print_attack_chain_delta(
             f"    {a.payload_id:<14} {a.phase.value:<10} "
             f"firewall={a.firewall_verdict:<9} -> defended={a.defended_verdict.value}"
         )
+    # FT-001 (fleet Wave F): auth rejections are NOT catches. Surface them
+    # loudly — a receipt built on credentials noise is not a measurement.
+    if delta.firewall_auth_errors:
+        console.print(
+            f"  [bold red]WARNING:[/bold red] {delta.firewall_auth_errors}/{delta.n} payload(s) "
+            "rejected by NG auth/config (auth_error) BEFORE any evaluation — "
+            "excluded from catch scoring; check the API key/tenant binding"
+        )
     if json_out:
         import json as _json
 
@@ -1446,6 +1474,7 @@ def _print_attack_chain_delta(
             # stopped half the chain. These keys say what the screen STOPPED.
             "firewall_caught": delta.firewall_caught,
             "catch_rate": delta.catch_rate,
+            "firewall_auth_errors": delta.firewall_auth_errors,
             "baseline_succeeded": delta.baseline_succeeded,
             "baseline_conclusive": delta.baseline_conclusive,
             "defended_succeeded": delta.defended_succeeded,
