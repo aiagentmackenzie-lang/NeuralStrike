@@ -86,7 +86,10 @@ class ScreenResult:
 
     ``verdict`` is the NeuralGuard ``/v1/evaluate`` verdict string
     (``allow`` | ``block`` | ``sanitize`` | ``escalate`` | ``quarantine``
-    | ``rate_limit`` | ``error``). ``caught`` is ``verdict != "allow"``.
+    | ``rate_limit`` | ``error`` | ``auth_error``). ``caught`` is
+    ``verdict != "allow"``; note ``error``/``auth_error`` are
+    NON-MEASUREMENTS (the firewall never evaluated the prompt) — they are
+    excluded from catch scoring downstream and surfaced separately.
     ``findings`` carries the NeuralGuard finding dicts (rule_id, severity,
     etc.) when available — diagnostic, never relied on for scoring.
     """
@@ -178,8 +181,19 @@ class NeuralGuardHTTPScreen(NeuralGuardScreen):
             body = {}
         verdict = body.get("verdict") if isinstance(body.get("verdict"), str) else None
         if verdict is None:
+            body_err = body.get("error")
+            if isinstance(body_err, str) and body_err:
+                # FT-001 (fleet Wave F): NG auth/config rejections (401
+                # unauthorized / missing key, 403 tenant_mismatch) answer
+                # WITHOUT a verdict field. Inferring "block" from the 403
+                # status counted credentials noise as firewall catches —
+                # an unmeasured receipt (live: 8 auth 403s reported as
+                # "8/8 caught (100%)" with ZERO audit rows behind them).
+                # Auth rejections are auth_error: a non-measurement, never
+                # a security verdict.
+                verdict = "auth_error"
             # Fall back to inferring from the status code (matches the NG harness).
-            if resp.status_code == 403:
+            elif resp.status_code == 403:
                 verdict = "block"
             elif resp.status_code == 200:
                 verdict = "allow"
