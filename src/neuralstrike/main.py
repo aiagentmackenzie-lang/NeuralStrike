@@ -981,17 +981,23 @@ def scan(
                 "to drive an agent that uses MCP-sourced tools."
             )
 
-        probe_obj = adapter_scan_probe(
-            target_adapter,
-            payload=prompt,
-            oracles=[oracle],
-            canary_tools=canary if tier != "text" else (),
-            tools=() if tier == "text" else TargetAdapter.canary_tools_as_schemas(canary),
-            scenario_id=scenario_id,
-            category="asi05-tool-poisoning",
-        )
-        runner = TrialRunner(base_seed=seed, run_dir=run_dir, inter_trial_delay=delay, trial_timeout=timeout)
-        report = await runner.run(probe_obj, trials=trials, intensity=intensity)
+        try:
+            probe_obj = adapter_scan_probe(
+                target_adapter,
+                payload=prompt,
+                oracles=[oracle],
+                canary_tools=canary if tier != "text" else (),
+                tools=() if tier == "text" else TargetAdapter.canary_tools_as_schemas(canary),
+                scenario_id=scenario_id,
+                category="asi05-tool-poisoning",
+            )
+            runner = TrialRunner(
+                base_seed=seed, run_dir=run_dir, inter_trial_delay=delay, trial_timeout=timeout
+            )
+            report = await runner.run(probe_obj, trials=trials, intensity=intensity)
+        finally:
+            if isinstance(target_adapter, OpenAIEndpointAdapter | A2AAdapter | LangGraphServerAdapter):
+                await target_adapter.close()
         score = report.score
         assert score is not None
         console.print(Panel(score.headline, title=f"Scan {report.meta.run_id} — {scenario_id}"))
@@ -1003,8 +1009,6 @@ def scan(
         if save_baseline_dir:
             path = save_baseline(save_baseline_dir, report)
             console.print(f"[green]Baseline saved → {path}[/green]")
-        if isinstance(target_adapter, OpenAIEndpointAdapter | A2AAdapter | LangGraphServerAdapter):
-            await target_adapter.close()
         if baseline_dir:
             result = compare_baseline(baseline_dir, report, fail_on=fail_on)
             console.print(
@@ -1793,6 +1797,7 @@ def corpus(
     out: str = typer.Option("neuralstrike-report", help="Output file path (extension added per --format)."),
     fail_on: str = typer.Option("regression", help="Gate: never|vuln|regression; never is report-only."),
     trials: int = typer.Option(1, help="Trials per scenario (k-trial run)."),
+    run_dir: str = typer.Option("runs", help="Private immutable per-scenario evidence directory."),
     seed: int = typer.Option(2024, help="Base seed for reproducibility."),
     limit: int | None = typer.Option(None, "--limit", help="Run only the first N scenarios (smoke / debug)."),
     delay: float = typer.Option(0.0, "--delay", help="Seconds to sleep between scenarios."),
@@ -1903,17 +1908,26 @@ def corpus(
                 )
                 runner = TrialRunner(
                     base_seed=seed,
-                    run_dir=None,
+                    run_dir=run_dir,
                     inter_trial_delay=delay,
                     trial_timeout=timeout,
                 )
-                r = await runner.run(probe, trials=trials, persist=False)
+                r = await runner.run(probe, trials=trials)
                 reports.append(r)
                 if task is not None and progress_ctx is not None:
                     progress_ctx.advance(task)
         finally:
-            if progress_ctx is not None:
-                progress_ctx.stop()
+            try:
+                if progress_ctx is not None:
+                    progress_ctx.stop()
+            finally:
+                closed = await asyncio.gather(
+                    *(a.close() for a in adapters_to_close if isinstance(a, OpenAIEndpointAdapter)),
+                    return_exceptions=True,
+                )
+                for result in closed:
+                    if isinstance(result, BaseException):
+                        raise result
         target = url or model or "bundled-vulnerable-fixture"
         corpus_run = build_corpus_run(
             scenarios=scenarios,
@@ -1923,9 +1937,6 @@ def corpus(
             adapter=adapter,
             target=target,
         )
-        for a in adapters_to_close:
-            if isinstance(a, OpenAIEndpointAdapter):
-                await a.close()
         ext = {"sarif": ".sarif", "json": ".json", "junit": ".xml", "markdown": ".md", "pdf": ".pdf"}[format]
         path = out + ext
         content: str | bytes
@@ -1942,10 +1953,9 @@ def corpus(
         from pathlib import Path
 
         out_path = Path(path)
-        if isinstance(content, bytes):
-            out_path.write_bytes(content)
-        else:
-            out_path.write_text(content, encoding="utf-8")
+        from neuralstrike.utils.artifacts import write_private_artifact
+
+        write_private_artifact(out_path, content)
         console.print(Panel(corpus_run_summary(corpus_run), title=f"Corpus run → {path}"))
         console.print(
             f"[green]{len(scenarios)} scenarios · {corpus_run.overall_total} trials · "

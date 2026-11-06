@@ -15,6 +15,7 @@ from litellm import acompletion
 
 from neuralstrike.core.config import settings
 from neuralstrike.core.exceptions import LLMError
+from neuralstrike.evaluation.controls import current_trial_controls
 from neuralstrike.utils.logging import get_logger
 
 logger = get_logger("neuralstrike.core.llm")
@@ -58,13 +59,25 @@ class LLMManager:
         model: str,
         prompt: str,
         api_key: str | None = None,
+        *,
+        seed: int | None = None,
+        temperature: float | None = None,
     ) -> str:
-        """Call a remote model via LiteLLM. Raises :class:`LLMError` on failure."""
+        """Call LiteLLM with best-effort controls; never retry without rejected controls."""
+        controls = current_trial_controls()
+        options: dict[str, Any] = {}
+        if seed is not None or controls:
+            options["seed"] = seed if seed is not None else controls.seed if controls else None
+        if temperature is not None or controls:
+            options["temperature"] = (
+                temperature if temperature is not None else controls.temperature if controls else None
+            )
         try:
             response = await acompletion(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 api_key=api_key,
+                **options,
             )
         except Exception as exc:
             logger.error("LiteLLM error for %s: %s", model, exc)

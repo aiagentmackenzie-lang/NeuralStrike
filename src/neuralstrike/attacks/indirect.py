@@ -45,11 +45,12 @@ proof the harness delivered via the right channel, by adapter trace.
 from __future__ import annotations
 
 import secrets
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from dataclasses import replace as _replace
 
 from neuralstrike.adapters.base import Message, TargetAdapter, ToolSchema
 from neuralstrike.corpus.loader import CANARY_PLACEHOLDER, DeliveryVector, Scenario
+from neuralstrike.evaluation.identity import comparison_identity
 from neuralstrike.evaluation.probes import strongest_fidelity
 from neuralstrike.evaluation.runner import Probe
 from neuralstrike.evaluation.verdict import SutResponse, TrialResult
@@ -283,6 +284,13 @@ class IndirectHarness:
                 fidelity=strongest_fidelity(findings) if findings else fidelity,
                 findings=tuple(findings),
                 payload=inputs.prompt,
+                inputs={
+                    **asdict(inputs),
+                    "canary": canary,
+                    "scenario": asdict(scenario),
+                    "tools": [asdict(tool) for tool in tools],
+                    "capture_status": "adapter-inputs; see exchanges for actual provider bodies",
+                },
                 response=response,
                 scenario_id=scenario.id,
                 iterations=max_iterations,
@@ -294,6 +302,15 @@ class IndirectHarness:
             factory=_factory,
             category=scenario.owasp_category,
             severity=scenario.severity,
+            comparison_identity=comparison_identity(
+                adapter,
+                asdict(scenario),
+                [
+                    {"name": tool.name, "description": tool.description, "parameters": tool.parameters}
+                    for tool in (*tools, *TargetAdapter.canary_tools_as_schemas(canary_tools))
+                ],
+                scenario.build_oracles("CANARY-0000000000000000"),
+            ),
         )
 
 

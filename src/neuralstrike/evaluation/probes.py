@@ -15,11 +15,13 @@ fully seed/temperature-pinned and replayable.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from dataclasses import asdict
 
 from neuralstrike.adapters.base import Message, TargetAdapter, ToolSchema
 from neuralstrike.core.adversarial_loop import AdversarialLoop, LoopResult
 from neuralstrike.core.llm_manager import LLMManager
 from neuralstrike.core.trajectory import fingerprint, trajectory_from_loop_history
+from neuralstrike.evaluation.identity import comparison_identity
 from neuralstrike.evaluation.runner import Probe
 from neuralstrike.evaluation.verdict import (
     EvidenceFidelity,
@@ -233,6 +235,14 @@ def adapter_scan_probe(
             fidelity=strongest_fidelity(findings) if findings else fidelity,
             findings=tuple(findings),
             payload=payload,
+            inputs={
+                "prompt": payload,
+                "system_prompt": sys_prompt,
+                "history": [asdict(message) for message in history],
+                "tools": [asdict(tool) for tool in tools],
+                "canary": canary,
+                "capture_status": "adapter-inputs; see exchanges for actual provider bodies",
+            },
             response=response,
             scenario_id=scenario_id,
             iterations=1,
@@ -244,4 +254,25 @@ def adapter_scan_probe(
         factory=_factory,
         category=category,
         severity=severity,
+        comparison_identity=comparison_identity(
+            adapter,
+            {
+                "scenario_id": scenario_id,
+                "payload": payload,
+                "system_prompt": system_prompt,
+                "history": [asdict(message) for message in history],
+                "goal": goal,
+            },
+            [asdict(tool) for tool in tools]
+            + [
+                {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.parameters,
+                    "required": tool.required,
+                }
+                for tool in canary_tools
+            ],
+            oracles,
+        ),
     )

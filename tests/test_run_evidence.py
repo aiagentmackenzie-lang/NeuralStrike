@@ -66,3 +66,38 @@ async def test_cancelled_run_never_claims_committed_evidence(tmp_path):
     manifest = json.loads(next(tmp_path.glob("*/manifest.json")).read_text())
     assert manifest["state"] != "complete"
     assert not list(tmp_path.glob("*/report.json"))
+
+
+@pytest.mark.asyncio
+async def test_failed_atomic_replace_never_commits_partial_trial(tmp_path, monkeypatch):
+    import os
+
+    from neuralstrike.evaluation import runner as module
+
+    original = os.replace
+
+    def fail_trial(source, destination):
+        if destination.name == "trial-0.json":
+            raise OSError("simulated disk failure")
+        return original(source, destination)
+
+    monkeypatch.setattr(module.os, "replace", fail_trial)
+    with pytest.raises(OSError, match="simulated disk failure"):
+        await TrialRunner(run_dir=tmp_path).run(Probe("s", "fixture", factory))
+    directory = next(tmp_path.iterdir())
+    assert json.loads((directory / "manifest.json").read_text())["state"] == "running"
+    assert not (directory / "trial-0.json").exists()
+    assert not list(directory.glob("*.tmp"))
+
+
+@pytest.mark.asyncio
+async def test_existing_execution_directory_is_never_reused(tmp_path, monkeypatch):
+    from neuralstrike.evaluation import runner as module
+
+    monkeypatch.setattr(module, "_run_id", lambda *args: "collision")
+    runner = TrialRunner(run_dir=tmp_path)
+    await runner.run(Probe("s", "fixture", factory))
+    original = {p.name: p.read_bytes() for p in (tmp_path / "collision").iterdir()}
+    with pytest.raises(FileExistsError):
+        await runner.run(Probe("s", "fixture", factory))
+    assert {p.name: p.read_bytes() for p in (tmp_path / "collision").iterdir()} == original

@@ -71,6 +71,7 @@ class ScenarioResult:
     total: int
     trials: tuple[TrialOutcome, ...]
     controls: tuple[ControlRef, ...] = field(default_factory=tuple)
+    evidence: dict[str, Any] = field(default_factory=dict)
 
     @property
     def is_finding(self) -> bool:
@@ -119,6 +120,7 @@ class CorpusRun:
 def _scenario_to_dict(s: ScenarioResult) -> dict[str, Any]:
     return {
         "id": s.scenario.id,
+        "evidence": s.evidence,
         "owasp_category": s.scenario.owasp_category,
         "owasp_name": s.scenario.owasp_name,
         "mitre_atlas": list(s.scenario.mitre_atlas),
@@ -266,6 +268,7 @@ def build_corpus_run(
                 total=len(verdicts),
                 trials=_trial_outcomes(report),
                 controls=controls,
+                evidence=report.to_dict(),
             )
         )
 

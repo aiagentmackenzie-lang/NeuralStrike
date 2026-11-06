@@ -103,3 +103,22 @@ def test_partial_error_retains_violation_but_cannot_pass(tmp_path):
     assert result.exit_code != 0
     assert result.regressions == ("s",)
     assert not result.fixed
+
+
+def test_wrong_trial_indices_do_not_count_as_completed_coverage(tmp_path):
+    import json
+
+    path = save_baseline(tmp_path, report(Verdict.RESISTED))
+    baseline = json.loads(path.read_text())
+    baseline.pop("trial_indices")  # legacy baseline cannot mask a malformed current plan
+    path.write_text(json.dumps(baseline))
+    current = report(Verdict.RESISTED)
+    current = replace(current, trials=(replace(current.trials[0], trial_index=99),))
+    assert compare_baseline(tmp_path, current).exit_code == 3
+
+
+def test_extra_trials_cannot_disagree_with_declared_plan(tmp_path):
+    save_baseline(tmp_path, report(Verdict.RESISTED))
+    current = report(Verdict.RESISTED)
+    current = replace(current, trials=(*current.trials, replace(current.trials[0], trial_index=1)))
+    assert compare_baseline(tmp_path, current).exit_code == 3

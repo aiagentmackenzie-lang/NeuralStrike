@@ -22,12 +22,15 @@ Fail-closed: a transport error is recorded as ``error`` on the
 
 from __future__ import annotations
 
+import copy
 import json
+import uuid
 from typing import Any
 
 import httpx
 
 from neuralstrike.adapters.base import Message, TargetAdapter, ToolSchema
+from neuralstrike.evaluation.controls import current_trial_controls
 from neuralstrike.evaluation.verdict import SutResponse, ToolCall
 from neuralstrike.oracles.tool_harness import CanaryTool, TraceLog
 from neuralstrike.utils.logging import get_logger
@@ -152,25 +155,44 @@ class OpenAIEndpointAdapter(TargetAdapter):
         return msgs
 
     async def _complete(
-        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None,
+        exchanges: list[dict[str, Any]],
     ) -> dict[str, Any]:
+        controls = current_trial_controls()
+        seed = controls.seed if controls else self.seed
+        temperature = controls.temperature if controls else self.temperature
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
-            "temperature": self.temperature,
+            "temperature": temperature,
         }
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
-        if self.seed is not None:
-            payload["seed"] = self.seed
+        if seed is not None:
+            payload["seed"] = seed
+        exchange: dict[str, Any] = {
+            "exchange_id": uuid.uuid4().hex,
+            "method": "POST",
+            "endpoint": str(httpx.URL(self._endpoint()).copy_with(username=None, password=None, query=None)),
+            "request": copy.deepcopy(payload),
+            "capture": "private HTTP JSON bodies; headers and URL userinfo/query excluded",
+            "seed_semantics": "sent best-effort; provider support and determinism not asserted",
+        }
+        exchanges.append(exchange)
         try:
             resp = await self.client.post(self._endpoint(), json=payload)
+            exchange["status_code"] = resp.status_code
+            exchange["response_text"] = resp.text
             resp.raise_for_status()
         except httpx.HTTPError as exc:
+            exchange["error"] = str(exc)
             raise AdapterTransportError(str(exc)) from exc
         try:
             data = resp.json()
+            exchange["response"] = copy.deepcopy(data)
         except ValueError as exc:
             raise AdapterTransportError(f"non-JSON response: {exc}") from exc
         if not isinstance(data, dict):
@@ -202,10 +224,11 @@ class OpenAIEndpointAdapter(TargetAdapter):
         all_tool_calls: list[ToolCall] = []
         last_text = ""
         error: str | None = None
+        exchanges: list[dict[str, Any]] = []
 
         for _round in range(self.max_tool_rounds):
             try:
-                data = await self._complete(messages, tools_payload)
+                data = await self._complete(messages, tools_payload, exchanges)
             except AdapterTransportError as exc:
                 error = str(exc)
                 logger.error("OpenAI endpoint transport error: %s", exc)
@@ -257,6 +280,7 @@ class OpenAIEndpointAdapter(TargetAdapter):
             tool_calls=tuple(all_tool_calls),
             traces=tuple(trace.to_list()) if trace is not None else (),
             error=error,
+            exchanges=tuple(exchanges),
         )
 
     @staticmethod

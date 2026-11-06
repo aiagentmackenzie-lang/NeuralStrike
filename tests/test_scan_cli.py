@@ -129,12 +129,12 @@ class TestScanCommand:
         assert result.exit_code == 0, result.stdout
         assert "Baseline saved" in result.stdout
 
-    def test_scan_baseline_gate_exit_1_on_vuln(self, runner: CliRunner, tmp_path) -> None:
+    def test_legacy_scan_baseline_refused_without_identity(self, runner: CliRunner, tmp_path) -> None:
         from neuralstrike.evaluation.baseline import save_baseline
         from neuralstrike.evaluation.runner import RunMeta, RunReport
         from neuralstrike.evaluation.scoring import score_trials
 
-        # Save a Succeeded baseline; the scan also Succeeds -> pre-existing vuln (exit 1).
+        # A legacy unbound baseline cannot establish comparability with a modern scan.
         trial = _succeeded_trial()
         meta = RunMeta("r", "asi01-scan", 0, 1, 0.0, 0.7, "t")
         save_baseline(tmp_path / "bl", RunReport(meta=meta, trials=(trial,), score=score_trials([trial])))
@@ -157,6 +157,25 @@ class TestScanCommand:
                     str(tmp_path / "runs"),
                 ],
             )
+        assert result.exit_code == 3, result.stdout
+        assert "identity" in result.stdout
+
+    def test_scan_matching_baseline_still_fails_existing_vulnerability(self, runner, tmp_path):
+        args = [
+            "scan",
+            "--adapter",
+            "openai",
+            "--url",
+            "http://victim",
+            "--model",
+            "m",
+            "--run-dir",
+            str(tmp_path / "runs"),
+        ]
+        with patch("neuralstrike.adapters.openai_endpoint.OpenAIEndpointAdapter", _FakeOpenAIAdapter):
+            saved = runner.invoke(app, [*args, "--save-baseline-dir", str(tmp_path / "bl")])
+            assert saved.exit_code == 0, saved.stdout
+            result = runner.invoke(app, [*args, "--baseline-dir", str(tmp_path / "bl")])
         assert result.exit_code == 1, result.stdout
 
 

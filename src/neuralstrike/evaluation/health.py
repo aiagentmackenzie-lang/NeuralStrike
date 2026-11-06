@@ -44,7 +44,7 @@ def assessment_health(reports: Sequence[RunReport], *, selected: int | None = No
     conclusive = sum(t.verdict is not Verdict.INCONCLUSIVE for t in trials)
     errors = sum(bool(t.error or (t.response and t.response.error)) for t in trials)
     valid_indices = all(
-        len({(t.scenario_id, t.trial_index) for t in r.trials}) == len(r.trials)
+        sorted(t.trial_index for t in r.trials) == list(range(r.meta.trials))
         and len(r.trials) == r.meta.trials
         for r in reports
     )

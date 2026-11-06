@@ -126,3 +126,85 @@ Next: capture actual request envelopes/seeds and complete NS-02/03/04 acceptance
 fixtures, then canonical replay. Do not advance claims to Phase 1 completion or
 pilot readiness. Independent human pilots require real authorized participants;
 none have occurred. NeuralGuard and Scarlet remain optional.
+
+## 2026-11-06 — pushed baseline fixes, continued Phase 0
+
+User authorized pushing to main and continuing Phase 0. Fetched origin/main;
+there was no divergence or unrelated work. Committed/pushed the preceding work as
+`0abbd2e` (`fix: restore Phase 0 gate, evidence, and execution safety contracts`).
+
+### Newly demonstrated and fixed
+
+- NS-05: three new regressions initially failed: missing wire seed, missing
+  injection-bearing request history, and shared-adapter seed isolation. A
+  task-local TrialControls context now binds runner seed/temperature without
+  mutating shared adapters. OpenAI requests record actual sent JSON per round,
+  response JSON/model/fingerprint, HTTP status and errors. Request snapshots are
+  copied before subsequent tool rounds mutate history. Remote LiteLLM controls
+  are also forwarded (verified with a mocked provider; no cloud inference).
+- Two further regressions failed before fixes: remote controls omitted, and
+  corpus CLI had no durable raw-evidence path. Corpus now persists immutable
+  per-scenario run directories (`--run-dir`, default runs). JSON embeds original
+  RunReport evidence, including full woven adapter inputs and captured exchanges.
+  Corpus artifacts are atomically written with mode 0600. Headers and URL
+  userinfo/query are excluded from exchange capture. Raw bodies may still contain
+  sensitive target content: these are private evidence, not sanitized exports.
+- NS-01: five configuration-change tests failed before comparison fingerprints:
+  same-label payload, target URL, model, oracle and tools changes all passed.
+  Modern adapter probes now fingerprint scenario content, configured target,
+  tool definitions, oracle configuration/implementation and composition logic.
+  Incompatible or unsupported identities reject comparison with exit 3 (never
+  retains report-only exit 0). Existing identity-less baselines cannot be compared
+  to modern scan snapshots: regenerate a baseline. Legacy-to-legacy API behavior
+  remains readable. A matching modern vulnerable baseline still exits 1.
+- Added real socket tests with a strict stdlib HTTP endpoint: all 60 corpus
+  histories are accepted; duplicate/orphan malformed requests return HTTP 400.
+  This independently checks wire formatting, not live-model efficacy or official
+  provider/protocol conformance.
+- Added disk replacement fault injection and forced run-ID collisions: interrupted
+  writes leave no partial final trial or false completion; existing evidence is
+  unchanged when exclusive directory creation detects a collision.
+
+### Verification
+
+- Refreshed Python 3.12.14 `python -m pytest --cov=neuralstrike
+  --cov-fail-under=85`: **1062 passed, 2 skipped, 90.83% coverage**.
+- `ruff check src tests`: passed. `mypy`: passed, 131 source files.
+- New local tests use synthetic data, mocked remote calls or loopback HTTP only.
+- Final targeted checks and rebuilt-wheel smoke are recorded below after completion.
+
+### Remaining Phase 0 limitations
+
+Remote builds are explicitly unverified: configuration fingerprints do not attest
+that an application behind a URL has unchanged code/tools. Custom unrepresentable
+oracle configurations are non-comparable. Provider seeds are sent best-effort;
+providers may ignore or reject them. No silent retry strips rejected controls.
+Only the OpenAI-compatible adapter records actual provider exchanges so far;
+other adapters preserve planned inputs, which do not prove delivery or execution.
+Timeout/cancellation can end before a complete exchange is returned; incomplete
+manifests remain visibly uncommitted. A sanitized sharing bundle and strict
+integrity-loading/offline rescoring workflow remain unimplemented. All-format
+canonical trial reporting, exceptional-path resource cleanup, and independent
+compatible implementation validation still need completion before Phase 0 signoff.
+
+### Final verification and additional failure-path fixes
+
+- Two more baseline regressions failed before enforcing exact planned trial
+  indices: arbitrary legacy-current indices and extra actual trials could pass.
+  Baseline and standalone health now require exactly the declared trial indices.
+  Standalone-health regression was separately observed failing before its fix.
+- Scan and corpus cleanup regressions both failed when TrialRunner.run raised a
+  simulated disk error. Both now close network adapters in finally blocks. Corpus
+  attempts all closes before surfacing a cleanup failure. This closes the scoped
+  scan/corpus resource gap; other legacy commands were not refactored.
+- Final Python 3.12.14 full gate: **1067 passed, 2 skipped, 90.82% coverage**.
+  `ruff check src tests` and mypy pass (131 files). `git diff --check` passes.
+- Rebuilt wheel/sdist after the final source changes; reinstalled wheel with
+  --no-deps --reinstall into the isolated runtime-lock environment. From /tmp,
+  `neuralstrike smoke --out /tmp/neuralstrike-phase0-request-smoke --format json`
+  exits 0 (3 scenarios / 3 trials). No live model or external target used.
+
+Phase 0 still needs all-format trial/health consistency, unavailable-ASR display,
+full private/sanitized artifact policy enforcement, and independent compatible
+implementation checks before signoff. Full integrity-checked offline replay is
+still outstanding. Passing local fixtures is not proof of real-target efficacy.

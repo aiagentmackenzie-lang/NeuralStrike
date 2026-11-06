@@ -148,6 +148,7 @@ def save_baseline(directory: str | Path, report: RunReport) -> Path:
         "base_seed": report.meta.base_seed,
         "trials": report.meta.trials,
         "intensity": report.meta.intensity,
+        "comparison_identity": report.meta.comparison_identity,
         "verdicts": sigs,
         "trial_indices": _trial_indices(report),
         "succeeded_severities": severities,
@@ -215,7 +216,7 @@ def _coverage_gaps(
     indices = _trial_indices(report)
     incomplete = not current or bool(missing or unresolved)
     for values in indices.values():
-        if len(values) < report.meta.trials or len(set(values)) != len(values):
+        if values != list(range(report.meta.trials)):
             incomplete = True
     pinned_indices = baseline.get("trial_indices")
     if isinstance(pinned_indices, dict):
@@ -224,6 +225,31 @@ def _coverage_gaps(
                 incomplete = True
 
     return missing, unresolved, incomplete
+
+
+def _compatibility_issue(baseline: Mapping[str, Any], report: RunReport) -> str | None:
+    pinned = baseline.get("comparison_identity", {})
+    current = report.meta.comparison_identity
+    if (pinned or current) and (pinned != current or not current.get("comparable", False)):
+        return "comparison identity missing, unsupported or mismatched; refusing to compare"
+    baseline_trials = baseline.get("trials")
+    if isinstance(baseline_trials, int) and baseline_trials > 0 and report.meta.trials < baseline_trials:
+        return (
+            f"current run has {report.meta.trials} trials but baseline pinned at {baseline_trials}; "
+            "refusing to compare a truncated scan"
+        )
+    intensity = baseline.get("intensity")
+    if (
+        isinstance(intensity, str)
+        and intensity
+        and report.meta.intensity
+        and report.meta.intensity != intensity
+    ):
+        return (
+            f"intensity mismatch: baseline pinned at {intensity!r}, current run is "
+            f"{report.meta.intensity!r}; refusing to compare runs at different probe profiles"
+        )
+    return None
 
 
 def compare_baseline(
@@ -245,40 +271,9 @@ def compare_baseline(
     baseline_verdicts: Mapping[str, str] = baseline["verdicts"]
     current = _scenario_signatures(report)
 
-    # Truncation / intensity mismatch refusal: a baseline pinned at
-    # ``trials=N`` cannot be compared to a run with fewer trials (the
-    # run was truncated, so its ASR is not comparable to the baseline).
-    baseline_trials = baseline.get("trials")
-    if isinstance(baseline_trials, int) and baseline_trials > 0 and report.meta.trials < baseline_trials:
-        return CompareResult(
-            decision=CompareDecision.NOT_COMPARABLE,
-            exit_code=0 if fail_on == "never" else 3,
-            summary=(
-                f"current run has {report.meta.trials} trials but baseline pinned at "
-                f"{baseline_trials}; refusing to compare a truncated scan"
-            ),
-        )
-
-    # Intensity mismatch refusal: a baseline pinned at one probe profile
-    # (e.g. 'adaptive') is not comparable to a run at a different profile
-    # ('standard') — the ASR means different things. Backward compatible:
-    # a baseline with no recorded intensity skips the check.
-    baseline_intensity = baseline.get("intensity")
-    if (
-        isinstance(baseline_intensity, str)
-        and baseline_intensity
-        and report.meta.intensity
-        and report.meta.intensity != baseline_intensity
-    ):
-        return CompareResult(
-            decision=CompareDecision.NOT_COMPARABLE,
-            exit_code=0 if fail_on == "never" else 3,
-            summary=(
-                f"intensity mismatch: baseline pinned at {baseline_intensity!r}, "
-                f"current run is {report.meta.intensity!r}; refusing to compare "
-                f"runs at different probe profiles"
-            ),
-        )
+    issue = _compatibility_issue(baseline, report)
+    if issue:
+        return CompareResult(CompareDecision.NOT_COMPARABLE, 0 if fail_on == "never" else 3, issue)
 
     new_succ: list[str] = []
     pre_existing: list[str] = []

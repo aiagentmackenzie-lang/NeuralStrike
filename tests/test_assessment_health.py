@@ -105,3 +105,13 @@ def test_report_health_is_independent_of_vulnerability():
         assert f"Assessment health:** {status}" in to_markdown(run)
         assert f'"{status}"' in to_junit(run)
         assert any(f"Assessment health: {status}" in line for line in _lines_for_run(run, 100))
+
+
+def test_wrong_trial_index_is_incomplete_without_baseline():
+    from neuralstrike.evaluation.health import assessment_health
+    from neuralstrike.evaluation.runner import RunMeta, RunReport
+    from neuralstrike.evaluation.verdict import EvidenceFidelity, TrialResult, Verdict
+
+    trial = TrialResult(99, 0, 0, Verdict.RESISTED, EvidenceFidelity.VERBAL, scenario_id="s")
+    report = RunReport(RunMeta("r", "s", 0, 1, 0, 0.7, "t"), trials=(trial,))
+    assert assessment_health([report]).exit_code("vuln") == 3

@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from neuralstrike.evaluation.controls import trial_controls
 from neuralstrike.evaluation.scoring import ScoreCard, score_trials
 from neuralstrike.evaluation.verdict import (
     EvidenceFidelity,
@@ -98,9 +99,17 @@ def _manifest(path: Path, meta: RunMeta, *, complete: bool) -> None:
             "run_id": meta.run_id,
             "state": "complete" if complete else "running",
             "comparison_key": hashlib.sha256(
-                f"{meta.base_seed}:{meta.scenario_id}:{meta.intensity}".encode()
+                json.dumps(
+                    {
+                        "seed": meta.base_seed,
+                        "scenario": meta.scenario_id,
+                        "intensity": meta.intensity,
+                        "identity": meta.comparison_identity,
+                    },
+                    sort_keys=True,
+                ).encode()
             ).hexdigest(),
-            "comparison_key_scope": "seed/scenario-id/intensity only; excludes target and content identity",
+            "comparison_key_scope": "configured assessment inputs; remote application build unverified",
             "expected_trials": meta.trials,
             "files": files,
             "evidence_policy": "private raw evidence; not a sanitized sharing bundle",
@@ -122,6 +131,7 @@ class Probe:
     factory: TrialFactory
     category: str = "uncategorized"
     severity: str = "high"
+    comparison_identity: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -145,6 +155,8 @@ class RunMeta:
     different profile (the ASR means different things). Backward compatible:
     a baseline with no recorded intensity skips the check."""
 
+    comparison_identity: dict[str, Any] = field(default_factory=dict)
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "run_id": self.run_id,
@@ -157,6 +169,7 @@ class RunMeta:
             "judge_model": self.judge_model,
             "attacker_model": self.attacker_model,
             "intensity": self.intensity,
+            "comparison_identity": self.comparison_identity,
         }
 
 
@@ -189,9 +202,11 @@ def _trial_to_dict(t: TrialResult) -> dict[str, Any]:
         "verdict": t.verdict.value,
         "fidelity": t.fidelity.value,
         "payload": t.payload,
+        "inputs": t.inputs,
+        "exchanges": list(t.response.exchanges) if t.response else [],
         "response_text": t.response.text if t.response else "",
         "tool_calls": [
-            {"name": tc.name, "arguments": tc.arguments}
+            {"name": tc.name, "arguments": tc.arguments, "tool_call_id": tc.tool_call_id}
             for tc in (t.response.tool_calls if t.response else ())
         ],
         "traces": list(t.response.traces) if t.response else [],
@@ -313,6 +328,7 @@ class TrialRunner:
             judge_model=judge_model,
             attacker_model=attacker_model,
             intensity=intensity,
+            comparison_identity=probe.comparison_identity,
         )
 
         run_path: Path | None = None
@@ -331,12 +347,13 @@ class TrialRunner:
             canary = self._mint()
             logger.info("run %s trial %d/%d seed=%d canary=%s", run_id, trial_index + 1, trials, seed, canary)
             try:
-                if self.trial_timeout is not None:
-                    trial = await asyncio.wait_for(
-                        probe.factory(trial_index, seed, canary), timeout=self.trial_timeout
-                    )
-                else:
-                    trial = await probe.factory(trial_index, seed, canary)
+                with trial_controls(seed, self.victim_temperature):
+                    if self.trial_timeout is not None:
+                        trial = await asyncio.wait_for(
+                            probe.factory(trial_index, seed, canary), timeout=self.trial_timeout
+                        )
+                    else:
+                        trial = await probe.factory(trial_index, seed, canary)
             except asyncio.TimeoutError:
                 # A hung trial is a coverage gap, not a fabricated pass. The
                 # run continues (other trials may conclude); the timeout is

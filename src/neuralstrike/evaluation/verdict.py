@@ -93,6 +93,7 @@ class SutResponse:
     tool_calls: tuple[ToolCall, ...] = field(default_factory=tuple)
     traces: tuple[dict[str, Any], ...] = field(default_factory=tuple)
     error: str | None = None
+    exchanges: tuple[dict[str, Any], ...] = field(default_factory=tuple)
 
     @classmethod
     def from_text(cls, text: str) -> SutResponse:
@@ -134,8 +135,10 @@ class Finding:
 class TrialResult:
     """The outcome of a single trial, fully replayable.
 
-    ``seed`` and ``temperature`` are recorded so a replay with the same
-    seed reproduces identical verdicts (Phase-0 exit-gate requirement).
+    ``seed`` and ``temperature`` describe requested trial controls; live
+    providers may ignore them or produce different observations. Actual
+    OpenAI request controls are recorded in response exchanges. Offline
+    evidence replay is separate from a live rerun.
     ``scenario_id`` carries the probe's id so scoring can group trials by
     category and baselines can pin a regression to a specific scenario.
     """
@@ -154,6 +157,8 @@ class TrialResult:
     trajectory_fingerprint: str = ""
     """Phase 9 (additive): the trial's trajectory fingerprint (behavior shape;
     empty when the scenario predates the trajectory layer or has no turns)."""
+
+    inputs: dict[str, Any] = field(default_factory=dict)
 
 
 # Type aliases kept narrow on purpose — Literal unions, not free strings.
