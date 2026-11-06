@@ -170,9 +170,10 @@ def to_sarif(run: CorpusRun) -> str:
                 "results": results,
                 "invocations": [
                     {
-                        "executionSuccessful": True,
+                        "executionSuccessful": run.health.complete if run.health else False,
                         "startTimeUtc": run.started_at,
                         "properties": {
+                            "health": run.health.to_dict() if run.health else None,
                             "base_seed": run.base_seed,
                             "trials_per_scenario": run.trials_per_scenario,
                             "adapter": run.adapter,

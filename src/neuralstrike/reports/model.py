@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from neuralstrike.corpus.loader import Scenario
+from neuralstrike.evaluation.health import AssessmentHealth, assessment_health
 from neuralstrike.evaluation.runner import RunReport
 from neuralstrike.evaluation.verdict import EvidenceFidelity, Verdict
 from neuralstrike.reports.compliance import ControlRef, crosswalk
@@ -93,9 +94,11 @@ class CorpusRun:
     overall_total: int
     asr: float
     coverage: float
+    health: AssessmentHealth | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "health": self.health.to_dict() if self.health else None,
             "started_at": self.started_at,
             "base_seed": self.base_seed,
             "trials_per_scenario": self.trials_per_scenario,
@@ -284,4 +287,5 @@ def build_corpus_run(
         overall_total=total,
         asr=asr,
         coverage=coverage,
+        health=assessment_health(reports, selected=len(scenarios) * trials_per_scenario),
     )

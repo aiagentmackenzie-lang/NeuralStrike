@@ -93,6 +93,16 @@ class AgentCard:
         )
 
 
+def _origin(value: str) -> tuple[str, str, int]:
+    try:
+        url = httpx.URL(value)
+        if url.scheme not in {"http", "https"} or not url.host or url.userinfo:
+            raise ValueError("invalid origin")
+        return url.scheme, url.host.lower(), url.port or (443 if url.scheme == "https" else 80)
+    except (httpx.InvalidURL, ValueError) as exc:
+        raise A2AError("invalid A2A destination URL") from exc
+
+
 class A2AAdapter(TargetAdapter):
     """Agent2Agent JSON-RPC 2.0 client (HTTP + Agent Card, security-aware)."""
 
@@ -106,12 +116,15 @@ class A2AAdapter(TargetAdapter):
         api_key: str | None = None,
         bearer_token: str | None = None,
         client_cert: tuple[str, str] | None = None,  # (cert_path, key_path) for mTLS
+        allowed_origins: tuple[str, ...] = (),
         timeout: float = 30.0,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         if not base_url.startswith(("http://", "https://")):
             raise ValueError(f"A2A base_url must be http(s)://, got {base_url!r}")
         self.base_url = base_url.rstrip("/")
+        self._credential_origin = _origin(base_url)
+        self._allowed_origins = {self._credential_origin, *(_origin(url) for url in allowed_origins)}
         self.api_key = api_key
         self.bearer_token = bearer_token
         self.client_cert = client_cert
@@ -188,7 +201,15 @@ class A2AAdapter(TargetAdapter):
         assert self._card is not None
         target = self._card.url or self.base_url
         payload = {"jsonrpc": "2.0", "id": str(uuid.uuid4()), "method": method, "params": params}
-        headers = self._auth_headers()
+        origin = _origin(target)
+        if origin not in self._allowed_origins:
+            raise A2AError("A2A destination origin is not authorized")
+        if self._credential_origin[0] == "https" and origin[0] != "https":
+            raise A2AError("A2A destination HTTPS downgrade is not authorized")
+        if self.client_cert and origin != self._credential_origin:
+            raise A2AError("A2A client certificate is bound to the configured origin")
+        # Allowing another destination does not authorize forwarding base credentials.
+        headers = self._auth_headers() if origin == self._credential_origin else {}
         try:
             resp = await self.client.post(target, json=payload, headers=headers)
             resp.raise_for_status()

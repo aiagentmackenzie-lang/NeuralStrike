@@ -63,6 +63,7 @@ def _lines_for_run(run: CorpusRun, max_chars: int) -> list[str]:
     lines: list[str] = [
         "NeuralStrike Corpus Run Report",
         "",
+        f"Assessment health: {run.health.status if run.health else 'unavailable'}",
         f"Started:           {run.started_at}",
         f"Adapter:           {run.adapter}",
         f"Target:            {run.target}",

@@ -2,8 +2,8 @@
 
 The runner is the reproducibility layer. Every run is:
 
-- **seedable** - a base seed derives a deterministic per-trial seed so a
-  replay with the same base seed reproduces identical verdicts.
+- **seedable** - a base seed derives deterministic per-trial seed metadata.
+  Live providers and fresh canaries can still produce different observations.
 - **temperature-pinned** - the victim is pinned to ``temperature=0.0`` by
   default (reproducible); the attacker is configurable.
 - **transcript-recorded** - every trial is persisted to
@@ -23,8 +23,10 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import secrets
 import time
+import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -65,10 +67,45 @@ def _derive_seed(base_seed: int, trial_index: int) -> int:
 
 
 def _run_id(base_seed: int, scenario_id: str) -> str:
-    """Deterministic run id from seed + scenario so a replay overwrites the
-    same run directory (same seed => same verdicts => same transcript path)."""
-    h = hashlib.blake2b(f"{base_seed}:{scenario_id}".encode(), digest_size=8).hexdigest()
-    return f"run-{h}"
+    """Unique execution identity; seeds are comparison metadata, not file names."""
+    return f"run-{uuid.uuid4().hex}"
+
+
+def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
+    """Commit a private JSON file by atomic rename, without partial final files."""
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(json.dumps(payload, indent=2, sort_keys=True))
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _manifest(path: Path, meta: RunMeta, *, complete: bool) -> None:
+    files = {
+        item.name: hashlib.sha256(item.read_bytes()).hexdigest()
+        for item in sorted(path.glob("*.json"))
+        if item.name != "manifest.json"
+    }
+    _atomic_json(
+        path / "manifest.json",
+        {
+            "schema_version": 1,
+            "run_id": meta.run_id,
+            "state": "complete" if complete else "running",
+            "comparison_key": hashlib.sha256(
+                f"{meta.base_seed}:{meta.scenario_id}:{meta.intensity}".encode()
+            ).hexdigest(),
+            "comparison_key_scope": "seed/scenario-id/intensity only; excludes target and content identity",
+            "expected_trials": meta.trials,
+            "files": files,
+            "evidence_policy": "private raw evidence; not a sanitized sharing bundle",
+        },
+    )
 
 
 @dataclass(frozen=True)
@@ -157,6 +194,8 @@ def _trial_to_dict(t: TrialResult) -> dict[str, Any]:
             {"name": tc.name, "arguments": tc.arguments}
             for tc in (t.response.tool_calls if t.response else ())
         ],
+        "traces": list(t.response.traces) if t.response else [],
+        "response_error": t.response.error if t.response else None,
         "error": t.error,
         "iterations": t.iterations,
         "trajectory_fingerprint": t.trajectory_fingerprint,
@@ -201,10 +240,8 @@ class TrialRunner:
     Parameters
     ----------
     base_seed
-        The seed the whole run is pinned to. The same seed reproduces the
-        same per-trial seeds and therefore the same verdicts (Phase-0 exit
-        gate: "a recorded run produces identical verdicts when replayed
-        with the same seed").
+        Derives stable per-trial seed metadata. This does not guarantee identical
+        live observations or verdicts; offline evidence replay is separate.
     victim_temperature
         Pinned to ``0.0`` by default for reproducibility.
     attacker_temperature
@@ -281,10 +318,10 @@ class TrialRunner:
         run_path: Path | None = None
         if persist and self.run_dir is not None:
             run_path = self.run_dir / run_id
-            run_path.mkdir(parents=True, exist_ok=True)
-            (run_path / "meta.json").write_text(
-                json.dumps(meta.to_dict(), indent=2, sort_keys=True), encoding="utf-8"
-            )
+            self.run_dir.mkdir(parents=True, exist_ok=True)
+            run_path.mkdir(mode=0o700, exist_ok=False)
+            _atomic_json(run_path / "meta.json", meta.to_dict())
+            _manifest(run_path, meta, complete=False)
 
         results: list[TrialResult] = []
         for trial_index in range(trials):
@@ -335,19 +372,16 @@ class TrialRunner:
             results.append(trial)
             if run_path is not None:
                 path = run_path / f"trial-{trial_index}.json"
-                path.write_text(
-                    json.dumps(_trial_to_dict(trial), indent=2, sort_keys=True),
-                    encoding="utf-8",
-                )
+                _atomic_json(path, _trial_to_dict(trial))
+                _manifest(run_path, meta, complete=False)
 
         category_of = {probe.scenario_id: probe.category}
         score = score_trials(results, category_of=category_of)
         report = RunReport(meta=meta, trials=tuple(results), score=score)
 
         if run_path is not None:
-            (run_path / "report.json").write_text(
-                json.dumps(report.to_dict(), indent=2, sort_keys=True), encoding="utf-8"
-            )
+            _atomic_json(run_path / "report.json", report.to_dict())
+            _manifest(run_path, meta, complete=True)
 
         logger.info("run %s complete: %s", run_id, score.headline)
         return report

@@ -156,6 +156,13 @@ class IndirectHarness:
                 Message(
                     role="assistant",
                     content="Running the tool now.",
+                    tool_calls=(
+                        {
+                            "id": "call_prev",
+                            "type": "function",
+                            "function": {"name": "run_tool", "arguments": "{}"},
+                        },
+                    ),
                 ),
                 Message(
                     role="tool",
@@ -181,6 +188,13 @@ class IndirectHarness:
                 Message(
                     role="assistant",
                     content="Retrieving relevant documents.",
+                    tool_calls=(
+                        {
+                            "id": "call_retrieval",
+                            "type": "function",
+                            "function": {"name": "search_docs", "arguments": "{}"},
+                        },
+                    ),
                 ),
                 Message(
                     role="tool",

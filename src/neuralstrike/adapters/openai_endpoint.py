@@ -122,7 +122,13 @@ class OpenAIEndpointAdapter(TargetAdapter):
                     },
                 }
             )
-        return fns or None
+        unique: dict[str, dict[str, Any]] = {}
+        for definition in fns:
+            name = definition["function"]["name"]
+            if name in unique and unique[name] != definition:
+                raise ValueError(f"conflicting definitions for tool {name!r}")
+            unique[name] = definition
+        return list(unique.values()) or None
 
     def _messages(
         self,
@@ -135,6 +141,8 @@ class OpenAIEndpointAdapter(TargetAdapter):
             msgs.append({"role": "system", "content": system_prompt})
         for m in history:
             d: dict[str, Any] = {"role": m.role, "content": m.content}
+            if m.tool_calls:
+                d["tool_calls"] = list(m.tool_calls)
             if m.tool_call_id is not None:
                 d["tool_call_id"] = m.tool_call_id
             if m.name is not None:

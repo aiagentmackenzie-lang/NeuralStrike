@@ -28,8 +28,14 @@ CANARY = "CANARY-deadbeefdeadbeef"
 class TestSettings:
     """Test configuration defaults and validation (D1 judge-model default fix)."""
 
-    def test_default_settings(self) -> None:
-        s = Settings()
+    def test_default_settings(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import os
+
+        # Package defaults must not depend on private env files or shell settings.
+        for name in tuple(os.environ):
+            if name.startswith("NEURALSTRIKE_"):
+                monkeypatch.delenv(name)
+        s = Settings(_env_file=None)
         assert s.project_name == "NeuralStrike"
         # Single-sourced from neuralstrike.__version__ (the 0.2.0 fossil is gone).
         from neuralstrike import __version__

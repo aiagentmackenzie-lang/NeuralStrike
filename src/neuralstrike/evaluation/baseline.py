@@ -17,8 +17,12 @@ Exit codes (non-negotiable):
   **Regression outranks absolute vuln**: if both a pre-existing vuln and
   a regression exist, the exit code is ``4`` (regression), not ``1``.
 
-``--fail-on never`` records the comparison but always exits ``0`` (the
-"informational baseline" mode used while a corpus is still maturing).
+Incomplete current coverage returns ``not_comparable`` / exit ``3``. A fix
+requires complete current resistance; Inconclusive never establishes a fix.
+Pre-existing vulnerabilities deliberately fail ``regression`` with exit ``1``.
+
+``--fail-on never`` records the true decision for incomplete comparisons but
+exits ``0`` (report-only). Invalid or unreadable baselines still raise errors.
 """
 
 from __future__ import annotations
@@ -67,6 +71,8 @@ class CompareResult:
     pre_existing_succeeded: tuple[str, ...] = ()
     regressions: tuple[str, ...] = ()
     fixed: tuple[str, ...] = ()
+    unresolved: tuple[str, ...] = ()
+    missing: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -77,6 +83,8 @@ class CompareResult:
             "pre_existing_succeeded": list(self.pre_existing_succeeded),
             "regressions": list(self.regressions),
             "fixed": list(self.fixed),
+            "unresolved": list(self.unresolved),
+            "missing": list(self.missing),
         }
 
 
@@ -109,6 +117,13 @@ def _verdict_rank(v: Verdict) -> int:
     return {Verdict.RESISTED: 0, Verdict.INCONCLUSIVE: 1, Verdict.SUCCEEDED: 2}[v]
 
 
+def _trial_indices(report: RunReport) -> dict[str, list[int]]:
+    indices: dict[str, list[int]] = {}
+    for trial in report.trials:
+        indices.setdefault(trial.scenario_id, []).append(trial.trial_index)
+    return {sid: sorted(values) for sid, values in indices.items()}
+
+
 def save_baseline(directory: str | Path, report: RunReport) -> Path:
     """Persist ``report`` as the baseline for its scenario.
 
@@ -134,6 +149,7 @@ def save_baseline(directory: str | Path, report: RunReport) -> Path:
         "trials": report.meta.trials,
         "intensity": report.meta.intensity,
         "verdicts": sigs,
+        "trial_indices": _trial_indices(report),
         "succeeded_severities": severities,
         "score": {
             "asr": report.score.asr if report.score else None,
@@ -146,16 +162,68 @@ def save_baseline(directory: str | Path, report: RunReport) -> Path:
     return path
 
 
+def _valid_trial_indices(value: Any, verdicts: Mapping[str, str]) -> bool:
+    if not isinstance(value, dict) or set(value) != set(verdicts):
+        return False
+    return all(
+        isinstance(indices, list)
+        and bool(indices)
+        and all(type(index) is int and index >= 0 for index in indices)
+        and len(set(indices)) == len(indices)
+        for indices in value.values()
+    )
+
+
 def _load_baseline(path: Path) -> Mapping[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError as exc:
-        raise BaselineError(f"baseline not found: {path}") from exc
+    except OSError as exc:
+        raise BaselineError(f"baseline could not be read: {path}: {exc}") from exc
     except json.JSONDecodeError as exc:
         raise BaselineError(f"baseline {path} is not valid JSON: {exc.msg}") from exc
     if not isinstance(data, dict) or "verdicts" not in data:
         raise BaselineError(f"baseline {path} missing 'verdicts' map")
+    verdicts = data["verdicts"]
+    if (
+        not isinstance(verdicts, dict)
+        or not verdicts
+        or any(
+            not isinstance(sid, str)
+            or not sid
+            or not isinstance(value, str)
+            or value not in {v.value for v in Verdict}
+            for sid, value in verdicts.items()
+        )
+    ):
+        raise BaselineError(f"baseline {path} has invalid verdicts")
+    if "trial_indices" in data and not _valid_trial_indices(data["trial_indices"], verdicts):
+        raise BaselineError(f"baseline {path} has invalid trial_indices")
     return data
+
+
+def _coverage_gaps(
+    baseline: Mapping[str, Any], report: RunReport, current: Mapping[str, str]
+) -> tuple[list[str], list[str], bool]:
+    missing = sorted(set(baseline["verdicts"]) - set(current))
+    unresolved = sorted(
+        {
+            t.scenario_id
+            for t in report.trials
+            if t.verdict is Verdict.INCONCLUSIVE or t.error or (t.response and t.response.error)
+        }
+    )
+    indices = _trial_indices(report)
+    incomplete = not current or bool(missing or unresolved)
+    for values in indices.values():
+        if len(values) < report.meta.trials or len(set(values)) != len(values):
+            incomplete = True
+    pinned_indices = baseline.get("trial_indices")
+    if isinstance(pinned_indices, dict):
+        for sid, values in pinned_indices.items():
+            if not isinstance(values, list) or not set(values).issubset(indices.get(sid, [])):
+                incomplete = True
+
+    return missing, unresolved, incomplete
 
 
 def compare_baseline(
@@ -184,7 +252,7 @@ def compare_baseline(
     if isinstance(baseline_trials, int) and baseline_trials > 0 and report.meta.trials < baseline_trials:
         return CompareResult(
             decision=CompareDecision.NOT_COMPARABLE,
-            exit_code=3,
+            exit_code=0 if fail_on == "never" else 3,
             summary=(
                 f"current run has {report.meta.trials} trials but baseline pinned at "
                 f"{baseline_trials}; refusing to compare a truncated scan"
@@ -204,7 +272,7 @@ def compare_baseline(
     ):
         return CompareResult(
             decision=CompareDecision.NOT_COMPARABLE,
-            exit_code=3,
+            exit_code=0 if fail_on == "never" else 3,
             summary=(
                 f"intensity mismatch: baseline pinned at {baseline_intensity!r}, "
                 f"current run is {report.meta.intensity!r}; refusing to compare "
@@ -216,6 +284,7 @@ def compare_baseline(
     pre_existing: list[str] = []
     regressions: list[str] = []
     fixed: list[str] = []
+    missing, unresolved, incomplete = _coverage_gaps(baseline, report, current)
 
     for sid, v in current.items():
         if v == Verdict.SUCCEEDED.value:
@@ -226,10 +295,24 @@ def compare_baseline(
                 pre_existing.append(sid)
             else:  # was Resisted/Inconclusive -> now Succeeded
                 regressions.append(sid)
-        else:
-            prev = baseline_verdicts.get(sid)
-            if prev == Verdict.SUCCEEDED.value and v != Verdict.SUCCEEDED.value:
-                fixed.append(sid)
+        elif (
+            baseline_verdicts.get(sid) == Verdict.SUCCEEDED.value
+            and v == Verdict.RESISTED.value
+            and not incomplete
+        ):
+            fixed.append(sid)
+
+    if incomplete:
+        return CompareResult(
+            decision=CompareDecision.NOT_COMPARABLE,
+            exit_code=0 if fail_on == "never" else 3,
+            summary=f"incomplete assessment: missing={missing}, unresolved={unresolved}",
+            new_succeeded=tuple(new_succ),
+            pre_existing_succeeded=tuple(pre_existing),
+            regressions=tuple(regressions),
+            unresolved=tuple(unresolved),
+            missing=tuple(missing),
+        )
 
     # Decision: regression outranks vuln; vuln requires fail_on in {vuln, regression}.
     if regressions and fail_on == "regression":
@@ -243,13 +326,13 @@ def compare_baseline(
             fixed=tuple(fixed),
         )
 
-    current_vuln = bool(new_succ or pre_existing)
+    current_vuln = bool(new_succ or pre_existing or regressions)
     if current_vuln and fail_on in {"vuln", "regression"}:
         return CompareResult(
             decision=CompareDecision.VULN,
             exit_code=1,
             summary=(
-                f"{len(new_succ) + len(pre_existing)} Succeeded finding(s) "
+                f"{len(new_succ) + len(pre_existing) + len(regressions)} Succeeded finding(s) "
                 f"(new={len(new_succ)}, pre-existing={len(pre_existing)})"
             ),
             new_succeeded=tuple(new_succ),

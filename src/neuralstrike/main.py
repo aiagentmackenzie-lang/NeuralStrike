@@ -1003,6 +1003,8 @@ def scan(
         if save_baseline_dir:
             path = save_baseline(save_baseline_dir, report)
             console.print(f"[green]Baseline saved → {path}[/green]")
+        if isinstance(target_adapter, OpenAIEndpointAdapter | A2AAdapter | LangGraphServerAdapter):
+            await target_adapter.close()
         if baseline_dir:
             result = compare_baseline(baseline_dir, report, fail_on=fail_on)
             console.print(
@@ -1012,8 +1014,12 @@ def scan(
                 )
             )
             raise typer.Exit(result.exit_code)
-        if isinstance(target_adapter, OpenAIEndpointAdapter | A2AAdapter | LangGraphServerAdapter):
-            await target_adapter.close()
+        from neuralstrike.evaluation.health import assessment_health
+
+        health = assessment_health([report])
+        code = health.exit_code(fail_on)
+        console.print(f"Assessment {health.status} (exit {code}; fail-on={fail_on})")
+        raise typer.Exit(code)
 
     _run(run())
 
@@ -1785,6 +1791,7 @@ def corpus(
     ),
     format: str = typer.Option("sarif", help="Report format: sarif|json|junit|markdown|pdf."),
     out: str = typer.Option("neuralstrike-report", help="Output file path (extension added per --format)."),
+    fail_on: str = typer.Option("regression", help="Gate: never|vuln|regression; never is report-only."),
     trials: int = typer.Option(1, help="Trials per scenario (k-trial run)."),
     seed: int = typer.Option(2024, help="Base seed for reproducibility."),
     limit: int | None = typer.Option(None, "--limit", help="Run only the first N scenarios (smoke / debug)."),
@@ -1809,6 +1816,8 @@ def corpus(
     control (NIST AI RMF / EU AI Act / ISO 42001 / SOC 2 / CSA MAESTRO).
     Inconclusive probes are surfaced (SARIF note / JUnit skipped), never dropped.
     """
+    if fail_on not in {"never", "vuln", "regression"}:
+        raise ValidationError("--fail-on must be never|vuln|regression")
     if adapter not in {"langgraph", "openai"}:
         raise ValidationError("--adapter must be langgraph|openai")
     if tier not in {"text", "function-calling", "instrumented"}:
@@ -1942,6 +1951,13 @@ def corpus(
             f"[green]{len(scenarios)} scenarios · {corpus_run.overall_total} trials · "
             f"ASR {corpus_run.asr:.2%} · coverage {corpus_run.coverage:.2%}[/green]"
         )
+
+        from neuralstrike.evaluation.health import assessment_health
+
+        health = assessment_health(reports, selected=len(scenarios) * trials)
+        code = health.exit_code(fail_on)
+        console.print(f"Assessment {health.status} (exit {code}; fail-on={fail_on})")
+        raise typer.Exit(code)
 
     _run(run())
 

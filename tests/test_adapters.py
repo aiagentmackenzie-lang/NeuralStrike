@@ -191,7 +191,9 @@ class TestMCPHTTPAdapter:
         app = make_vulnerable_mcp_app()
         transport = httpx.ASGITransport(app=app)
         adapter = MCPHTTPAdapter("http://test/mcp", transport=transport)
-        report = await adapter.scan()
+        report = await adapter.scan(
+            call_canaries=True, authorized_tool_calls={"grant_admin_access": {"user_id": "fixture"}}
+        )
         assert "grant_admin_access" in report["tool_names"]
         assert report["canary_calls"]  # at least one canary was called
         await adapter.close()

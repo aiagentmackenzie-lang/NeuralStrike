@@ -40,10 +40,15 @@ class RedactingFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         if not self._enabled:
             return True
-        for attr in ("msg",):
-            value = getattr(record, attr, None)
-            if isinstance(value, str):
-                setattr(record, attr, self._redact(value))
+        record.msg = self._redact(record.getMessage())
+        record.args = ()
+        if record.exc_info:
+            record.exc_text = self._redact(logging.Formatter().formatException(record.exc_info))
+            record.exc_info = None
+        if record.exc_text:
+            record.exc_text = self._redact(record.exc_text)
+        if record.stack_info:
+            record.stack_info = self._redact(record.stack_info)
         return True
 
     @staticmethod
@@ -54,12 +59,20 @@ class RedactingFilter(logging.Filter):
         return redacted
 
 
+class RedactingFormatter(logging.Formatter):
+    """Scrub final rendered output, including formatter extras and traceback text."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        rendered = super().format(record)
+        return RedactingFilter._redact(rendered) if settings.redact_logs else rendered
+
+
 def configure_logging(level: int = logging.INFO) -> None:
     """Configure root logging once. Safe to call multiple times."""
     if getattr(configure_logging, "_done", False):
         return
     handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(name)s - %(levelname)s - %(message)s"))
+    handler.setFormatter(RedactingFormatter("%(name)s - %(levelname)s - %(message)s"))
     handler.addFilter(RedactingFilter(enabled=settings.redact_logs))
     root = logging.getLogger()
     root.handlers.clear()

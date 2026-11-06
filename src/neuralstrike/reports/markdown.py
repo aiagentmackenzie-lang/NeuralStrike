@@ -77,6 +77,7 @@ def to_markdown(run: CorpusRun) -> str:
     header = [
         "# NeuralStrike Corpus Run Report",
         "",
+        f"- **Assessment health:** {run.health.status if run.health else 'unavailable'}",
         f"- **Started:** {run.started_at}",
         f"- **Adapter:** `{run.adapter}` — target: `{run.target}`",
         f"- **Base seed:** {run.base_seed} · **Trials per scenario:** {run.trials_per_scenario}",

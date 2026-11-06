@@ -755,7 +755,7 @@ class TestScanClose:
     def test_scan_closes_adapter(self, runner: CliRunner) -> None:
         fake_report = type("R", (), {})()
         fake_report.score = type("S", (), {"headline": "ok"})()
-        fake_report.meta = type("M", (), {"run_id": "r1", "intensity": "standard"})()
+        fake_report.meta = type("M", (), {"run_id": "r1", "intensity": "standard", "trials": 1})()
         fake_report.trials = []
         # Patch the actual class methods so isinstance() still works at the end.
         with (
@@ -768,7 +768,8 @@ class TestScanClose:
                 app,
                 ["scan", "--adapter", "openai", "--url", "http://localhost:1", "--model", "gpt-4"],
             )
-        assert result.exit_code == 0, result.output
+        assert result.exit_code == 3, result.output
+        assert "incomplete" in result.output
         mock_close.assert_awaited()
 
 

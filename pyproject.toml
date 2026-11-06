@@ -37,6 +37,7 @@ dependencies = [
     "jsonschema>=4",
     "pyyaml>=6.0",
     "cryptography>=42.0",
+    "filelock>=4.2.1",  # security floor for transitive model/cache locking
 ]
 
 [project.optional-dependencies]

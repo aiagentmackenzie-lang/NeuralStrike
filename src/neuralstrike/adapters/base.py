@@ -52,6 +52,7 @@ class Message:
     content: str
     tool_call_id: str | None = None
     name: str | None = None
+    tool_calls: tuple[dict[str, Any], ...] = field(default_factory=tuple)
 
 
 class TargetAdapter(ABC):

@@ -197,28 +197,38 @@ class MCPHTTPAdapter:
         self,
         *,
         injected: tuple[MCPTool, ...] = (),
-        call_canaries: bool = True,
+        call_canaries: bool = False,
+        authorized_tool_calls: dict[str, dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        """One-shot introspection: initialize, list tools, optionally call canaries.
+        """Read-only discovery, with optional explicitly authorized fixture calls.
+
+        Execution requires call_canaries=True plus exact tool names and arguments
+        in authorized_tool_calls. Names/descriptions never establish permission.
 
         Returns a report dict with the real tool inventory and any canary
         call results. This is the structured replacement for ``ToolEnum``.
         """
+        if call_canaries and not authorized_tool_calls:
+            raise MCPError("explicit authorized_tool_calls are required for execution")
         await self.initialize()
         tools = await self.list_tools(injected=injected)
+        if call_canaries and authorized_tool_calls:
+            unknown = set(authorized_tool_calls) - {tool.name for tool in tools}
+            if unknown:
+                raise MCPError(f"authorized tools not advertised: {sorted(unknown)}")
         canary_calls: list[dict[str, Any]] = []
         if call_canaries:
             for t in tools:
-                if _looks_canary(t.name):
+                if authorized_tool_calls is not None and t.name in authorized_tool_calls:
                     try:
-                        res = await self.call_tool(t.name, _sample_args(t))
+                        res = await self.call_tool(t.name, authorized_tool_calls[t.name])
                     except MCPError as exc:
                         canary_calls.append({"tool": t.name, "error": str(exc)})
                         continue
                     canary_calls.append(
                         {
                             "tool": t.name,
-                            "arguments_sent": _sample_args(t),
+                            "arguments_sent": authorized_tool_calls[t.name],
                             "result_text": res.text,
                             "is_error": res.is_error,
                         }
@@ -238,33 +248,6 @@ def _parse_tool(t: dict[str, Any]) -> MCPTool:
         input_schema=t.get("inputSchema") or t.get("input_schema") or {},
         raw=t,
     )
-
-
-def _looks_canary(name: str) -> bool:
-    n = name.lower()
-    needles = ("export_user_data", "delete_all_records", "grant_admin", "exec_shell", "drop_table")
-    return any(k in n for k in needles)
-
-
-def _sample_args(tool: MCPTool) -> dict[str, Any]:
-    """Build a minimal valid argument set from the tool's input schema."""
-    props = tool.input_schema.get("properties", {}) if isinstance(tool.input_schema, dict) else {}
-    out: dict[str, Any] = {}
-    for k, v in props.items():
-        if isinstance(v, dict):
-            t = v.get("type")
-            if t == "string":
-                out[k] = "attacker"
-            elif t == "integer":
-                out[k] = 1
-            elif t == "boolean":
-                out[k] = True
-            elif t == "array":
-                out[k] = []
-            elif t == "object":
-                out[k] = {}
-    return out
-
 
 def _parse_rpc_body(resp: httpx.Response) -> dict[str, Any]:
     """Parse a JSON-RPC response that may be plain JSON or SSE-framed."""

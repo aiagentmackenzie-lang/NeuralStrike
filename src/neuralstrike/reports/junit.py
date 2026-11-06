@@ -24,6 +24,7 @@ def _attrs(**kwargs: str) -> str:
 
 def to_junit(run: CorpusRun) -> str:
     """Render the corpus run as a JUnit XML string."""
+    health = run.health.status if run.health else "unavailable"
     suites: list[str] = []
     total_tests = total_failures = total_skipped = 0
     for sr in run.scenario_results:
@@ -66,6 +67,7 @@ def to_junit(run: CorpusRun) -> str:
             f"            tests={quoteattr(str(n_tests))} failures={quoteattr(str(n_failures))}\n"
             f"            skipped={quoteattr(str(n_skipped))}>\n"
             f"    <properties>\n"
+            f"      <property name='assessment_health' value={quoteattr(health)} />\n"
             f"      <property name='owasp_category' value={quoteattr(s.owasp_category)} />\n"
             f"      <property name='owasp_name' value={quoteattr(s.owasp_name)} />\n"
             f"      <property name='mitre_atlas' value={quoteattr(', '.join(s.mitre_atlas))} />\n"

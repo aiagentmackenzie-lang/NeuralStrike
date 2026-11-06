@@ -46,6 +46,8 @@ def build_default_state(
         msgs.append({"role": "system", "content": system_prompt})
     for m in history:
         d: dict[str, Any] = {"role": m.role, "content": m.content}
+        if m.tool_calls:
+            d["tool_calls"] = list(m.tool_calls)
         if m.name:
             d["name"] = m.name
         if m.tool_call_id:
