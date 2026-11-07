@@ -1,10 +1,14 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   quality:
@@ -97,7 +101,9 @@ jobs:
 
       - name: Install dashboard dependencies
         working-directory: dashboard
-        run: npm ci
+        run: |
+          npm ci --ignore-scripts
+          node -e "const lock = require('./package-lock.json'); if (Object.keys(lock.packages || {}).some(p => p.endsWith('/plain-crypto-js'))) process.exit(1)"
 
       - name: Test report parsing
         working-directory: dashboard

@@ -906,3 +906,11 @@ Post-push verification for code commit **2fbb2eb**:
   no release dispatch was performed. The existing disabled CI state was preserved.
 - Hosted Python/OS matrix verification therefore remains an explicit acceptance
   gap. The local gates above passed; they are not a substitute for a hosted run.
+
+## 2026-11-07 — CI enabled on owner's explicit authorization
+
+Enabled the existing GitHub CI workflow. Added manual dispatch so a reviewed
+commit can be verified without manufacturing a source change, read-only workflow
+permissions, and dashboard dependency installation with scripts disabled plus a
+plain-crypto-js lock check (workspace supply-chain instructions). Release workflow
+unchanged; no release dispatch. Hosted results will be recorded after completion.
