@@ -356,6 +356,11 @@ This is the part that makes results defensible:
   providers may ignore controls or vary. `export-summary` emits only an allowlisted,
   non-replayable sharing summary. Full reports remain private raw evidence.
   See [offline replay](docs/implementation/REPLAY.md).
+- OpenAI target preflight: `neuralstrike doctor --url URL --model MODEL` checks
+  a harmless tool round-trip. `--target-api-key-env NAME` resolves a bearer
+  credential; `--max-response-bytes` bounds accepted response data. Both options
+  are also available on `corpus`. Readiness is not a security verdict.
+  See [Phase 2 scope and limits](docs/implementation/PHASE2_INTEROPERABILITY.md).
 - **Baseline gating.** Save a baseline, then fail CI on regression:
   exit `0` pass · `1` vulnerability · `3` runtime error · `4` regression
   (regression outranks absolute vulnerabilities). Probe-profile (intensity)

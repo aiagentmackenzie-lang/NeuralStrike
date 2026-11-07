@@ -1815,6 +1815,47 @@ def readme_mapping(
 
 
 @app.command()
+def doctor(
+    url: str = typer.Option(..., help="Authorized OpenAI-compatible target base URL."),
+    model: str = typer.Option(..., help="Model to probe (sends a completion request)."),
+    target_api_key_env: str | None = typer.Option(
+        None, help="Environment variable containing the bearer credential."
+    ),
+    tools: bool = typer.Option(
+        True, "--tools/--text-only", help="Require an observed harmless tool round-trip."
+    ),
+    timeout: float = typer.Option(30.0, min=0.001, help="Overall probe deadline in seconds."),
+    max_response_bytes: int = typer.Option(16 * 1024 * 1024, min=1, help="Maximum decoded response bytes."),
+    out: str | None = typer.Option(None, help="Optional private capability receipt JSON path."),
+    scope_file: str | None = typer.Option(None, help="Rules-of-engagement file for target validation."),
+) -> None:
+    """Probe OpenAI protocol capabilities; this may incur provider inference cost.
+
+    Exit 0 means the requested capability was observed, not a security pass.
+    Exit 3 means preflight is incomplete. No consequential tool handlers run.
+    """
+    import json
+    from pathlib import Path
+
+    from neuralstrike.adapters.preflight import check_openai_target, environment_credential
+
+    _apply_scope(scope_file, url, "target preflight")
+    try:
+        credential = environment_credential(target_api_key_env)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from None
+    receipt = _run_value(check_openai_target(
+        url, model=model, api_key=credential, timeout=timeout,
+        max_response_bytes=max_response_bytes, require_tools=tools,
+    ))
+    content = json.dumps(receipt, indent=2, sort_keys=True)
+    if out:
+        write_private_artifact(Path(out), content)
+    console.print(content, markup=False)
+    raise typer.Exit(0 if receipt["ready"] else 3)
+
+
+@app.command()
 def corpus(
     adapter: str = typer.Option(
         "langgraph",
@@ -1825,6 +1866,13 @@ def corpus(
         help="Target URL (required for --adapter openai; the OpenAI endpoint).",
     ),
     model: str | None = typer.Option(None, help="Victim model (required for --adapter openai)."),
+    target_api_key_env: str | None = typer.Option(
+        None, "--target-api-key-env", help="Environment variable containing the target bearer credential."
+    ),
+    max_response_bytes: int = typer.Option(
+        16 * 1024 * 1024, "--max-response-bytes", min=1,
+        help="Maximum decoded bytes per OpenAI response (including error responses).",
+    ),
     tier: str = typer.Option(
         "instrumented",
         help="OpenAI SUT tier: text|function-calling|instrumented.",
@@ -1878,6 +1926,15 @@ def corpus(
         raise ValidationError("--timeout must be > 0")
     if adapter == "openai" and (not url or not model):
         raise ValidationError("--adapter openai requires --url and --model")
+
+    from neuralstrike.adapters.preflight import environment_credential
+
+    if target_api_key_env is not None and adapter != "openai":
+        raise typer.BadParameter("--target-api-key-env requires --adapter openai")
+    try:
+        target_api_key = environment_credential(target_api_key_env)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from None
 
     _apply_scope(scope_file, url or model or "bundled-vulnerable-fixture", intent)
     _apply_safety(intent, require_approval)
@@ -1954,7 +2011,10 @@ def corpus(
                         await asyncio.sleep(delay)
                     a: object
                     if adapter == "openai":
-                        a = OpenAIEndpointAdapter(url or "", model=model or "", tier=tier)
+                        a = OpenAIEndpointAdapter(
+                            url or "", model=model or "", tier=tier,
+                            api_key=target_api_key, max_response_bytes=max_response_bytes,
+                        )
                     elif graph_module:
                         a = LangGraphAdapter(spec=graph_module)
                     else:

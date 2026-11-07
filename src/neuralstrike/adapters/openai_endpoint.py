@@ -55,6 +55,7 @@ class OpenAIEndpointAdapter(TargetAdapter):
         tier: str = "function-calling",
         timeout: float = 30.0,
         max_tool_rounds: int = _MAX_TOOL_ROUNDS,
+        max_response_bytes: int = 16 * 1024 * 1024,
         seed: int | None = None,
         temperature: float = 0.0,
         transport: httpx.AsyncBaseTransport | None = None,
@@ -63,6 +64,9 @@ class OpenAIEndpointAdapter(TargetAdapter):
             raise ValueError(f"tier must be text|function-calling|instrumented, got {tier!r}")
         if not base_url.startswith(("http://", "https://")):
             raise ValueError(f"base_url must be http(s)://, got {base_url!r}")
+        if type(max_response_bytes) is not int or max_response_bytes < 1:
+            raise ValueError("max_response_bytes must be a positive integer")
+        self.max_response_bytes = max_response_bytes
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.api_key = api_key
@@ -193,17 +197,37 @@ class OpenAIEndpointAdapter(TargetAdapter):
         }
         exchanges.append(exchange)
         try:
-            resp = await self.client.post(self._endpoint(), json=payload)
-            exchange["status_code"] = resp.status_code
-            exchange["response_text"] = resp.text
-            resp.raise_for_status()
+            async with self.client.stream("POST", self._endpoint(), json=payload) as resp:
+                exchange["status_code"] = resp.status_code
+                exchange["capture_complete"] = False
+                body = bytearray()
+                # Count decoded bytes, including compressed responses. Do not trust
+                # Content-Length, which may be absent or refer to compressed data.
+                async for chunk in resp.aiter_bytes():
+                    if len(body) + len(chunk) > self.max_response_bytes:
+                        diagnostic = f"response exceeded max_response_bytes={self.max_response_bytes}"
+                        exchange["error"] = diagnostic
+                        exchange["error_type"] = "ResponseLimitExceeded"
+                        raise AdapterTransportError(diagnostic)
+                    body.extend(chunk)
+                # aiter_bytes already decoded Content-Encoding; avoid decoding it
+                # a second time when constructing the bounded buffered response.
+                buffered = httpx.Response(
+                    resp.status_code,
+                    headers={k: v for k, v in resp.headers.items() if k.lower() != "content-encoding"},
+                    content=bytes(body),
+                    request=resp.request,
+                )
+                exchange["capture_complete"] = True
+                exchange["response_text"] = buffered.text
+                buffered.raise_for_status()
         except httpx.HTTPError as exc:
             diagnostic = _http_error_diagnostic(exc, safe_endpoint, credentials_configured)
             exchange["error"] = diagnostic
             exchange["error_type"] = type(exc).__name__
             raise AdapterTransportError(diagnostic) from None
         try:
-            data = resp.json()
+            data = buffered.json()
             exchange["response"] = copy.deepcopy(data)
         except ValueError as exc:
             raise AdapterTransportError(f"non-JSON response: {exc}") from exc
@@ -250,7 +274,12 @@ class OpenAIEndpointAdapter(TargetAdapter):
             if choice is None:
                 error = "response had no choices"
                 break
-            msg = choice.get("message", {})
+            msg = choice.get("message")
+            problem = _message_problem(msg)
+            if problem is not None:
+                error = f"invalid chat completion: {problem}"
+                break
+            assert isinstance(msg, dict)  # validated above
             last_text = msg.get("content") or ""
             tool_calls = msg.get("tool_calls") or []
 
@@ -389,6 +418,39 @@ def _first_choice(data: dict[str, Any]) -> dict[str, Any] | None:
     if isinstance(choices, list) and choices:
         c = choices[0]
         return c if isinstance(c, dict) else None
+    return None
+
+
+def _message_problem(message: Any) -> str | None:  # noqa: PLR0911 - explicit protocol checks
+    """Validate the whole tool batch before any local handler can run."""
+    if not isinstance(message, dict):
+        return "message must be an object"
+    if message.get("content") is not None and not isinstance(message["content"], str):
+        return "content must be text or null"
+    calls = message.get("tool_calls", [])
+    if calls is None:
+        return None
+    if not isinstance(calls, list):
+        return "tool_calls must be an array"
+    ids: set[str] = set()
+    for call in calls:
+        if not isinstance(call, dict) or call.get("type") != "function":
+            return "tool call must be a function object"
+        call_id = call.get("id")
+        if not isinstance(call_id, str) or not call_id or call_id in ids:
+            return "tool call IDs must be nonempty and unique"
+        ids.add(call_id)
+        fn = call.get("function")
+        if not isinstance(fn, dict) or not isinstance(fn.get("name"), str) or not fn["name"]:
+            return "function name must be nonempty text"
+        arguments = fn.get("arguments")
+        if isinstance(arguments, str):
+            try:
+                arguments = json.loads(arguments)
+            except ValueError:
+                return "function arguments must be a JSON object"
+        if not isinstance(arguments, dict):
+            return "function arguments must be a JSON object"
     return None
 
 

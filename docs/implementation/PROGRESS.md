@@ -566,3 +566,70 @@ and later-phase interoperability/authorization/validation boundaries remain
 explicit in CAPTURE_PROFILES.md, REPLAY.md and PHASE1_ACCEPTANCE.md. Next phase is
 protocol interoperability and target preflight under the master plan; no release,
 cloud spend or external-target testing has been performed or authorized here.
+
+## 2026-11-07 — Phase 2 started: authenticated OpenAI preflight and response boundary
+
+Phase 2 is in progress, not complete. Started from clean main c0eed07; no
+unrelated work was present. Read the master-plan Phase 2 acceptance requirements
+and inspected adapter/CLI/runtime ownership. No repository AGENTS.md was found.
+No dependencies changed, cloud inference ran, releases were published or external
+targets were tested. Tests used synthetic credentials and loopback HTTP only.
+
+Demonstrated before fixes:
+- Eight new response-boundary tests failed: the adapter had no accepted-response
+  byte limit, crashed on null/list message objects, accepted duplicate tool IDs
+  and malformed JSON arguments, or ran until the round cap.
+- Three CLI auth regressions failed because corpus had no environment credential
+  reference option. Separate stdlib HTTP fixture supplies the independent
+  transport implementation; it does not establish customer-agent efficacy.
+- Preflight tests initially failed collection because no preflight module existed.
+
+Implemented:
+- Bounded decoded streaming read, explicit incomplete-capture/error metadata and
+  stream cleanup. All successful and failure status bodies use the same limit.
+- Whole-message/tool-batch validation before executing any handler from that
+  batch; invalid raw private response remains reproducible. No automatic retries.
+- Corpus `--target-api-key-env` and `--max-response-bytes`; missing/empty/header-
+  invalid credentials fail before assessment setup, and existing unauthenticated
+  CLI use remains valid.
+- `doctor` with overall timeout, harmless tool round-trip (or explicit text-only),
+  private optional capability receipt, client-version metadata, and guaranteed
+  client closure. Readiness is explicitly not a security assessment. Source
+  credential values and headers are excluded from its receipt.
+- Tests establish cancellation stream cleanup, deadline/client cleanup, 429/503
+  no-retry behavior, malformed batch nonexecution, compressed overflow, exact
+  boundary, actual CLI authenticated 200/401 handling, and safe inconclusive
+  corpus gating even when authentication succeeds.
+
+Verification checkpoints:
+- First full Python pass: 1312 passed, 2 skipped, 91.60% coverage, 34.03s
+  (`/tmp/neuralstrike-phase2-increment1-tests.log`), before added doctor coverage.
+- Final focused new suites: 26 passed (loopback CLI, preflight, response limits).
+- Final full-suite and static-check results are recorded below after completion.
+
+Scope/limitations and usable commands: PHASE2_INTEROPERABILITY.md. Remaining
+Phase 2 work includes independently implemented LangGraph vulnerable/hardened/
+regression cycles, explicit MCP revision profiles, runtime budgets/rate controls,
+thread reset/cleanup-failure semantics, secret stores and consequential-action
+idempotency. The byte limit bounds accepted decoded data, not all process memory.
+No claim of server-build attestation, universal interoperability or efficacy.
+
+Final verification for this increment:
+- `/tmp/neuralstrike-phase0-venv/bin/python -m pytest --cov=neuralstrike
+  --cov-fail-under=85` → **1321 passed, 2 skipped, 91.62% coverage**, 35.37s;
+  `/tmp/neuralstrike-phase2-increment1-final.log`. The optional base58 and real
+  NeuralGuard skips remain unverified integrations, not passes.
+- `ruff check src tests`: pass. `mypy src`: pass, 137 source files.
+- `uv build --out-dir /tmp/neuralstrike-phase2-increment1-dist`: wheel and sdist
+  pass. The initial `python -m build` attempt could not run because that temporary
+  environment lacks the build module; uv's isolated build succeeded without
+  repository dependency changes.
+- Reinstalled the wheel with `uv pip install --python
+  /tmp/neuralstrike-wheel-venv/bin/python --no-deps --reinstall ...whl`. From
+  `/tmp`, verified import from that environment, ran installed CLI doctor against
+  a separate loopback server, observed authenticated tool/final-text 200/200
+  round-trip, exit 0, private 0600 receipt, no synthetic credential in receipt and
+  `security_assessment=false`. Scratch root:
+  `/var/folders/zv/n4210phd6_d5lqqfx462c9gw0000gn/T/neuralstrike-phase2-wheel-hvvzcwpt`.
+- `git diff --check`: pass. Dashboard unchanged; no additional dashboard testing
+  required for these adapter/CLI changes. No hosted CI completion claim.
