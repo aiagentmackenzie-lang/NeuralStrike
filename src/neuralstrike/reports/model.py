@@ -82,6 +82,10 @@ class ScenarioResult:
     evidence: dict[str, Any] = field(default_factory=dict)
 
     @property
+    def recording_status(self) -> str:
+        return "recorded" if self.trials else "missing"
+
+    @property
     def is_finding(self) -> bool:
         """True if this scenario produced a Succeeded trial (an exploitable finding)."""
         return self.verdict is Verdict.SUCCEEDED
@@ -105,6 +109,12 @@ class CorpusRun:
     coverage: float
     health: AssessmentHealth | None = None
     completed_at: str | None = None
+    assessment_id: str | None = None
+    plan_digest: str | None = None
+    execution_error: str | None = None
+    gate_policy: str | None = None
+    tool_version: str = __version__
+    declared_scope: dict[str, Any] = field(default_factory=dict)
 
     @property
     def artifact_policy(self) -> dict[str, Any]:
@@ -118,16 +128,20 @@ class CorpusRun:
             "selected_scenarios": [sr.scenario.id for sr in self.scenario_results],
             "planned_trials": len(self.scenario_results) * self.trials_per_scenario,
             "authorization": "not attested by this report",
+            "declared_scope": self.declared_scope,
         }
 
     @property
     def limitations(self) -> tuple[str, ...]:
-        return (
+        common = (
             "Remote builds and authorization are not authenticated by this report.",
             "Delivery observations show the sent channel, not target consumption.",
             "Local canary receipts prove fixture execution, not production side effects.",
             "Hashes detect changed bytes; they do not authenticate the evidence author.",
             "Raw target content is private; report formats are not sanitizers.",
+        )
+        return common + (
+            (f"Assessment execution error: {self.execution_error}",) if self.execution_error else ()
         )
 
     @property
@@ -148,9 +162,24 @@ class CorpusRun:
             "coverage": self.coverage,
         }
 
+    @property
+    def recorded_gate(self) -> dict[str, Any] | None:
+        if self.health is None or self.gate_policy is None:
+            return None
+        return {
+            "fail_on": self.gate_policy,
+            "exit_code": self.health.exit_code(self.gate_policy),
+            "assessment_status": self.health.status,
+            "baseline_comparison": False,
+        }
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "artifact_policy": self.artifact_policy,
+            "assessment_id": self.assessment_id,
+            "plan_digest": self.plan_digest,
+            "execution_error": self.execution_error,
+            "recorded_gate": self.recorded_gate,
             "assessment_scope": self.assessment_scope,
             "limitations": list(self.limitations),
             "health": self.health.to_dict() if self.health else None,
@@ -161,7 +190,7 @@ class CorpusRun:
             "adapter": self.adapter,
             "target": self.target,
             "schema_version": 2,
-            "tool_version": __version__,
+            "tool_version": self.tool_version,
             "overall": self.overall(),
             "scenario_results": [_scenario_to_dict(s) for s in self.scenario_results],
         }
@@ -170,6 +199,7 @@ class CorpusRun:
 def _scenario_to_dict(s: ScenarioResult) -> dict[str, Any]:
     return {
         "id": s.scenario.id,
+        "recording_status": s.recording_status,
         "source": {
             "path": s.scenario.source_path,
             "sha256": s.scenario.source_sha256,

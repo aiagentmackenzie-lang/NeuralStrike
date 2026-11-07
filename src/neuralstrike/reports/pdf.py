@@ -53,6 +53,8 @@ def _lines_for_run(run: CorpusRun, max_chars: int) -> list[str]:
         "NeuralStrike Corpus Run Report",
         "",
         "Handling:          Private raw evidence; not sanitized for sharing.",
+        f"Assessment ID:     {run.assessment_id or 'unrecorded'}",
+        f"Plan digest:       {run.plan_digest or 'unrecorded'}",
         f"Assessment health: {run.health.status if run.health else 'unavailable'}",
         f"Started:           {run.started_at}",
         f"Completed:         {run.completed_at or 'unrecorded'}",
@@ -67,7 +69,7 @@ def _lines_for_run(run: CorpusRun, max_chars: int) -> list[str]:
         f"({run.overall_succeeded} succeeded / {run.overall_resisted} resisted / "
         f"{run.overall_inconclusive} inconclusive)",
         f"ASR (conclusive):  {run.asr_display}",
-        f"Coverage:          {run.coverage:.2%}",
+        f"Coverage (recorded): {run.coverage:.2%}",
         "",
         "Legend: SUCCEEDED = exploitable | RESISTED | INCONCLUSIVE = coverage gap (surfaced)",
         "        Verdicts are conclusive-only; Inconclusive trials are never coerced to PASS.",
@@ -92,6 +94,8 @@ def _lines_for_run(run: CorpusRun, max_chars: int) -> list[str]:
                 lines.append(f"    [{c.framework}] {c.control_id} - {c.control_name}")
         else:
             lines.append("    (no controls mapped)")
+        if not sr.trials:
+            lines.append("    Selected scenario has no committed trial evidence; execution is not asserted.")
         for t in sr.trials:
             ev = (t.evidence_quote or t.reason or "").replace("\n", " ")
             if len(ev) > 90:

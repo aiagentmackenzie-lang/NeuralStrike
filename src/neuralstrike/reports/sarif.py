@@ -28,7 +28,6 @@ from dataclasses import asdict
 from typing import Any
 from urllib.parse import quote
 
-from neuralstrike import __version__
 from neuralstrike.evaluation.verdict import Verdict
 from neuralstrike.reports.compliance import framework_name
 from neuralstrike.reports.model import CorpusRun, ScenarioResult
@@ -66,6 +65,9 @@ def _rule_for(scenario_result: ScenarioResult) -> dict[str, Any]:
             )
         },
         "properties": {
+            "recording_status": scenario_result.recording_status,
+            "recorded_trials": scenario_result.total,
+            "planned_trials": scenario_result.evidence.get("meta", {}).get("trials"),
             "source_path": s.source_path,
             "source_sha256": s.source_sha256,
             "scenario_fingerprint": s.fingerprint,
@@ -155,7 +157,7 @@ def to_sarif(run: CorpusRun) -> str:
                 "tool": {
                     "driver": {
                         "name": "NeuralStrike",
-                        "version": __version__,
+                        "version": run.tool_version,
                         "informationUri": ("https://github.com/aiagentmackenzie-lang/NeuralStrike"),
                         "rules": rules,
                         "properties": {
@@ -179,6 +181,10 @@ def to_sarif(run: CorpusRun) -> str:
                         **({"endTimeUtc": run.completed_at} if run.completed_at else {}),
                         "properties": {
                             "artifact_policy": run.artifact_policy,
+                            "assessment_id": run.assessment_id,
+                            "plan_digest": run.plan_digest,
+                            "execution_error": run.execution_error,
+                            "recorded_gate": run.recorded_gate,
                             "assessment_scope": run.assessment_scope,
                             "limitations": list(run.limitations),
                             "health": run.health.to_dict() if run.health else None,

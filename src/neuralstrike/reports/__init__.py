@@ -30,6 +30,7 @@ from neuralstrike.reports.model import (
 )
 from neuralstrike.reports.pdf import to_pdf
 from neuralstrike.reports.readme_mapping import readme_mapping_section, readme_mapping_table
+from neuralstrike.reports.render import render_report
 from neuralstrike.reports.sarif import to_sarif
 
 __all__ = [
@@ -39,6 +40,7 @@ __all__ = [
     "build_corpus_run",
     "readme_mapping_section",
     "readme_mapping_table",
+    "render_report",
     "to_json",
     "to_junit",
     "to_markdown",

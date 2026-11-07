@@ -26,6 +26,7 @@ import copy
 import json
 import uuid
 from typing import Any
+from urllib.parse import unquote
 
 import httpx
 
@@ -173,12 +174,21 @@ class OpenAIEndpointAdapter(TargetAdapter):
             payload["tool_choice"] = "auto"
         if seed is not None:
             payload["seed"] = seed
+        endpoint_url = httpx.URL(self._endpoint())
+        safe_endpoint = str(endpoint_url.copy_with(username=None, password=None, query=None, fragment=None))
+        credentials_configured = bool(
+            self.api_key
+            or endpoint_url.username
+            or endpoint_url.password
+            or endpoint_url.query
+            or endpoint_url.fragment
+        )
         exchange: dict[str, Any] = {
             "exchange_id": uuid.uuid4().hex,
             "method": "POST",
-            "endpoint": str(httpx.URL(self._endpoint()).copy_with(username=None, password=None, query=None)),
+            "endpoint": safe_endpoint,
             "request": copy.deepcopy(payload),
-            "capture": "private HTTP JSON bodies; headers and URL userinfo/query excluded",
+            "capture": "private HTTP JSON bodies; headers and URL userinfo/query/fragment excluded",
             "seed_semantics": "sent best-effort; provider support and determinism not asserted",
         }
         exchanges.append(exchange)
@@ -188,8 +198,10 @@ class OpenAIEndpointAdapter(TargetAdapter):
             exchange["response_text"] = resp.text
             resp.raise_for_status()
         except httpx.HTTPError as exc:
-            exchange["error"] = str(exc)
-            raise AdapterTransportError(str(exc)) from exc
+            diagnostic = _http_error_diagnostic(exc, safe_endpoint, credentials_configured)
+            exchange["error"] = diagnostic
+            exchange["error_type"] = type(exc).__name__
+            raise AdapterTransportError(diagnostic) from None
         try:
             data = resp.json()
             exchange["response"] = copy.deepcopy(data)
@@ -323,6 +335,49 @@ class OpenAIEndpointAdapter(TargetAdapter):
                     channel = "retrieved_document"
             present = marker in content
             trace.record_delivery(channel, marker, present=present)
+
+
+def _http_error_diagnostic(exc: httpx.HTTPError, endpoint: str, credentials_configured: bool) -> str:
+    """Do not copy authentication material from exception messages into evidence/logs.
+
+    Status errors use structured metadata, including redirects whose Location may
+    contain independent secrets. Authenticated or URL-bearing transport messages
+    are opaque: encoded/decoded credential echoes are not safe to pattern-scrub.
+    Ordinary credential-free connection diagnostics remain useful (e.g. 'boom').
+    """
+    if isinstance(exc, httpx.HTTPStatusError):
+        return f"{type(exc).__name__}: HTTP {exc.response.status_code} at {endpoint}"
+    try:
+        request = exc.request
+    except (AttributeError, RuntimeError):
+        request = None
+    if request is not None:
+        url = request.url
+        ordinary_headers = {
+            "accept",
+            "accept-encoding",
+            "connection",
+            "content-length",
+            "content-type",
+            "host",
+            "user-agent",
+        }
+        credentials_configured |= bool(url.username or url.password or url.query or url.fragment)
+        credentials_configured |= bool(set(request.headers) - ordinary_headers)
+    detail = str(exc)
+    decoded = detail
+    # Decode until stable within a bounded diagnostic, not an arbitrary nesting
+    # depth that could expose credentials after another percent-encoding layer.
+    oversized = len(detail) > 4096
+    if not oversized:
+        while True:
+            previous = decoded
+            decoded = unquote(decoded)
+            if previous == decoded:
+                break
+    if credentials_configured or oversized or "://" in decoded:
+        detail = "transport detail omitted (credential-bearing or URL-bearing diagnostic)"
+    return f"{type(exc).__name__}: {detail} at {endpoint}"
 
 
 class AdapterTransportError(Exception):

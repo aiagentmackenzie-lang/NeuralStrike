@@ -221,3 +221,24 @@ def test_adapters_close_when_evidence_persistence_raises(tmp_path, command):
     assert result.exit_code == 3, result.output
     assert "incomplete" in result.output.lower()
     close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_credential_url_is_excluded_from_error_diagnostics(tmp_path):
+    sentinel = "SYNTHETIC_URL_PASSWORD"
+    adapter = OpenAIEndpointAdapter(
+        f"http://fixture-user:{sentinel}@fixture",
+        model="synthetic",
+        transport=httpx.MockTransport(lambda request: httpx.Response(503, text="synthetic outage")),
+    )
+    try:
+        report = await TrialRunner(run_dir=tmp_path).run(
+            adapter_scan_probe(adapter, payload="synthetic", scenario_id="safe-errors", oracles=[])
+        )
+    finally:
+        await adapter.close()
+    encoded = json.dumps(report.to_dict())
+    assert sentinel not in encoded
+    assert "fixture-user" not in encoded
+    assert report.trials[0].response.error
+    assert "503" in report.trials[0].response.error

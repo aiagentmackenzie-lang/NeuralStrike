@@ -497,3 +497,72 @@ under `never`. Final wheel source:
 These raw artifacts are local only and are not committed. Full-suite counts above
 are final after the strict recipe-validation changes. No hosted CI result is
 claimed for this new increment until its pushed commit is independently checked.
+
+### Phase 1 acceptance completed — 2026-11-07
+
+Continued from af55e2d with clean main. Implemented the remaining assessment-level
+bundle and capture/export scope work, preserving per-run paths and newer fixes.
+See PHASE1_ACCEPTANCE.md for the six acceptance rows and explicit profile limits.
+
+Completed work and fail-before evidence:
+
+- New parent-bundle acceptance tests failed before implementation. Corpus now
+  freezes the full selected plan before adapter setup; private unique parent
+  directories contain plan/report, hashed child manifests and complete child
+  bundles. Portability requires no original run root. Loader enforces bounded
+  known-schema files, exact inventories, plan/run context and compiled-summary
+  consistency. Changed scenario contents cannot claim the original plan.
+- Omitted selections retain empty trial sets, incomplete health and no asserted
+  execution. Global setup/cleanup errors remain incomplete even if all committed
+  trials conclude. Partial/unlinked persistence cannot be blessed as committed.
+  Offline replay/rescore retain those states, and source bytes/content IDs stay
+  unchanged. Parent derivations record source identity/hash and new policy.
+- Five offline-format regressions failed before adding shared rendering dispatch.
+  All formats now render a verified parent; four more failing regressions required
+  parent ID/plan digest in each view. Recorded policy and original producer version
+  are retained, separate from current replay policy. A historical producer-version
+  control failed before preserving that version. Malformed summary-array input
+  also failed the explicit-error contract before its final guard.
+- A selected scenario without a SARIF result was missing from dashboard rows.
+  The new regression failed first. Scope/rules now preserve that row as missing,
+  with no synthetic result/trial added to totals; JSON/JUnit/human views retain
+  the same missing-record distinction. Known older additive labels remain readable.
+- New sharing tests failed before `export-summary`. Only validated metrics, fixed
+  enum values and hashed references are exported; all freeform fields are omitted.
+  Sentinels across IDs, target URL, prompts, outputs, tool args, errors, paths and
+  oracle text are absent from the summary. Source corruption prevents output,
+  overwrite inside the source is rejected, and summary profile is non-replayable.
+- Demonstrated credential leak: HTTPX status-error strings included URL passwords
+  in exchanges, response errors, persisted JSON and logs. Boundary investigation
+  confirmed copies/encoded forms and the ordinary connection-error contract.
+  Narrow adapter diagnostics now retain structured class/status/credential-free
+  endpoint information and ordinary unauthenticated details; authenticated or
+  URL-bearing transport messages remain opaque. Actual bodies/auth wiring stay.
+- One independent candidate review found a surviving SDK INFO route before the
+  adapter handler. Six new INFO formatter/filter regressions and a deeply encoded
+  transport case failed before fixes. Default URL log rendering now omits userinfo,
+  query and fragment; the adapter no longer copies credential-bearing diagnostic
+  text/cause. The original trigger, alternates and legitimate controls pass.
+  No historical real-credential leak or compromise is claimed; all probes synthetic.
+
+Final ordered verification:
+1. Syntax/import/static: Ruff passed; mypy passed (136 source files).
+2. Security trigger/alternates: focused capture/adapters/request-evidence/logging
+   checks passed after correcting the reviewer-confirmed INFO path; original raw
+   and equivalent encoded/redirect/authenticated transport sentinels no longer
+   reproduce in rendered diagnostics. Ordinary `boom` and successful/full-body
+   capture remain intact. One review cycle, read-only agents, no unrelated edits.
+3. Full refreshed Python 3.12.14 gate: **1295 passed, 2 skipped, 91.62% coverage**,
+   `/tmp/neuralstrike-phase1-final-acceptance.log`. Dashboard **19 tests/build pass**.
+   Wheel/sdist and isolated installed-wheel assessment smoke, portable original-
+   oracle replay in five formats, derived rescoring, summary and corruption/missing
+   rejection passed. Source manifest hash/root are recorded in PHASE1_ACCEPTANCE.md.
+   Diff whitespace checks pass. Final PDF pages were rendered/visually inspected.
+
+Phase 1's declared acceptance gates are complete within these tested profiles.
+No readiness/efficacy claim follows from coverage or fixture success. Capture
+scope, legacy/producer compatibility, summary limits, optional skipped packages
+and later-phase interoperability/authorization/validation boundaries remain
+explicit in CAPTURE_PROFILES.md, REPLAY.md and PHASE1_ACCEPTANCE.md. Next phase is
+protocol interoperability and target preflight under the master plan; no release,
+cloud spend or external-target testing has been performed or authorized here.

@@ -29,6 +29,9 @@ export interface Report {
   tool: string;
   version: string;
   target?: string;
+  assessmentId?: string;
+  planDigest?: string;
+  recordedGate?: { fail_on: string; exit_code: number } | null;
   startedAt?: string;
   completedAt?: string;
   health: "complete" | "incomplete" | "unavailable";
@@ -40,8 +43,13 @@ export interface Report {
   findings: Finding[];
 }
 
-function provenance(raw: any): Pick<Report, "scope" | "limitations"> {
+function provenance(raw: any): Pick<Report, "scope" | "limitations" | "assessmentId" | "planDigest" | "recordedGate"> {
+  const gate = raw.recorded_gate;
+  const knownGate = ["never", "vuln", "regression"].includes(gate?.fail_on) && [0, 1, 3, 4].includes(gate?.exit_code);
   return {
+    assessmentId: typeof raw.assessment_id === "string" ? raw.assessment_id : undefined,
+    planDigest: typeof raw.plan_digest === "string" && /^[0-9a-f]{64}$/.test(raw.plan_digest) ? raw.plan_digest : undefined,
+    recordedGate: knownGate ? { fail_on: gate.fail_on, exit_code: gate.exit_code } : null,
     scope: raw.assessment_scope && typeof raw.assessment_scope === "object" && !Array.isArray(raw.assessment_scope)
       ? raw.assessment_scope : null,
     limitations: Array.isArray(raw.limitations) ? raw.limitations.filter((value: any) => typeof value === "string")
@@ -113,7 +121,8 @@ function parseNeuralStrikeJson(data: any): Report {
       owaspName: scenario.owasp_name || "",
       verdict,
       severity: trial.severity || scenario.severity || "info",
-      reason: trial.reason || "No matching trial evidence available",
+      reason: trial.reason || (!total ? "Selected scenario has no committed trial evidence"
+        : "No matching trial evidence available"),
       evidence: trial.evidence_quote || undefined,
       evidenceId: trial.evidence_id,
       evidenceOrigin: trial.evidence_origin || "unverified-observation",
@@ -150,6 +159,11 @@ function parseSarif(data: any): Report {
   for (const rule of driver.rules || []) rulesById.set(rule.id, rule);
 
   const groups = new Map<string, any[]>();
+  if (props.report_schema_version === 2 && Array.isArray(props.assessment_scope?.selected_scenarios)) {
+    for (const id of props.assessment_scope.selected_scenarios) {
+      if (typeof id === "string") groups.set(id, []);
+    }
+  }
   const trialVerdicts = new Map<string, Finding["verdict"][]>();
   let legacyRows = false;
   for (const [index, result] of (run.results || []).entries()) {
@@ -176,7 +190,8 @@ function parseSarif(data: any): Report {
       id, verdict, owaspCategory: rule.properties?.owasp_category || "",
       owaspName: rule.properties?.owasp_name || rule.name || "",
       severity: row?.result.properties?.severity || rule.properties?.severity || "info",
-      reason: row?.result.message?.text || "No matching trial evidence available",
+      reason: row?.result.message?.text || (!rows.length ? "Selected scenario has no committed trial evidence"
+        : "No matching trial evidence available"),
       evidence: row?.result.message?.text || undefined,
       evidenceId: row?.result.properties?.evidence_id,
       evidenceOrigin: row?.result.properties?.evidence_origin || "unverified-observation",

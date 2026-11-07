@@ -421,6 +421,20 @@ def rescore_bundle(
     if destination == source or source in destination.parents:
         raise BundleError("derived output must be outside the source bundle")
     bundle = load_bundle(source)
+    report = rescore_verified(bundle, oracles, oracle_version=oracle_version, started_at=started_at)
+    persist_report(report, destination)
+    return report
+
+
+def rescore_verified(
+    bundle: VerifiedBundle,
+    oracles: list[Oracle],
+    *,
+    oracle_version: str,
+    started_at: str | None = None,
+) -> RunReport:
+    """Derive from already verified observations without writing or target calls."""
+    started_at = started_at or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     identity = comparison_identity(None, {}, [], oracles)
     if not identity["comparable"] or not oracle_version.strip():
         raise BundleError("rescoring requires a version and representable oracle identity")
@@ -447,8 +461,6 @@ def rescore_bundle(
             "execution": "caller-supplied local oracle objects; no target constructed",
         },
     )
-    report = RunReport(
+    return RunReport(
         meta, tuple(results), score_trials(results, category_of={meta.scenario_id: meta.category})
     )
-    persist_report(report, destination)
-    return report

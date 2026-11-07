@@ -17,9 +17,11 @@ from neuralstrike.safety import HITLGate, classify_intent
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from neuralstrike.evaluation.health import AssessmentHealth
     from neuralstrike.evaluation.runner import RunReport
     from neuralstrike.integrations.neuralguard import NeuralGuardScreen
     from neuralstrike.integrations.scarletai import ExerciseTelemetry
+    from neuralstrike.oracles.base import Oracle
 from neuralstrike.scope import load_scope
 from neuralstrike.utils.artifacts import write_private_artifact
 from neuralstrike.utils.logging import configure_logging, get_logger
@@ -84,6 +86,11 @@ def _finish_assessment(reports: Sequence[RunReport], fail_on: str, *, selected: 
     from neuralstrike.evaluation.health import assessment_health
 
     health = assessment_health(reports, selected=selected)
+    _finish_health(health, fail_on)
+
+
+def _finish_health(health: AssessmentHealth, fail_on: str) -> NoReturn:
+    """Render an already assembled health result, including assessment-wide errors."""
     code = health.exit_code(fail_on)
     console.print(f"Assessment {health.status} (exit {code}; fail-on={fail_on})")
     console.print(
@@ -1881,9 +1888,10 @@ def corpus(
     from neuralstrike.adapters.openai_endpoint import OpenAIEndpointAdapter
     from neuralstrike.attacks.indirect import IndirectHarness
     from neuralstrike.corpus import load_corpus_dir
+    from neuralstrike.evaluation.assessment import AssessmentRecorder
     from neuralstrike.evaluation.runner import TrialRunner
     from neuralstrike.oracles.tool_harness import make_canary_tools
-    from neuralstrike.reports import build_corpus_run, to_json, to_junit, to_markdown, to_pdf, to_sarif
+    from neuralstrike.reports import render_report
 
     console.print(
         f"[yellow]Running corpus ({format}) via {adapter} (trials={trials}, seed={seed})...[/yellow]"
@@ -1896,6 +1904,25 @@ def corpus(
         if not scenarios:
             console.print("[red]No scenarios loaded; is corpus/*.yaml present?[/red]")
             raise typer.Exit(3)
+        declared_scope: dict[str, Any] = {
+            "authorization": "not independently attested",
+            "declared_intent": intent,
+        }
+        if scope_file:
+            import hashlib
+            from pathlib import Path
+
+            declared_scope["scope_file_sha256"] = hashlib.sha256(Path(scope_file).read_bytes()).hexdigest()
+        recorder = AssessmentRecorder(
+            run_dir,
+            scenarios=scenarios,
+            base_seed=seed,
+            trials=trials,
+            adapter=adapter,
+            target=url or model or "bundled-vulnerable-fixture",
+            fail_on=fail_on,
+            declared_scope=declared_scope,
+        )
         canary = make_canary_tools()
         tools = TargetAdapter.canary_tools_as_schemas(canary)
         reports = []
@@ -1921,69 +1948,60 @@ def corpus(
             progress_ctx.start()
             task = progress_ctx.add_task("Corpus scan", total=len(scenarios))
         try:
-            for i, s in enumerate(scenarios):
-                if i > 0 and delay > 0:
-                    await asyncio.sleep(delay)
-                a: object
-                if adapter == "openai":
-                    a = OpenAIEndpointAdapter(url or "", model=model or "", tier=tier)
-                elif graph_module:
-                    a = LangGraphAdapter(spec=graph_module)
-                else:
-                    from neuralstrike.fixtures.langgraph_agent import build_vulnerable_graph
-
-                    a = LangGraphAdapter(graph=build_vulnerable_graph())
-                adapters_to_close.append(a)
-                harness = IndirectHarness(s)
-                probe = harness.probe_for(
-                    a,
-                    canary_tools=canary if tier != "text" else (),
-                    tools=tools if tier != "text" else (),
-                )
-                runner = TrialRunner(
-                    base_seed=seed,
-                    run_dir=run_dir,
-                    inter_trial_delay=delay,
-                    trial_timeout=timeout,
-                )
-                r = await runner.run(probe, trials=trials)
-                reports.append(r)
-                if task is not None and progress_ctx is not None:
-                    progress_ctx.advance(task)
-        finally:
             try:
-                if progress_ctx is not None:
-                    progress_ctx.stop()
+                for i, s in enumerate(scenarios):
+                    if i > 0 and delay > 0:
+                        await asyncio.sleep(delay)
+                    a: object
+                    if adapter == "openai":
+                        a = OpenAIEndpointAdapter(url or "", model=model or "", tier=tier)
+                    elif graph_module:
+                        a = LangGraphAdapter(spec=graph_module)
+                    else:
+                        from neuralstrike.fixtures.langgraph_agent import build_vulnerable_graph
+
+                        a = LangGraphAdapter(graph=build_vulnerable_graph())
+                    adapters_to_close.append(a)
+                    harness = IndirectHarness(s)
+                    probe = harness.probe_for(
+                        a,
+                        canary_tools=canary if tier != "text" else (),
+                        tools=tools if tier != "text" else (),
+                    )
+                    runner = TrialRunner(
+                        base_seed=seed,
+                        run_dir=run_dir,
+                        inter_trial_delay=delay,
+                        trial_timeout=timeout,
+                    )
+                    r = await runner.run(probe, trials=trials)
+                    recorder.add(r)
+                    reports.append(r)
+                    if task is not None and progress_ctx is not None:
+                        progress_ctx.advance(task)
             finally:
-                closed = await asyncio.gather(
-                    *(a.close() for a in adapters_to_close if isinstance(a, OpenAIEndpointAdapter)),
-                    return_exceptions=True,
-                )
-                for result in closed:
-                    if isinstance(result, BaseException):
-                        raise result
-        target = url or model or "bundled-vulnerable-fixture"
-        corpus_run = build_corpus_run(
-            scenarios=scenarios,
-            reports=reports,
-            base_seed=seed,
-            trials_per_scenario=trials,
-            adapter=adapter,
-            target=target,
-        )
+                try:
+                    if progress_ctx is not None:
+                        progress_ctx.stop()
+                finally:
+                    closed = await asyncio.gather(
+                        *(a.close() for a in adapters_to_close if isinstance(a, OpenAIEndpointAdapter)),
+                        return_exceptions=True,
+                    )
+                    for result in closed:
+                        if isinstance(result, BaseException):
+                            raise result
+        except BaseException as exc:
+            try:
+                recorder.finish(execution_error=f"assessment execution aborted ({type(exc).__name__})")
+            except Exception:
+                logger.exception("Assessment abort evidence could not be committed")
+            raise
+        corpus_run = recorder.finish()
+        console.print(f"Assessment bundle → {recorder.path}")
         ext = {"sarif": ".sarif", "json": ".json", "junit": ".xml", "markdown": ".md", "pdf": ".pdf"}[format]
         path = out + ext
-        content: str | bytes
-        if format == "sarif":
-            content = to_sarif(corpus_run)
-        elif format == "json":
-            content = to_json(corpus_run)
-        elif format == "junit":
-            content = to_junit(corpus_run)
-        elif format == "markdown":
-            content = to_markdown(corpus_run)
-        else:
-            content = to_pdf(corpus_run)
+        content = render_report(corpus_run, format)
         from pathlib import Path
 
         out_path = Path(path)
@@ -3539,8 +3557,11 @@ def judge_audit(
 
 @app.command()
 def replay(
-    bundle: str = typer.Argument(..., help="Directory containing a committed run manifest."),
-    out: str | None = typer.Option(None, help="Private JSON export outside the source bundle."),
+    bundle: str = typer.Argument(..., help="Directory containing a committed run or assessment bundle."),
+    out: str | None = typer.Option(None, help="Private report export outside the source bundle."),
+    format: str = typer.Option(
+        "json", help="Assessment format: json|sarif|junit|markdown|pdf; per-run export is JSON."
+    ),
     verify_oracles: bool = typer.Option(
         False, help="Re-evaluate the recorded built-in deterministic policy offline."
     ),
@@ -3549,19 +3570,32 @@ def replay(
     """Verify a run bundle and recompute recorded-outcome scores offline."""
     from pathlib import Path
 
+    from neuralstrike.evaluation.assessment import is_assessment_bundle, load_assessment
     from neuralstrike.evaluation.bundle import BundleError, replay_bundle
+    from neuralstrike.reports import render_report
 
     if fail_on not in {"never", "vuln", "regression"}:
         raise typer.BadParameter("--fail-on must be never|vuln|regression")
+    if format not in {"json", "sarif", "junit", "markdown", "pdf"}:
+        raise typer.BadParameter("unsupported report format")
     try:
         source = Path(bundle).resolve()
         if out and (Path(out).resolve() == source or source in Path(out).resolve().parents):
             raise BundleError("replay export must be outside the source bundle")
-        report = replay_bundle(source, verify_oracles=verify_oracles)
-        if out:
+        assessment = None
+        report = None
+        if is_assessment_bundle(source):
+            assessment = load_assessment(source, verify_oracles=verify_oracles)
+            content = render_report(assessment.report, format)
+        else:
+            if format != "json":
+                raise BundleError("per-run export is JSON; other formats require an assessment bundle")
+            report = replay_bundle(source, verify_oracles=verify_oracles)
             import json
 
-            write_private_artifact(Path(out), json.dumps(report.to_dict(), indent=2, sort_keys=True))
+            content = json.dumps(report.to_dict(), indent=2, sort_keys=True)
+        if out:
+            write_private_artifact(Path(out), content)
     except (BundleError, OSError) as exc:
         console.print(f"[red]Bundle error:[/red] {exc}")
         raise typer.Exit(3) from exc
@@ -3571,6 +3605,11 @@ def replay(
         else "Offline replay: verified recorded outcomes; no target or oracle calls."
     )
     console.print("Private raw evidence; hashes do not authenticate the author.")
+    if assessment is not None and assessment.report.health is not None:
+        if assessment.report.execution_error:
+            console.print("Assessment-wide execution error recorded; inspect the private report.")
+        _finish_health(assessment.report.health, fail_on)
+    assert report is not None
     _finish_assessment([report], fail_on, selected=report.meta.trials)
 
 
@@ -3583,6 +3622,7 @@ def rescore(
     fail_on: str = typer.Option("vuln", help="never|vuln|regression."),
 ) -> None:
     """Rescore recorded responses with an explicit deterministic tool policy."""
+    from neuralstrike.evaluation.assessment import is_assessment_bundle, rescore_assessment
     from neuralstrike.evaluation.bundle import BundleError, rescore_bundle
     from neuralstrike.oracles.forbidden_tool import ForbiddenToolOracle, ForbiddenToolSpec
 
@@ -3591,18 +3631,52 @@ def rescore(
     if not forbid_tool or any(not name.strip() for name in forbid_tool):
         raise typer.BadParameter("--forbid-tool must contain a tool name")
     try:
-        report = rescore_bundle(
-            bundle,
-            [ForbiddenToolOracle(ForbiddenToolSpec(forbidden_tools=tuple(forbid_tool)))],
-            output_root=out_dir,
-            oracle_version=oracle_version,
-        )
+        oracles: list[Oracle] = [ForbiddenToolOracle(ForbiddenToolSpec(forbidden_tools=tuple(forbid_tool)))]
+        assessment = None
+        report = None
+        if is_assessment_bundle(bundle):
+            assessment = rescore_assessment(
+                bundle,
+                oracles,
+                output_root=out_dir,
+                oracle_version=oracle_version,
+                fail_on=fail_on,
+            )
+        else:
+            report = rescore_bundle(bundle, oracles, output_root=out_dir, oracle_version=oracle_version)
     except (BundleError, OSError) as exc:
         console.print(f"[red]Bundle error:[/red] {exc}")
         raise typer.Exit(3) from exc
+    if assessment is not None and assessment.report.health is not None:
+        console.print(f"Offline assessment rescore saved → {assessment.path}")
+        console.print("Private raw evidence; source preserved; no target/model calls.")
+        if assessment.report.execution_error:
+            console.print("Source assessment-wide execution error retained; no remediation is inferred.")
+        _finish_health(assessment.report.health, fail_on)
+    assert report is not None
     console.print(f"Offline rescore saved → {out_dir}/{report.meta.run_id}")
     console.print("Private raw evidence; source preserved; no target/model calls.")
     _finish_assessment([report], fail_on, selected=report.meta.trials)
+
+
+@app.command(name="export-summary")
+def export_summary_command(
+    bundle: str = typer.Argument(..., help="Private run or assessment bundle to validate."),
+    out: str = typer.Option(..., help="Summary JSON outside the private source bundle."),
+) -> None:
+    """Export only validated counts, outcome enums and hashed observation references."""
+    from neuralstrike.evaluation.bundle import BundleError
+    from neuralstrike.evaluation.sharing import export_summary
+
+    try:
+        document = export_summary(bundle, out)
+    except (BundleError, OSError) as exc:
+        console.print(f"[red]Bundle error:[/red] {exc}")
+        raise typer.Exit(3) from exc
+    console.print(f"Sharing summary saved → {out}; assessment {document['health']['status']}.")
+    console.print(
+        "Export success is not a security gate. Summary is not replayable; retain private evidence."
+    )
 
 
 if __name__ == "__main__":

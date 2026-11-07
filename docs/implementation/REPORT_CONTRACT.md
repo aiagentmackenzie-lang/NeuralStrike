@@ -36,8 +36,8 @@ uses canonical totals when available and labels unidentified legacy SARIF rows
 as rows; those rows are not evidence of a complete trial count.
 
 All formats identify their output as **private raw evidence**, not sanitized
-sharing artifacts. Corpus output files use atomic mode-0600 writes. No sanitized
-sharing mode is implemented. PDF provides a text preview using standard fonts;
+sharing artifacts. Corpus output files use atomic mode-0600 writes. The separate allowlisted `export-summary` profile omits raw evidence and is
+non-replayable; full reports remain unsanitized. PDF provides a text preview using standard fonts;
 Unicode/full request fidelity remains in the JSON evidence. No report format is
 a redaction boundary or an independently signed provenance statement.
 
@@ -62,3 +62,15 @@ with a file hash and normalized scenario fingerprint; ID-prefix guesses were
 removed. Recorded completion time is retained when available; legacy absence is
 explicitly unrecorded. This is an additive report-schema-2 extension, distinct
 from the run-manifest schema-2 migration documented in REPLAY.md.
+
+## Assessment-level context
+
+Parent assessment ID, plan digest, original producer version and recorded policy
+now travel across report formats and the dashboard. `recorded_gate` describes
+the source's standalone policy, not a replay invocation override or a baseline
+comparison. Global execution errors force incomplete health and are retained in
+limitations and machine properties. JUnit does not invent a failing testcase for
+unrecorded work; gate on process exit and assessment-health properties. Selected
+scenarios without committed evidence retain `recording_status: missing`, empty
+trial lists and zero recorded counts. SARIF rules/scope and the dashboard retain
+those missing selections without adding result rows to trial totals.

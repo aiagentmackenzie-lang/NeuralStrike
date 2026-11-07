@@ -350,8 +350,12 @@ This is the part that makes results defensible:
 - **Replayability.** Private per-trial transcripts land in unique `runs/<run-id>/`
   directories. `neuralstrike replay <directory> --verify-oracles` checks integrity
   and re-evaluates supported recorded deterministic policies without model calls.
+  Corpus runs also create self-contained `assessment-<id>` bundles with frozen
+  selection scope; replay can render all five report formats offline.
   `rescore` creates a derived bundle under an explicit new local policy. Live
-  providers may ignore controls or vary. See [offline replay](docs/implementation/REPLAY.md).
+  providers may ignore controls or vary. `export-summary` emits only an allowlisted,
+  non-replayable sharing summary. Full reports remain private raw evidence.
+  See [offline replay](docs/implementation/REPLAY.md).
 - **Baseline gating.** Save a baseline, then fail CI on regression:
   exit `0` pass · `1` vulnerability · `3` runtime error · `4` regression
   (regression outranks absolute vulnerabilities). Probe-profile (intensity)

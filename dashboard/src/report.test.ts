@@ -154,3 +154,32 @@ it.each(["phase1-mixed.json", "phase1-mixed.sarif"])("matches canonical mixed/er
   expect(report.limitations.length).toBeGreaterThan(0);
   expect(report.scope?.planned_trials).toBe(4);
 });
+
+it.each(["phase1-mixed.json", "phase1-mixed.sarif"])("retains parent bundle identity and recorded gate in %s", (name) => {
+  const report = parseReport(fixture(name));
+  expect(report.assessmentId).toMatch(/^assessment-/);
+  expect(report.planDigest).toMatch(/^[0-9a-f]{64}$/);
+  expect(report.recordedGate).toEqual({ fail_on: "vuln", exit_code: 3 });
+});
+
+it("does not mistake a sharing summary for a replayable raw assessment", () => {
+  const report = parseReport(JSON.stringify({ kind: "neuralstrike-share-summary", schema_version: 1,
+    overall: { total: 1, succeeded: 0, resisted: 1, inconclusive: 0, coverage: 1, asr: 0 }, scenarios: [] }));
+  expect(report.format).toBe("unknown");
+  expect(report.health).toBe("unavailable");
+});
+
+it("shows selected SARIF scenarios without evidence while counting only recorded trials", () => {
+  const document = JSON.parse(fixture("phase1-mixed.sarif"));
+  const run = document.runs[0];
+  run.tool.driver.rules.push({ id: "missing-selected", properties: {} });
+  run.invocations[0].properties.assessment_scope.selected_scenarios.push("missing-selected");
+  run.invocations[0].properties.health.selected = 8;
+  const report = parseReport(JSON.stringify(document));
+  expect(report.summary.total).toBe(4);
+  expect(report.findings).toHaveLength(2);
+  const missing = report.findings.find(row => row.id === "missing-selected");
+  expect(missing?.verdict).toBe("inconclusive");
+  expect(missing?.reason).toContain("no committed trial evidence");
+  expect(report.health).toBe("incomplete");
+});

@@ -47,6 +47,8 @@ def _scenario_section(sr: ScenarioResult) -> str:
     else:
         lines.append("  - _no controls mapped_")
     lines.append("")
+    if not sr.trials:
+        lines.append("Selected scenario has no committed trial evidence; execution is not asserted.")
     lines.append("| Trial | Oracle | Verdict | Fidelity | Evidence |")
     lines.append("|------:|--------|---------|----------|----------|")
     for t in sr.trials:
@@ -99,6 +101,8 @@ def to_markdown(run: CorpusRun) -> str:
         "# NeuralStrike Corpus Run Report",
         "",
         "- **Handling:** Private raw evidence; not sanitized for sharing.",
+        f"- **Assessment ID:** {run.assessment_id or 'unrecorded'}",
+        f"- **Plan digest:** {run.plan_digest or 'unrecorded'}",
         f"- **Assessment health:** {run.health.status if run.health else 'unavailable'}",
         f"- **Started:** {run.started_at}",
         f"- **Completed:** {run.completed_at or 'unrecorded'}",
@@ -110,7 +114,7 @@ def to_markdown(run: CorpusRun) -> str:
         f"- **Overall:** {run.overall_total} trials — "
         f"{run.overall_succeeded} succeeded · {run.overall_resisted} resisted · "
         f"{run.overall_inconclusive} inconclusive",
-        f"- **ASR (conclusive-only):** {run.asr_display} · **Coverage:** {run.coverage:.2%}",
+        f"- **ASR (conclusive-only):** {run.asr_display} · **Coverage (recorded):** {run.coverage:.2%}",
         "",
         "Verdict legend: ❌ Succeeded (exploitable) · ✅ Resisted · "
         "⚠️ Inconclusive (coverage gap, surfaced not dropped).",

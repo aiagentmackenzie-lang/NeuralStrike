@@ -93,6 +93,12 @@ export default function App() {
 
           <p>Scope: {report.scope ? "configured target and selected scenarios" : "not recorded"}.
             Authorization is not independently attested by this report.</p>
+          <details style={{ marginBottom: 12, overflowWrap: "anywhere" }}>
+            <summary>Assessment identity and recorded policy</summary>
+            <div>Assessment: {report.assessmentId || "Unrecorded"}</div>
+            <div>Plan digest: {report.planDigest || "Unrecorded"}</div>
+            <div>Recorded policy: {report.recordedGate ? `${report.recordedGate.fail_on}; exit ${report.recordedGate.exit_code}` : "Unrecorded"}</div>
+          </details>
           <details style={{ marginBottom: 12 }}>
             <summary>Evidence limitations</summary>
             <ul>{report.limitations.map((limit, index) => <li key={index}>{limit}</li>)}</ul>

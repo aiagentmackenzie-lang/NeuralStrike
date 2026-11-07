@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import re
 from typing import Final
+from urllib.parse import urlsplit, urlunsplit
 
 from neuralstrike.core.config import settings
 
@@ -28,6 +29,19 @@ _REDACT_PATTERNS: Final = [
 ]
 
 _REDACT_REPLACEMENT = "[REDACTED]"
+
+
+_LOG_URL = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
+
+
+def _redact_url(match: re.Match[str]) -> str:
+    """SDK/traceback URL diagnostics must not expose userinfo/query/fragment."""
+    try:
+        parts = urlsplit(match.group())
+        authority = parts.netloc.rsplit("@", 1)[-1]
+        return urlunsplit((parts.scheme, authority, parts.path, "", ""))
+    except ValueError:
+        return "[REDACTED_URL]"
 
 
 class RedactingFilter(logging.Filter):
@@ -53,7 +67,7 @@ class RedactingFilter(logging.Filter):
 
     @staticmethod
     def _redact(text: str) -> str:
-        redacted = text
+        redacted = _LOG_URL.sub(_redact_url, text)
         for pattern in _REDACT_PATTERNS:
             redacted = pattern.sub(_REDACT_REPLACEMENT, redacted)
         return redacted

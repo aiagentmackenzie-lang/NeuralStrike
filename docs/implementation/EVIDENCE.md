@@ -10,11 +10,11 @@ reported separately.
 OpenAI-compatible evidence includes sent request JSON for every round, returned
 JSON and HTTP status/errors, alongside adapter inputs and execution/delivery
 traces. Each request is captured before the next round alters its messages.
-Headers and URL userinfo/query are excluded; raw request/response bodies may
+Headers and URL userinfo/query/fragment are excluded; raw request/response bodies may
 contain sensitive target data. Directories use mode 0700 and files 0600 on POSIX.
 Corpus reports use atomic private writes. These files are **private raw evidence**.
-There is no sanitized sharing/export command yet; do not treat report formats as
-sanitizers. Embedding or publishing the JSON can disclose target content.
+Use `export-summary` for a validated allowlisted, non-replayable sharing summary;
+do not treat full report formats as sanitizers. Embedding or publishing the JSON can disclose target content.
 
 Runner seeds/temperatures are task-local and supplied to supported OpenAI and
 LiteLLM requests. Recording a sent seed does not prove a provider honored it or
@@ -60,3 +60,10 @@ local fixture execution is not mistaken for production side effects. Corpus
 sources record their actual portable file path, file hash and normalized scenario
 fingerprint. Baselines whose scenario/oracle identities changed require a trusted
 reference rerun; preserve the old evidence rather than overwriting it to pass.
+
+Corpus execution now also preserves a self-contained assessment-level bundle
+with a frozen complete selection plan and hashed child bundles. Persistence
+completion and security completeness are separate. Missing children retain
+selected scope, no fabricated attempts and incomplete health; global execution
+errors cannot disappear during replay/rescore. REPLAY.md documents profile
+versions, producer-version preservation and bounded compatibility behavior.
