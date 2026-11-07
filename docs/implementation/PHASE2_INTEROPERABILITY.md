@@ -323,3 +323,41 @@ isolation and checkpoint deletion, application-global reset serialization, reset
 failure and failed-remediation comparison, cleanup failure/deadline, all exit paths,
 repeated cancellation, original-oracle replay and both CLI paths. These are local
 engineering checks; no real customer efficacy or universal reset claim follows.
+
+## Completion and stream failure semantics
+
+A fully received HTTP JSON body can still report an incomplete generation.
+Explicit `finish_reason` values `length`, `content_filter`, null, unknown or
+invalid types now make execution incomplete. Validated emitted text/tool intent
+remains observed evidence, but no local tool or continuation runs from that
+completion. Missing finish metadata retains legacy endpoint compatibility and
+is not proof of an untruncated backend response. A malformed batch still executes
+no valid prefix. Finite body `capture_complete=true` describes body capture,
+not assessment health or generation completeness.
+
+Only the instrumented tier executes supplied local canary handlers. Function-
+calling serves inert acknowledgments; unexpected text-tier tool calls stop with
+an explicit error. A handler exception or invalid non-text result stops the batch
+and continuation, retains earlier receipts and records the failed call identity
+and exception class. Later calls remain emitted intent, not completed executions.
+No failed action is retried and no rollback is inferred. Doctor now retains an
+incomplete private receipt if client closure raises, preserving earlier HTTP/
+capability observations and separate cleanup status rather than losing the receipt.
+
+Local lifecycle hook validation includes binding the actual positional
+`(graph, thread_id)` calling convention before graph resolution. This rejects
+async hooks with missing, keyword-only or extra-required arguments before any
+application action; it cannot validate arbitrary callback internals.
+
+Default text-message values streaming now checkpoints each observed assistant
+state while the stream is running. Input-only initial values are allowed; unseen
+nodes are never invented. Frozen call observations survive timeout, cancellation,
+malformed later states, application errors, stream-close failures and later
+output-only snapshots that omit prior calls. Repeated call IDs deduplicate only
+identical calls; changed arguments/name for an observed ID produce an explicit
+error while retaining earlier observations. The owned iterator is explicitly
+closed when it exposes `aclose`, with failed/unavailable closure recorded.
+Custom extractor streams are not interpreted through this default profile.
+These observations remain IntentToAct without separately bound execution receipts.
+
+The consolidated support/gate review is in [PHASE2_ACCEPTANCE.md](PHASE2_ACCEPTANCE.md).

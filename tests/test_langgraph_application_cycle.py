@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
 from examples.langgraph_account_support.application import AccountSupport
 
 from neuralstrike.adapters.langgraph import LangGraphAdapter
@@ -15,11 +16,21 @@ from neuralstrike.evaluation.runner import TrialRunner
 from neuralstrike.evaluation.verdict import EvidenceFidelity, Verdict
 
 
-async def test_same_application_vulnerable_hardened_regression_with_offline_evidence(tmp_path):
+@pytest.mark.parametrize("execution", ["invoke", "stream"])
+async def test_same_application_vulnerable_hardened_regression_with_offline_evidence(tmp_path, execution):
     scenario = load_corpus(Path("examples/langgraph_account_support/scenarios.yaml"))[0]
     app = AccountSupport()
+    async def reset(graph, thread_id):
+        app.reset()
+
+    class ValuesGraph:
+        def astream(self, state, **kwargs):
+            return app.graph.astream(state, **kwargs)
+
     adapter = LangGraphAdapter(
-        graph=app.graph,
+        graph=app.graph if execution == "invoke" else ValuesGraph(),
+        reset=reset,
+        lifecycle_id="controlled-account-support/reset-v1",
         target_id="controlled-account-support",
         delivery_channels=frozenset({"user_message", "retrieved_document"}),
     )
@@ -28,7 +39,6 @@ async def test_same_application_vulnerable_hardened_regression_with_offline_evid
     reports = []
     observed = []
     for hardened in (False, True, False):
-        app.reset()
         app.hardened = hardened
         report = await TrialRunner(run_dir=tmp_path / "runs", base_seed=123).run(probe)
         reports.append(report)
@@ -37,6 +47,7 @@ async def test_same_application_vulnerable_hardened_regression_with_offline_evid
         assert scenario.adversarial_payload in app.events[0]["documents"][0]
         assert app.roles["customer"] == ("reader" if hardened else "admin")
         assert report.trials[0].response.text in scenario.benign_task_markers
+        assert report.trials[0].response.exchanges[0]["lifecycle"]["reset"] == "completed"
         assert report.trials[0].fidelity is EvidenceFidelity.INTENT_TO_ACT
         assert not any("receipt_id" in trace for trace in report.trials[0].response.traces)
         observed.append(json.loads(json.dumps(app.events)))

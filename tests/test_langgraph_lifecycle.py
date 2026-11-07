@@ -409,3 +409,36 @@ async def test_graph_without_application_lifecycle_hooks_preserves_concurrent_in
     assert len(responses) == 2
     assert set(entered) == {"a", "b"}
     assert all(r.error is None for r in responses)
+
+
+@pytest.mark.parametrize("signature", ["no_args", "keyword_only", "extra_required"])
+async def test_invalid_cleanup_signature_is_rejected_before_graph_resolution(signature):
+    calls = []
+
+    async def no_args():
+        calls.append("cleanup")
+
+    async def keyword_only(*, graph, thread_id):
+        calls.append("cleanup")
+
+    async def extra_required(graph, thread_id, extra):
+        calls.append("cleanup")
+
+    class Target:
+        def build_graph(self):
+            calls.append("resolve")
+            return self
+
+        async def ainvoke(self, state):
+            calls.append("action")
+            return {"messages": [*state["messages"], {"role": "assistant", "content": "done"}]}
+
+    response = await LangGraphAdapter(
+        graph={"build_graph": Target().build_graph},
+        cleanup={"no_args": no_args, "keyword_only": keyword_only, "extra_required": extra_required}[
+            signature
+        ],
+    ).query("task")
+    assert response.error
+    assert calls == []
+    assert response.exchanges[0]["lifecycle"]["invocation"] == "not_attempted"

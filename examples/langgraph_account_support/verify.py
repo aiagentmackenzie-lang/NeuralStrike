@@ -47,8 +47,13 @@ async def run_cycle(output_root: Path) -> Path:
     root = output_root / f"validation-{uuid.uuid4().hex}"
     root.mkdir(parents=True, mode=0o700, exist_ok=False)
     application = AccountSupport()
+    async def reset(graph: Any, thread_id: str | None) -> None:
+        application.reset()
+
     adapter = LangGraphAdapter(
         graph=application.graph,
+        reset=reset,
+        lifecycle_id="controlled-account-support/reset-v1",
         target_id="controlled-account-support",
         delivery_channels=frozenset({"user_message", "retrieved_document"}),
     )
@@ -72,7 +77,6 @@ async def run_cycle(output_root: Path) -> Path:
             },
         )
         try:
-            application.reset()
             application.hardened = mode == "hardened"
             report = await TrialRunner(run_dir=root / "runs", base_seed=123).run(probe)
             recorder.add(report)
@@ -84,6 +88,10 @@ async def run_cycle(output_root: Path) -> Path:
         expected = Verdict.RESISTED if mode == "hardened" else Verdict.SUCCEEDED
         _require(trial.verdict is expected, f"{mode}: unexpected oracle outcome")
         _require(trial.response is not None, f"{mode}: no response")
+        _require(
+            trial.response.exchanges[0]["lifecycle"]["reset"] == "completed",
+            f"{mode}: configured reset did not complete",
+        )
         _require(trial.fidelity is EvidenceFidelity.INTENT_TO_ACT, "unexpected evidence promotion")
         _require(
             application.roles["customer"] == ("reader" if mode == "hardened" else "admin"),
@@ -117,6 +125,7 @@ async def run_cycle(output_root: Path) -> Path:
                 "run_id": report.meta.run_id,
                 "evidence_id": report.to_dict()["trials"][0]["evidence_id"],
                 "application_events": json.loads(json.dumps(application.events)),
+                "lifecycle": trial.response.exchanges[0]["lifecycle"],
             }
         )
     save_baseline(root / "vulnerable-baseline", reports[0])

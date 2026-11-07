@@ -1081,3 +1081,79 @@ Lifecycle increment complete for the explicit local profile. Phase 2 remains
 open for the consolidated acceptance review recorded above; no customer efficacy,
 independent reset attestation, experimental-server lifecycle support or production
 readiness is inferred from these green engineering gates.
+
+## 2026-11-07 — Phase 2 acceptance review: completion, dispatch and live stream evidence
+
+Started from clean `38efb58`, preserving the previous lifecycle/interruption
+work. Re-read the Phase 2 master-plan gates and implementation records. Existing
+hashed-lock Python 3.12 environments remain usable; no dependencies changed.
+
+Demonstrated before fixes:
+- `/tmp/neuralstrike-phase2-acceptance-red.log`: 13 new failures. Explicit
+  incomplete/unsupported OpenAI finish reasons could become complete resistance;
+  a truncated tool batch could execute a local handler; doctor could say ready;
+  invalid async cleanup signatures allowed graph construction/actions before error.
+- `/tmp/neuralstrike-phase2-dispatch-red.log`: five failures. Non-instrumented
+  tiers executed supplied canaries; a failed handler did not stop the remaining
+  batch/continuation; preflight close exceptions discarded capability receipts.
+- `/tmp/neuralstrike-phase2-handler-result-red.log`: three failures. Invalid
+  handler result types were appended as malformed execution receipts.
+- `/tmp/neuralstrike-phase2-stream-red.log`: five failures. Observed graph
+  values-stream actions vanished on timeout, cancellation, later node/malformed
+  state failure, or a later output-only snapshot omitting the earlier call.
+- `/tmp/neuralstrike-phase2-stream-mutation-red.log`: a yielded argument object
+  could be mutated by the graph after capture, rewriting earlier observations.
+
+Implemented focused changes:
+- Distinguish body capture from generation termination. Explicit incomplete or
+  unsupported finish reasons stop tool execution/continuation, retain valid
+  emitted intent and raw bodies, and leave health incomplete. Legacy omitted
+  finish metadata remains compatible, without asserting backend completion.
+- Restrict local handler execution to the instrumented tier. Stop a batch on
+  handler failure; preserve emitted calls and completed prefix receipts, record
+  failed dispatch identity/class, and neither retry nor execute later handlers.
+  Validate handler text results before constructing execution receipts.
+- Persist doctor incomplete receipts on close failure, preserving original
+  capability/status errors and separate cleanup state; CLI regression verifies
+  exit 3 and mode 0600 output. Cancellation continues to propagate.
+- Bind lifecycle hook signatures before graph resolution. Capture/freeze actual
+  yielded default-profile graph observations live; merge identical call IDs,
+  reject conflicting reuse, preserve earlier intent across later snapshots and
+  failures, and explicitly close the owned values iterator. Custom extractor/
+  arbitrary application internals remain outside this capture profile.
+- The separate application's validation cycle now uses the adapter reset hook,
+  with independent role/events/task checks and lifecycle receipts. The test runs
+  both real compiled `ainvoke` and values-stream paths. No canary behavioral
+  promotion or independent-reset attestation is inferred from app events.
+
+Added PHASE2_ACCEPTANCE.md with the exact controlled support matrix, all six
+master-plan gate mappings and exclusions. Final acceptance awaits frozen-source,
+installed-wheel and hosted verification below. No release, paid inference,
+external security target or independent customer efficacy exercise.
+
+Final local gates for the acceptance fixes:
+- Python 3.12.14: `python -m pytest --cov=neuralstrike --cov-fail-under=85`
+  → **1445 passed, 2 skipped, 91.79% coverage**, 49.41s. Log:
+  `/tmp/neuralstrike-phase2-accepted-full.log`. Existing optional integrations
+  remain skipped/unverified; code coverage is not security efficacy.
+- Ruff on `src tests examples/langgraph_account_support` and strict mypy on
+  143 source files pass. `git diff --check` passes. No lock/dependency changes.
+- Wheel/sdist rebuilt at `/tmp/neuralstrike-phase2-acceptance-dist`; all **147**
+  checked packaged Python/JSON/YAML files match source. Installed without
+  dependency resolution into the separate existing hash-lock wheel environment.
+- From `/tmp/neuralstrike-phase2-acceptance-wheel-check`, outside checkout:
+  **133 selected Phase 2 checks pass**, 10.88s, covering actual local HTTP auth,
+  completion health, lifecycle/stream/partial evidence, outbound limits and MCP
+  stdio/HTTP/protocol/cleanup/integrity. Log:
+  `/tmp/neuralstrike-phase2-acceptance-wheel-tests.log`.
+- Installed-wheel `examples.langgraph_account_support.verify` passes with reset
+  hooks at `/tmp/neuralstrike-phase2-acceptance-cycle/validation-5e0df61fe7544321bdd375223b236c3d`.
+  Application source SHA-256:
+  `32c4be6eef15b63e0d82370286cba72b87959424280f64c30a483b0382ee4962`.
+  Roles admin/reader/admin; benign task all three stages; fix exit 0/regression
+  exit 4; original-oracle replay agrees without source mutation. Installed CLI
+  smoke passes (three scenarios/trials). Only controlled local fixtures.
+
+Acceptance remains a candidate until hosted verification of this source commit
+finishes. The new matrix names experimental exclusions instead of inheriting
+capabilities across adapters. No Phase 3 independent efficacy/pilot claim.

@@ -136,7 +136,7 @@ def _call_snapshot(call: Any) -> dict[str, Any]:
         raise ValueError("invalid graph tool name or arguments")
     if not isinstance(call_id, str) or not call_id:
         raise ValueError("graph tool call requires a nonempty ID")
-    return {"id": call_id, "name": name, "arguments": arguments}
+    return {"id": call_id, "name": name, "arguments": copy.deepcopy(arguments)}
 
 
 def _attr(obj: Any, name: str, *, default: Any = None) -> Any:
@@ -319,9 +319,13 @@ class LangGraphAdapter(TargetAdapter):
                     delivery_channel,
                     delivery_marker,
                 )
+            def observe(chunk: Any) -> None:
+                nonlocal response
+                response = self._observe_stream_state(chunk, inputs, exchange, response)
+
             lifecycle["invocation"] = "started"
-            final = await self._invoke(state, thread_id)
-            response = self._extract_response(final, inputs, exchange)
+            final = await self._invoke(state, thread_id, observe, exchange)
+            response = _merge_observed_calls(response, self._extract_response(final, inputs, exchange))
             lifecycle["invocation"] = "completed"
         except asyncio.CancelledError:
             if lifecycle["reset"] == "started":
@@ -330,6 +334,7 @@ class LangGraphAdapter(TargetAdapter):
                 lifecycle["invocation"] = "interrupted"
             raise
         except Exception as exc:
+            exchange["capture_complete"] = False
             if lifecycle["invocation"] == "started":
                 lifecycle["invocation"] = "failed"
             if lifecycle["reset"] == "started":
@@ -385,6 +390,33 @@ class LangGraphAdapter(TargetAdapter):
             text=text, tool_calls=tuple(tool_calls), traces=tuple(traces), exchanges=(exchange,)
         )
 
+    def _observe_stream_state(
+        self, state: Any, inputs: list[dict[str, Any]], exchange: dict[str, Any], previous: SutResponse
+    ) -> SutResponse:
+        if self.result_extractor is not extract_default:
+            exchange["stream_capture_limitations"] = "custom extractor; intermediate states not interpreted"
+            return previous
+        messages = [_message_snapshot(message) for message in _messages_of(state)]
+        outputs = messages
+        if self.messages_mode == "append":
+            if messages[:len(inputs)] != inputs:
+                raise ValueError("stream changed or omitted the input prefix")
+            outputs = messages[len(inputs):]
+        exchange["stream_values_observed"] = exchange.get("stream_values_observed", 0) + 1
+        if not any(message["role"] == "assistant" for message in outputs):
+            return previous
+        try:
+            observed = _merge_observed_calls(previous, self._extract_response(state, inputs, exchange))
+            exchange["stream_observed_tool_calls"] = [
+                {"name": call.name, "arguments": call.arguments, "tool_call_id": call.tool_call_id}
+                for call in observed.tool_calls
+            ]
+            return observed
+        finally:
+            # A yielded state is an observation, not evidence that the stream
+            # terminated successfully. Final extraction alone commits that fact.
+            exchange["capture_complete"] = False
+
     async def _cleanup_response(
         self, graph: Any, thread_id: str | None, lifecycle: dict[str, Any], response: SutResponse
     ) -> SutResponse:
@@ -430,7 +462,10 @@ class LangGraphAdapter(TargetAdapter):
             raise asyncio.CancelledError
         task.result()
 
-    async def _invoke(self, state: dict[str, Any], thread_id: str | None = None) -> Any:
+    async def _invoke(
+        self, state: dict[str, Any], thread_id: str | None,
+        observe: Callable[[Any], None], exchange: dict[str, Any],
+    ) -> Any:
         graph = self.graph
         config = {"config": {"configurable": {"thread_id": thread_id}}} if thread_id else {}
         if hasattr(graph, "ainvoke"):
@@ -440,9 +475,15 @@ class LangGraphAdapter(TargetAdapter):
             # executing tools; require cooperative async execution instead.
             raise ValueError("synchronous graph execution unsupported; provide ainvoke")
         final = None
-        # Node-update streaming is not a final-state transcript.
-        async for chunk in graph.astream(state, stream_mode="values", **config):
-            final = chunk
+        # Node-update streaming is not a final-state transcript. Own and close
+        # the values iterator; the graph/application lifetime remains external.
+        stream = graph.astream(state, stream_mode="values", **config).__aiter__()
+        try:
+            async for chunk in stream:
+                observe(chunk)
+                final = chunk
+        finally:
+            await _close_stream(stream, exchange)
         return final
 
     @staticmethod
@@ -490,6 +531,10 @@ def _resolve_hook(hook: LifecycleHook | str) -> LifecycleHook:
         hook = getattr(importlib.import_module(module), attribute)
     if not inspect.iscoroutinefunction(hook):
         raise ValueError("lifecycle hook must be an async function")
+    try:
+        inspect.signature(hook).bind(None, None)
+    except (TypeError, ValueError):
+        raise ValueError("lifecycle hook must accept positional (graph, thread_id)") from None
     return hook
 
 
@@ -501,3 +546,29 @@ def _validate_hooks(*hooks: LifecycleHook | str | None) -> None:
 
 async def _run_hook(hook: LifecycleHook | str, graph: Any, thread_id: str | None) -> None:
     await _resolve_hook(hook)(graph, thread_id)
+
+
+def _merge_observed_calls(previous: SutResponse, current: SutResponse) -> SutResponse:
+    if not previous.tool_calls:
+        return current
+    calls = {call.tool_call_id: call for call in previous.tool_calls}
+    for call in current.tool_calls:
+        if call.tool_call_id in calls and calls[call.tool_call_id] != call:
+            raise ValueError("graph stream changed an already observed tool call ID")
+        calls[call.tool_call_id] = call
+    return replace(current, tool_calls=tuple(calls.values()))
+
+
+async def _close_stream(stream: Any, exchange: dict[str, Any]) -> None:
+    close = getattr(stream, "aclose", None)
+    if close is None:
+        exchange["stream_cleanup"] = "unavailable"
+        return
+    exchange["stream_cleanup"] = "started"
+    try:
+        await close()
+        exchange["stream_cleanup"] = "completed"
+    except BaseException as exc:
+        exchange["stream_cleanup"] = "failed"
+        exchange["stream_cleanup_error_type"] = type(exc).__name__
+        raise
