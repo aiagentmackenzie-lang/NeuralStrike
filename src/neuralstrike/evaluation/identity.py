@@ -38,6 +38,11 @@ def comparison_identity(adapter: Any, scenario: Any, tools: Any, oracles: Any) -
     target = {
         name: getattr(adapter, name, None) for name in ("name", "base_url", "model", "tier", "graph_id")
     }
+    if hasattr(adapter, "messages_mode"):
+        target["graph_target_id"] = getattr(adapter, "target_id", None)
+        target["graph_messages_mode"] = adapter.messages_mode
+        channels = getattr(adapter, "delivery_channels", None)
+        target["graph_delivery_channels"] = sorted(channels) if channels is not None else None
     target["class"] = f"{type(adapter).__module__}.{type(adapter).__qualname__}"
     target["graph_spec"] = getattr(getattr(adapter, "resolver", None), "spec", None)
     try:
@@ -52,7 +57,7 @@ def comparison_identity(adapter: Any, scenario: Any, tools: Any, oracles: Any) -
         oracle_digest = configuration_digest(oracle_configs)
     except (TypeError, OSError):
         oracle_digest = None
-    return {
+    identity = {
         "schema_version": 1,
         "seed_derivation": SEED_DERIVATION,
         "engine_version": __version__,
@@ -64,6 +69,12 @@ def comparison_identity(adapter: Any, scenario: Any, tools: Any, oracles: Any) -
         "comparable": oracle_digest is not None,
         "target_build": "unverified; configured URL/model identity only",
     }
+    if hasattr(adapter, "resolver") and not (target["graph_spec"] or getattr(adapter, "target_id", None)):
+        identity["comparable"] = False
+        identity["target_build"] = (
+            "unverified; anonymous in-process graph has no configured application identity"
+        )
+    return identity
 
 
 def model_comparison_identity(

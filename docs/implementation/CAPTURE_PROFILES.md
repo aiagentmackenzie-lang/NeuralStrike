@@ -1,4 +1,4 @@
-# Capture and sharing profiles — Phase 1
+# Capture and sharing profiles
 
 The verified Phase 1 profile is an OpenAI-compatible JSON-body assessment using
 controlled local fixtures, plus the bundled in-process graph fixture. This is
@@ -8,7 +8,7 @@ no cloud inference or external target exercises establish wider support.
 | Workflow | Retained observation | Limits |
 |---|---|---|
 | OpenAI-compatible adapter | Actual JSON request for every round, injection-bearing messages/tool definitions, returned status/body/parsed JSON, sanitized endpoint, requested controls. Returned model/fingerprint/usage fields remain in response JSON when present. | Headers, URL userinfo/query/fragment are excluded. This is complete body capture, not a complete wire transcript or an authentication attestation. Providers can ignore controls or omit build metadata. |
-| In-process graph | Planned tagged inputs, returned normalized text/tool calls and available graph/delivery traces. | No HTTP exchange/provider-envelope claim. A graph may consume state differently; a sent marker does not prove target consumption. The bundled fixture is not independent customer-agent validation. |
+| In-process graph | `langgraph-messages-v1` captures normalized input, returned and output-only text messages, newly emitted calls across all output turns and installed package versions. Custom extractors remain explicitly incomplete capture. | Append-mode checks the original input prefix; output-only/custom profiles must be explicit. No HTTP/provider-envelope or full internal-state claim. A sent marker does not prove target consumption. The separate account app provides controlled local consumption/state evidence; no customer efficacy claim. |
 | Graph server | Planned inputs and normalized returned state. | Complete HTTP envelope/controls capture is not implemented; interoperability remains experimental pending Phase 2. |
 | A2A | Planned inputs and normalized response. | Current adapter is text-only and ignores history/system-message channels. No indirect-channel or complete-envelope claim. Origin authorization does not authenticate an application build. |
 | MCP | Read-only discovery and explicitly scoped fixture execution. | Discovery is not a behavioral security pass; this does not establish every HTTP revision or stdio interoperability. |
@@ -32,7 +32,9 @@ encoded echoes; ordinary credential-free details such as `boom` remain visible.
 Redirect Location strings are not copied into status diagnostics. Captured
 endpoints exclude fragments as well as userinfo/query. Default log filters and
 formatters also remove those HTTP(S) URL components from SDK/traceback text.
-Successful and failed request/response bodies remain exact private evidence.
+Successful and failed request/response bodies within the accepted byte limit remain
+exact private evidence. Phase 2 oversized streams record incomplete capture and
+an explicit error; they do not retain a misleading truncated body.
 
 One independent boundary investigation and one candidate bypass/regression
 review were completed. The candidate review found the INFO route; new regressions
@@ -58,3 +60,5 @@ It cannot establish remediation and is not accepted as a run/assessment. Export
 exit 0 means file creation succeeded, not that the security assessment passed.
 Hashes are linkable and are not an anonymity guarantee. A full scrubbed/replayable
 sharing bundle is not implemented; retain the private original for audit/replay.
+
+Phase 2 profile scope and compatibility: PHASE2_INTEROPERABILITY.md.

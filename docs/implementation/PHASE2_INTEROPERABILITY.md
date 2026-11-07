@@ -1,6 +1,6 @@
 # Phase 2 interoperability — work in progress
 
-First implementation increment: 2026-11-07. Phase 2 is **not accepted** yet.
+Current implementation increments: 2026-11-07. Phase 2 is **not accepted** yet.
 Phase 1 evidence gates remain the prerequisite; see PHASE1_ACCEPTANCE.md.
 
 ## Implemented OpenAI boundary
@@ -72,15 +72,88 @@ The receipt is private when written with `--out`, but is not a replay bundle.
   overflow, malformed message batches, cancellation, deadline, rate limits,
   outage, credential omission from artifacts and no automatic retry.
 
-This is independent HTTP protocol handling, **not** an independently validated
-LangGraph customer agent, hosted-provider certification or efficacy cohort.
+These HTTP checks establish transport handling, not hosted-provider certification
+or an efficacy cohort. The separate controlled LangGraph cycle is described below.
+
+## Separate LangGraph application cycle
+
+`examples/langgraph_account_support/application.py` contains a real compiled
+LangGraph/MessagesState app with an application-owned role store and tools. It
+imports neither NeuralStrike nor its canary harness/oracles. Its deterministic
+planner deliberately models a trust defect: a retrieved instruction can cause a
+privilege change. Hardened mode treats that document as data and still executes
+an authorized account lookup. The same graph, scenario, seed and application
+identity produce Succeeded → Resisted → Succeeded; baseline comparison reports a
+fix and then regression exit 4. The task-completion marker remains present in all
+three stages. The app also records which retrieval document the node consumed
+and which tool changed its store. This is local fixture evidence, not a learned
+model, third-party efficacy cohort or production compromise.
+
+```sh
+python -m examples.langgraph_account_support.verify --out /tmp/account-validation
+neuralstrike corpus --adapter langgraph \
+  --graph-module examples.langgraph_account_support.application:vulnerable \
+  --scenario-dir examples/langgraph_account_support \
+  --graph-channel retrieved_document --graph-channel user_message \
+  --format json --out /tmp/account-vulnerable --run-dir /tmp/account-runs --fail-on vuln
+```
+
+Use `:hardened` for the hardened CLI target. The script creates a unique private
+validation directory with frozen parent assessments for each stage, per-run
+bundles, baselines and `validation.json`. The receipt binds source/scenario
+hashes, installed package versions, assessment manifest hashes, observation IDs,
+independent app events, role state, task completion and comparison outcomes.
+Offline original-oracle verification agrees without modifying source bundles.
+The app/events are controlled by the same local operator, not signed or remote
+attestations. Retrieval is an explicit conversation ToolMessage surface, not a
+remote database/index hook. Findings stay IntentToAct: app state observations do
+not impersonate the local-canary receipt format or automatically promote fidelity.
+
+The default adapter profile `langgraph-messages-v1` now verifies the returned
+input prefix, excludes supplied history calls and extracts every new assistant
+call, including calls before a final plain-text answer. It retains normalized
+input/returned/output messages and installed LangGraph/LangChain/checkpoint
+versions in the private exchanges. Unknown/missing/non-text states and changed
+input prefixes fail explicitly. The snapshot is a text-message transcript,
+not every internal graph state field or model/provider wire envelope.
+
+Compatibility rules:
+
+- Append-mode is the default. A graph that returns only new messages must choose
+  `messages_mode="output"` explicitly through the Python API. A graph that edits
+  or removes its input history needs an application-specific extractor/profile;
+  it cannot silently reinterpret supplied calls as fresh output.
+- Existing `state_builder`/`result_extractor` callbacks remain usable with custom
+  states. Their capture is explicitly incomplete; generic full-state capture is
+  not claimed. These callbacks execute trusted local Python code.
+- Async invocation and explicit values-mode streaming are supported. A synchronous-
+  only graph now fails before execution, rather than blocking the event loop or
+  leaving an uncancellable executor thread executing tools after timeout. Provide
+  a cooperatively cancellable `ainvoke` integration. This deliberately narrows
+  the legacy sync fallback; no hard cancellation of arbitrary application code
+  is promised. The adapter does not take ownership of external app resources.
+- `--graph-channel` is a repeatable declared capability allowlist. Unsupported
+  selections return an explicit error before invoking the graph, never a direct
+  prompt substitution. With no declaration, the legacy conversation-state
+  surface is retained; sent markers alone do not prove target consumption.
+- Missing `module:attribute` names no longer fall back to another module graph.
+  Baseline comparability for anonymous object graphs requires a stable explicit
+  `target_id`; a module spec also supplies configuration identity. This is a
+  declared app family, not source/build authenticity. Profile/channel changes
+  change the comparison digest; old fingerprints are not silently upgraded.
+
+The transcript profile follows the installed real MessagesState/add_messages
+semantics ([official reference](https://reference.langchain.com/python/langgraph/graph/message)).
+Verified local versions: LangGraph 1.2.20, langchain-core 1.7.6 and
+langgraph-checkpoint 4.3.1. These receipts establish this local version profile,
+not support for every framework revision.
 
 ## Remaining Phase 2 gates
 
-The master plan still requires an independently implemented LangGraph app with
-vulnerable → hardened → regression evidence; pinned MCP stdio and declared HTTP
-revision profiles using appropriate maintained libraries; explicit unsupported
-hook/capability behavior; actual outbound rate/concurrency/budget controls;
+The controlled LangGraph app gate now has runnable evidence. The master plan
+still requires pinned MCP stdio and declared HTTP revision profiles using
+appropriate maintained libraries; broader explicit hook/capability checks;
+actual outbound rate/concurrency/budget controls;
 reset/thread lifecycle and cleanup-failure verification; idempotency decisions
 for consequential actions; and versioned interoperability receipts across valid,
 invalid, timeout and authentication paths. Secret-store references are not yet

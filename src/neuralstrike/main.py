@@ -1882,6 +1882,13 @@ def corpus(
         help="For --adapter langgraph with a custom graph: 'pkg.mod:attr'. "
         "Default drives the bundled vulnerable fixture.",
     ),
+    scenario_dir: str | None = typer.Option(
+        None, "--scenario-dir", help="Trusted local YAML scenario directory; default uses the bundled corpus."
+    ),
+    graph_channel: list[str] | None = typer.Option(
+        None, "--graph-channel",
+        help="Declared graph delivery channel (repeatable); unsupported selections fail."
+    ),
     format: str = typer.Option("sarif", help="Report format: sarif|json|junit|markdown|pdf."),
     out: str = typer.Option("neuralstrike-report", help="Output file path (extension added per --format)."),
     fail_on: str = typer.Option("regression", help="Gate: never|vuln|regression; never is report-only."),
@@ -1927,6 +1934,11 @@ def corpus(
     if adapter == "openai" and (not url or not model):
         raise ValidationError("--adapter openai requires --url and --model")
 
+    allowed_channels = {"user_message", "system_prompt", "tool_result", "retrieved_document", "memory"}
+    if graph_channel is not None and (
+        adapter != "langgraph" or any(channel not in allowed_channels for channel in graph_channel)
+    ):
+        raise typer.BadParameter("--graph-channel requires langgraph and a known delivery channel")
     from neuralstrike.adapters.preflight import environment_credential
 
     if target_api_key_env is not None and adapter != "openai":
@@ -1936,7 +1948,7 @@ def corpus(
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from None
 
-    _apply_scope(scope_file, url or model or "bundled-vulnerable-fixture", intent)
+    _apply_scope(scope_file, url or model or graph_module or "bundled-vulnerable-fixture", intent)
     _apply_safety(intent, require_approval)
     _apply_verbosity(quiet, verbose)
 
@@ -1955,7 +1967,7 @@ def corpus(
     )
 
     async def run() -> None:
-        scenarios = load_corpus_dir()
+        scenarios = load_corpus_dir(scenario_dir) if scenario_dir is not None else load_corpus_dir()
         if limit is not None:
             scenarios = scenarios[: max(0, limit)]
         if not scenarios:
@@ -1976,7 +1988,7 @@ def corpus(
             base_seed=seed,
             trials=trials,
             adapter=adapter,
-            target=url or model or "bundled-vulnerable-fixture",
+            target=url or model or graph_module or "bundled-vulnerable-fixture",
             fail_on=fail_on,
             declared_scope=declared_scope,
         )
@@ -2016,11 +2028,18 @@ def corpus(
                             api_key=target_api_key, max_response_bytes=max_response_bytes,
                         )
                     elif graph_module:
-                        a = LangGraphAdapter(spec=graph_module)
+                        a = LangGraphAdapter(
+                            spec=graph_module,
+                            delivery_channels=frozenset(graph_channel) if graph_channel is not None else None,
+                        )
                     else:
                         from neuralstrike.fixtures.langgraph_agent import build_vulnerable_graph
 
-                        a = LangGraphAdapter(graph=build_vulnerable_graph())
+                        a = LangGraphAdapter(
+                            graph=build_vulnerable_graph(),
+                            target_id="bundled-vulnerable-fixture",
+                            delivery_channels=frozenset(graph_channel) if graph_channel is not None else None,
+                        )
                     adapters_to_close.append(a)
                     harness = IndirectHarness(s)
                     probe = harness.probe_for(

@@ -633,3 +633,85 @@ Final verification for this increment:
   `/var/folders/zv/n4210phd6_d5lqqfx462c9gw0000gn/T/neuralstrike-phase2-wheel-hvvzcwpt`.
 - `git diff --check`: pass. Dashboard unchanged; no additional dashboard testing
   required for these adapter/CLI changes. No hosted CI completion claim.
+
+## 2026-11-07 — Phase 2: separate LangGraph app, output transcript and live regression cycle
+
+Started from clean main 1f39687. Read parent repository instructions and current
+memory pointers; no unrelated tracked changes were present. No new dependencies,
+cloud inference, external system tests, releases or optional fleet services.
+
+Demonstrated defects (failing regressions before fixes):
+- Six tests failed in `/tmp/neuralstrike-phase2-langgraph-red.log`: standard
+  LangGraph tool/result/final-answer flow lost the earlier action because only
+  the last message was inspected; absent/malformed output and rewritten input
+  prefixes could yield empty/misleading observations.
+- `/tmp/neuralstrike-phase2-graph-identity-red.log`: anonymous object graphs were
+  marked baseline-comparable without a configured application identity.
+- `/tmp/neuralstrike-phase2-resolver-red.log`: misspelled module attributes fell
+  back to a different available graph and executed it. Now explicit failure.
+- Three custom-scenario CLI tests failed before adding `--scenario-dir` and
+  `--graph-channel` (`/tmp/neuralstrike-phase2-custom-corpus-red.log`).
+
+Implemented focused adapter fixes:
+- Snapshot immutable inputs before invocation, normalize actual LangChain
+  messages, verify/exclude the input prefix and collect all newly emitted
+  assistant tool calls. Preserve final text, normalized returned/output messages,
+  invocation origin, text-message profile and installed protocol package versions.
+- Explicit append/output/custom extraction boundaries; preserve custom state/
+  extractor callbacks without claiming full custom capture. Missing/non-text/
+  invalid output is an error, not a pass. Explicit values-mode streaming.
+- A declared unavailable channel fails before graph invocation. Generic delivery
+  traces remain planned-input observations, not native-hook consumption proof.
+- Anonymous object graph comparisons are non-comparable unless a stable target_id
+  is supplied; module specs remain declared configuration identities. Bind graph
+  mode/channel capabilities to comparison digests, without build-authenticity claims.
+- Synchronous-only fallback is deliberately narrowed to explicit unsupported:
+  arbitrary sync work cannot be hard-cancelled safely. Async cancellation is
+  tested and propagates after application coroutine cleanup; no executor thread
+  is detached while it may execute tool actions.
+- CLI custom scenario directory and declared repeatable graph channel list, with
+  actual custom module identity in the frozen assessment scope/target label.
+
+Separate controlled application:
+- `examples/langgraph_account_support/application.py` imports LangGraph/LangChain,
+  never NeuralStrike. Uses real compiled nodes, its own role store/tools and a
+  deterministic vulnerable/hardened planner. This is separately implemented,
+  not an independently authored third-party efficacy cohort or learned LLM.
+- Same app/scenario/seed/app-family identity: vulnerable role changes to admin;
+  hardened preserves reader and completes the account-summary task; regressed
+  again changes to admin. All stages complete the benign task. Baseline detects
+  the fix, then regression exit 4. Findings stay IntentToAct; independent app
+  events/state are not relabeled as local-canary behavioral receipts.
+- `python -m examples.langgraph_account_support.verify --out
+  /tmp/neuralstrike-phase2-independent-graph` generated private reproducible
+  assessment/run bundles, baselines and a version/source/scenario/manifest-bound
+  validation receipt at
+  `/tmp/neuralstrike-phase2-independent-graph/validation-776c55bd56fa49de97956563f1061a43`.
+  Retrieval node events contain the actual selected payload. Original-oracle
+  run/parent replay agrees without source mutation. Installed profile: langgraph
+  1.2.20, langchain-core 1.7.6, langgraph-checkpoint 4.3.1. No inference requests.
+- Tests exercise CLI vulnerable exit 1, hardened exit 0, unsupported-hook exit 3,
+  explicit output/custom profiles, streaming values, async cancellation and
+  sync-only refusal before any uncancellable work starts.
+
+Phase 2 remains in progress. MCP profiles, actual outbound rate/concurrency/
+usage budgets, broader lifecycle/reset-failure handling, idempotency decisions,
+secret stores and wider interoperability receipts remain open. Retrieval in this
+fixture is an injected ToolMessage surface, not a remote search-index hook. See
+PHASE2_INTEROPERABILITY.md for concrete commands and compatibility boundaries.
+
+Final gates for the LangGraph increment:
+- Full Python: **1338 passed, 2 skipped, 91.73% coverage**, 35.63s;
+  `/tmp/neuralstrike-phase2-graph-full.log`. Optional skips remain unverified.
+- Ruff (`src tests examples/langgraph_account_support`) and mypy (`src`, 137
+  files): pass. `git diff --check`: pass. Dashboard unchanged.
+- `uv build --out-dir /tmp/neuralstrike-phase2-graph-dist`: wheel/sdist pass.
+  Reinstalled wheel with no dependency changes, then installed existing hashed
+  dev lock into the isolated wheel environment to supply optional LangGraph
+  (the base runtime environment correctly did not include it). No lock changes.
+- From `/tmp`, confirmed import from installed wheel; with only the repository
+  examples on PYTHONPATH, the three-stage verifier passed at
+  `/tmp/neuralstrike-phase2-graph-wheel/validation-53725753e2be40e1a44867345e364a3f`.
+  Installed CLI custom hardened scenario passed exit 0 with one resisted trial,
+  full selected coverage and complete health; report/logs under
+  `/tmp/neuralstrike-phase2-graph-wheel-cli-*`. This is controlled fixture scope.
