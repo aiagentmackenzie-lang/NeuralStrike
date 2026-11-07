@@ -943,6 +943,15 @@ def scan(
         help="OpenAI SUT tier: text|function-calling|instrumented.",
     ),
     module: str | None = typer.Option(None, help="For --adapter langgraph: 'pkg.mod:attr' graph spec."),
+    graph_thread_mode: str = typer.Option(
+        "none", help="Local LangGraph thread configuration: none|isolated (fresh thread per query)."
+    ),
+    graph_reset: str | None = typer.Option(
+        None, help="Trusted local module:async_callable(graph, thread_id) before each graph query."
+    ),
+    graph_cleanup: str | None = typer.Option(
+        None, help="Trusted local module:async_callable(graph, thread_id) after each graph query."
+    ),
     graph_id: str = typer.Option("agent", help="For --adapter langgraph-server: assistant id."),
     prompt: str = typer.Option(
         "Fix the permissions issue for user attacker.",
@@ -980,6 +989,10 @@ def scan(
     _validate_baseline_destinations(baseline_dir, save_baseline_dir)
     if adapter not in {"openai", "mcp", "langgraph", "langgraph-server", "a2a"}:
         raise ValidationError("--adapter must be openai|mcp|langgraph|langgraph-server|a2a")
+    if graph_thread_mode not in {"none", "isolated"}:
+        raise typer.BadParameter("--graph-thread-mode must be none|isolated")
+    if adapter != "langgraph" and (graph_thread_mode != "none" or graph_reset or graph_cleanup):
+        raise typer.BadParameter("graph lifecycle options require --adapter langgraph")
     if tier not in {"text", "function-calling", "instrumented"}:
         raise ValidationError("--tier must be text|function-calling|instrumented")
     if trials < 1:
@@ -1014,7 +1027,9 @@ def scan(
         if adapter == "openai":
             target_adapter = OpenAIEndpointAdapter(url, model=model or "", tier=tier)
         elif adapter == "langgraph":
-            target_adapter = LangGraphAdapter(spec=module)
+            target_adapter = LangGraphAdapter(
+                spec=module, thread_mode=graph_thread_mode, reset=graph_reset, cleanup=graph_cleanup,
+            )
         elif adapter == "langgraph-server":
             target_adapter = LangGraphServerAdapter(url, graph_id=graph_id)
         elif adapter == "a2a":
@@ -1894,6 +1909,15 @@ def corpus(
         help="For --adapter langgraph with a custom graph: 'pkg.mod:attr'. "
         "Default drives the bundled vulnerable fixture.",
     ),
+    graph_thread_mode: str = typer.Option(
+        "none", help="Local LangGraph thread configuration: none|isolated (fresh thread per query)."
+    ),
+    graph_reset: str | None = typer.Option(
+        None, help="Trusted local module:async_callable(graph, thread_id) before each graph query."
+    ),
+    graph_cleanup: str | None = typer.Option(
+        None, help="Trusted local module:async_callable(graph, thread_id) after each graph query."
+    ),
     scenario_dir: str | None = typer.Option(
         None, "--scenario-dir", help="Trusted local YAML scenario directory; default uses the bundled corpus."
     ),
@@ -1933,6 +1957,10 @@ def corpus(
         raise ValidationError("--fail-on must be never|vuln|regression")
     if adapter not in {"langgraph", "openai"}:
         raise ValidationError("--adapter must be langgraph|openai")
+    if graph_thread_mode not in {"none", "isolated"}:
+        raise typer.BadParameter("--graph-thread-mode must be none|isolated")
+    if adapter != "langgraph" and (graph_thread_mode != "none" or graph_reset or graph_cleanup):
+        raise typer.BadParameter("graph lifecycle options require --adapter langgraph")
     if tier not in {"text", "function-calling", "instrumented"}:
         raise ValidationError("--tier must be text|function-calling|instrumented")
     if format not in {"sarif", "json", "junit", "markdown", "pdf"}:
@@ -2061,6 +2089,7 @@ def corpus(
                     elif graph_module:
                         a = LangGraphAdapter(
                             spec=graph_module,
+                            thread_mode=graph_thread_mode, reset=graph_reset, cleanup=graph_cleanup,
                             delivery_channels=frozenset(graph_channel) if graph_channel is not None else None,
                         )
                     else:
@@ -2069,6 +2098,7 @@ def corpus(
                         a = LangGraphAdapter(
                             graph=build_vulnerable_graph(),
                             target_id="bundled-vulnerable-fixture",
+                            thread_mode=graph_thread_mode, reset=graph_reset, cleanup=graph_cleanup,
                             delivery_channels=frozenset(graph_channel) if graph_channel is not None else None,
                         )
                     adapters_to_close.append(a)

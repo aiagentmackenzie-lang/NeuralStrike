@@ -15,11 +15,16 @@ fresh clone without forcing a heavy install.
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import importlib
+import inspect
 import json
-from collections.abc import Callable
-from dataclasses import dataclass
+import math
+import uuid
+from collections.abc import Awaitable, Callable
+from contextlib import nullcontext, suppress
+from dataclasses import dataclass, replace
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
@@ -34,6 +39,9 @@ logger = get_logger("neuralstrike.adapters.langgraph")
 
 
 StateBuilder = Callable[[str, str | None, tuple[Message, ...]], dict[str, Any]]
+LifecycleHook = Callable[[Any, str | None], Awaitable[None]]
+
+
 ResultExtractor = Callable[[Any], tuple[str, list[ToolCall], list[dict[str, Any]]]]
 
 
@@ -197,11 +205,28 @@ class LangGraphAdapter(TargetAdapter):
         target_id: str | None = None,
         messages_mode: str = "append",
         delivery_channels: frozenset[str] | None = None,
+        thread_mode: str = "none",
+        reset: LifecycleHook | str | None = None,
+        cleanup: LifecycleHook | str | None = None,
+        lifecycle_id: str | None = None,
+        cleanup_timeout: float = 5.0,
     ) -> None:
         if messages_mode not in {"append", "output"}:
             raise ValueError("messages_mode must be append|output")
         if target_id is not None and (not isinstance(target_id, str) or not target_id.strip()):
             raise ValueError("target_id must be a nonempty application identity")
+        if thread_mode not in {"none", "isolated"}:
+            raise ValueError("thread_mode must be none|isolated")
+        if not math.isfinite(cleanup_timeout) or cleanup_timeout <= 0:
+            raise ValueError("cleanup_timeout must be finite and positive")
+        self.thread_mode = thread_mode
+        self.reset = reset
+        self.cleanup = cleanup
+        self.lifecycle_id = lifecycle_id
+        self.cleanup_timeout = cleanup_timeout
+        # Reset and cleanup may operate on application-wide state. Serialize
+        # this adapter's queries; other adapters/processes remain caller-owned.
+        self._lifecycle_lock = asyncio.Lock()
         self.target_id = target_id
         self.messages_mode = messages_mode
         self.delivery_channels = delivery_channels
@@ -217,6 +242,26 @@ class LangGraphAdapter(TargetAdapter):
         return self._graph
 
     async def query(
+        self,
+        prompt: str,
+        *,
+        system_prompt: str | None = None,
+        tools: tuple[ToolSchema, ...] = (),
+        history: tuple[Message, ...] = (),
+        canary_tools: tuple[Any, ...] = (),
+        trace: Any = None,
+        delivery_channel: str | None = None,
+        delivery_marker: str | None = None,
+    ) -> SutResponse:
+        guard = self._lifecycle_lock if self.reset is not None or self.cleanup is not None else nullcontext()
+        async with guard:
+            return await self._query(
+                prompt, system_prompt=system_prompt, tools=tools, history=history,
+                canary_tools=canary_tools, trace=trace, delivery_channel=delivery_channel,
+                delivery_marker=delivery_marker,
+            )
+
+    async def _query(
         self,
         prompt: str,
         *,
@@ -245,8 +290,19 @@ class LangGraphAdapter(TargetAdapter):
             "delivery_semantics": "input state observed; target consumption not attested",
             "versions": _package_versions(),
         }
-        capture_response(lambda: SutResponse(text="", exchanges=(exchange,)))
+        thread_id = str(uuid.uuid4()) if self.thread_mode == "isolated" else None
+        lifecycle = self._new_lifecycle(thread_id)
+        exchange["lifecycle"] = lifecycle
+        response = SutResponse(text="", exchanges=(exchange,))
+        capture_response(lambda: response)
+        graph = None
         try:
+            _validate_hooks(self.reset, self.cleanup)
+            graph = self.graph
+            if self.reset is not None:
+                lifecycle["reset"] = "started"
+                await _run_hook(self.reset, graph, thread_id)
+                lifecycle["reset"] = "completed"
             state = self.state_builder(prompt, system_prompt, history)
             # Freeze before invocation: graphs/reducers can mutate the input object.
             inputs = (
@@ -263,49 +319,129 @@ class LangGraphAdapter(TargetAdapter):
                     delivery_channel,
                     delivery_marker,
                 )
-            final = await self._invoke(state)
-            if self.result_extractor is extract_default:
-                messages = [_message_snapshot(m) for m in _messages_of(final)]
-                exchange["returned_messages"] = messages
-                outputs = messages
-                if self.messages_mode == "append":
-                    if messages[: len(inputs)] != inputs:
-                        raise ValueError(
-                            "graph changed or omitted the input prefix; use an explicit output profile"
-                        )
-                    outputs = messages[len(inputs) :]
-                if not outputs:
-                    raise ValueError("graph produced no new output messages")
-                exchange["output_messages"] = outputs
-                # Snapshot tool representation is normalized; extractor accepts
-                # the original message objects to preserve the public helper API.
-                raw = _messages_of(final)
-                selected = raw[len(inputs) :] if self.messages_mode == "append" else raw
-                text, tool_calls, traces = self.result_extractor({"messages": selected})
-            else:
-                text, tool_calls, traces = self.result_extractor(final)
-            exchange["capture_complete"] = self.result_extractor is extract_default
-            if self.result_extractor is not extract_default:
-                exchange["capture_limitations"] = "custom state/extractor; full graph state not captured"
+            lifecycle["invocation"] = "started"
+            final = await self._invoke(state, thread_id)
+            response = self._extract_response(final, inputs, exchange)
+            lifecycle["invocation"] = "completed"
+        except asyncio.CancelledError:
+            if lifecycle["reset"] == "started":
+                lifecycle["reset"] = "interrupted"
+            if lifecycle["invocation"] == "started":
+                lifecycle["invocation"] = "interrupted"
+            raise
         except Exception as exc:
+            if lifecycle["invocation"] == "started":
+                lifecycle["invocation"] = "failed"
+            if lifecycle["reset"] == "started":
+                lifecycle["reset"] = "failed"
             logger.error("LangGraph drive failed (%s)", type(exc).__name__)
             exchange["error_type"] = type(exc).__name__
-            return SutResponse(text="", error=f"{type(exc).__name__}: {exc}", exchanges=(exchange,))
+            response = replace(response, error=f"{type(exc).__name__}: {exc}")
+        finally:
+            if self.cleanup is not None and graph is not None:
+                response = await self._cleanup_response(graph, thread_id, lifecycle, response)
+        return response
+
+    def _new_lifecycle(self, thread_id: str | None) -> dict[str, Any]:
+        return {
+            "thread_mode": self.thread_mode,
+            "thread_id": thread_id,
+            "state_isolation": "fresh thread configuration; application state unverified"
+            if thread_id else "unverified; no thread configuration supplied",
+            "invocation": "not_attempted",
+            "reset": "not_attempted" if self.reset is not None else "not_configured",
+            "cleanup": "not_attempted" if self.cleanup is not None else "not_configured",
+            "reset_attestation": "caller-supplied callback only; independent reset not attested",
+            "resource_ownership": "invocation hooks only; graph/store lifetime remains caller-owned",
+        }
+
+    def _extract_response(
+        self, final: Any, inputs: list[dict[str, Any]], exchange: dict[str, Any]
+    ) -> SutResponse:
+        if self.result_extractor is extract_default:
+            messages = [_message_snapshot(m) for m in _messages_of(final)]
+            exchange["returned_messages"] = messages
+            outputs = messages
+            if self.messages_mode == "append":
+                if messages[: len(inputs)] != inputs:
+                    raise ValueError(
+                        "graph changed or omitted the input prefix; use an explicit output profile"
+                    )
+                outputs = messages[len(inputs) :]
+            if not outputs:
+                raise ValueError("graph produced no new output messages")
+            exchange["output_messages"] = outputs
+            # Snapshot tool representation is normalized; extractor accepts
+            # the original message objects to preserve the public helper API.
+            raw = _messages_of(final)
+            selected = raw[len(inputs) :] if self.messages_mode == "append" else raw
+            text, tool_calls, traces = self.result_extractor({"messages": selected})
+        else:
+            text, tool_calls, traces = self.result_extractor(final)
+        exchange["capture_complete"] = self.result_extractor is extract_default
+        if self.result_extractor is not extract_default:
+            exchange["capture_limitations"] = "custom state/extractor; full graph state not captured"
         return SutResponse(
             text=text, tool_calls=tuple(tool_calls), traces=tuple(traces), exchanges=(exchange,)
         )
 
-    async def _invoke(self, state: dict[str, Any]) -> Any:
+    async def _cleanup_response(
+        self, graph: Any, thread_id: str | None, lifecycle: dict[str, Any], response: SutResponse
+    ) -> SutResponse:
+        lifecycle["cleanup"] = "started"
+        try:
+            await self._cleanup(graph, thread_id, lifecycle)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            error = f"graph cleanup failed ({type(exc).__name__})"
+            return replace(response, error=f"{response.error}; {error}" if response.error else error)
+        return response
+
+    async def _cleanup(self, graph: Any, thread_id: str | None, lifecycle: dict[str, Any]) -> None:
+        # Shield cooperative cleanup from caller cancellation and await it before
+        # releasing the lifecycle lock. No detached worker or action retry.
+        async def finish() -> None:
+            try:
+                async with asyncio.timeout(self.cleanup_timeout):
+                    assert self.cleanup is not None
+                    await _run_hook(self.cleanup, graph, thread_id)
+                lifecycle["cleanup"] = "completed"
+            except BaseException as exc:
+                lifecycle["cleanup"] = "failed"
+                lifecycle["cleanup_error_type"] = type(exc).__name__
+                raise
+
+        task = asyncio.create_task(finish())
+        cancelled = False
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                if task.cancelled():
+                    break
+                cancelled = True
+            except Exception:
+                break
+        if cancelled:
+            # Retrieve any failure before propagating the caller cancellation.
+            with suppress(BaseException):
+                task.result()
+            raise asyncio.CancelledError
+        task.result()
+
+    async def _invoke(self, state: dict[str, Any], thread_id: str | None = None) -> Any:
         graph = self.graph
+        config = {"config": {"configurable": {"thread_id": thread_id}}} if thread_id else {}
         if hasattr(graph, "ainvoke"):
-            return await graph.ainvoke(state)
+            return await graph.ainvoke(state, **config)
         if hasattr(graph, "invoke"):
             # An executor thread cannot be killed on timeout and may keep
             # executing tools; require cooperative async execution instead.
             raise ValueError("synchronous graph execution unsupported; provide ainvoke")
         final = None
         # Node-update streaming is not a final-state transcript.
-        async for chunk in graph.astream(state, stream_mode="values"):
+        async for chunk in graph.astream(state, stream_mode="values", **config):
             final = chunk
         return final
 
@@ -344,3 +480,24 @@ def _package_versions() -> dict[str, str | None]:
         except PackageNotFoundError:
             versions[package] = None
     return versions
+
+
+def _resolve_hook(hook: LifecycleHook | str) -> LifecycleHook:
+    if isinstance(hook, str):
+        module, separator, attribute = hook.partition(":")
+        if not separator or not module or not attribute:
+            raise ValueError("lifecycle hook must be module:async_callable")
+        hook = getattr(importlib.import_module(module), attribute)
+    if not inspect.iscoroutinefunction(hook):
+        raise ValueError("lifecycle hook must be an async function")
+    return hook
+
+
+def _validate_hooks(*hooks: LifecycleHook | str | None) -> None:
+    for hook in hooks:
+        if hook is not None:
+            _resolve_hook(hook)
+
+
+async def _run_hook(hook: LifecycleHook | str, graph: Any, thread_id: str | None) -> None:
+    await _resolve_hook(hook)(graph, thread_id)

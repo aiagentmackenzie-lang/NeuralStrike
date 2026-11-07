@@ -144,4 +144,4 @@ def test_corrupt_baseline_is_runtime_exit_not_vulnerability(tmp_path, policy):
         )
     assert result.exit_code == 3, result.output
     assert "baseline" in result.output.lower()
-    assert "valid json" in result.output.lower()
+    assert "valid json" in " ".join(result.output.lower().split())

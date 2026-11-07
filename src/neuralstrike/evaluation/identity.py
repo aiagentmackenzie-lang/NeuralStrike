@@ -43,6 +43,13 @@ def comparison_identity(adapter: Any, scenario: Any, tools: Any, oracles: Any) -
     if hasattr(adapter, "messages_mode"):
         target["graph_target_id"] = getattr(adapter, "target_id", None)
         target["graph_messages_mode"] = adapter.messages_mode
+        target["graph_thread_mode"] = adapter.thread_mode
+        target["graph_cleanup_timeout"] = adapter.cleanup_timeout
+        target["graph_lifecycle_id"] = adapter.lifecycle_id
+        target["graph_reset"] = adapter.reset if isinstance(adapter.reset, str) else bool(adapter.reset)
+        target["graph_cleanup"] = (
+            adapter.cleanup if isinstance(adapter.cleanup, str) else bool(adapter.cleanup)
+        )
         channels = getattr(adapter, "delivery_channels", None)
         target["graph_delivery_channels"] = sorted(channels) if channels is not None else None
     target["class"] = f"{type(adapter).__module__}.{type(adapter).__qualname__}"
@@ -76,6 +83,11 @@ def comparison_identity(adapter: Any, scenario: Any, tools: Any, oracles: Any) -
         identity["target_build"] = (
             "unverified; anonymous in-process graph has no configured application identity"
         )
+    if hasattr(adapter, "lifecycle_id") and not adapter.lifecycle_id and any(
+        hook is not None and not isinstance(hook, str) for hook in (adapter.reset, adapter.cleanup)
+    ):
+        identity["comparable"] = False
+        identity["target_build"] = "unverified; callable lifecycle hooks require an explicit lifecycle_id"
     return identity
 
 

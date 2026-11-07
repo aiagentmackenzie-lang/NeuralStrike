@@ -221,9 +221,10 @@ protocol profile, not complete MCP/OAuth conformance or customer-agent efficacy.
 
 The controlled LangGraph app gate now has runnable evidence. The master plan
 now has a pinned, locally verified MCP stdio/HTTP profile. Phase 2 still requires
-remaining application reset/thread lifecycle and cleanup-failure cases, preservation
-of earlier observations when an OpenAI/graph trial times out in flight, and broader
-explicit hook/capability interoperability checks. Arbitrary application-owned
+a consolidated acceptance review of the declared hook/capability support matrix.
+The interruption and explicit local reset/thread/cleanup increments below now have
+regressions and receipts; they do not extend the supported profile to experimental
+remote LangGraph Server or arbitrary custom capture implementations. Arbitrary application-owned
 resources and detached processes are not guaranteed cancellable. Credential/build/
 principal identity remains unverified beyond declared configuration and captured
 self-reports; the protocol receipts do not establish live remediation. Environment
@@ -257,3 +258,68 @@ paths retain explicit errors, without claiming complete capture.
 
 Supported Python minimum is now 3.11: the mandatory `filelock>=4.2.1` security
 floor cannot install on 3.10. Hosted CI exercises 3.11, 3.12, and 3.14.
+
+## Explicit local LangGraph lifecycle
+
+`LangGraphAdapter` now accepts `thread_mode="none"|"isolated"`, optional async
+`reset(graph, thread_id)` / `cleanup(graph, thread_id)` hooks, and a cooperative
+`cleanup_timeout` (default five seconds). Hooks may be trusted in-process async
+functions or explicit `module:async_callable` references. Both are validated
+before resolving/invoking the graph. They are never inferred from an application's
+method names, and replay never imports or executes a recorded hook.
+
+Default `none` preserves existing invocation signatures and records thread/state
+isolation as unverified. `isolated` sends a fresh UUID through LangGraph's
+`config.configurable.thread_id` for each query, including values-mode streams.
+It does not clear application-global stores or prove a graph honored that config.
+The caller owns the graph, checkpointer and application lifetime. Cleanup hooks
+can delete this invocation's checkpoints with a supported saver, for example
+`await graph.checkpointer.adelete_thread(thread_id)`; this is opt-in, never an
+inferred deletion of caller data. With no hook, cleanup is `not_configured`.
+
+CLI `scan` and `corpus` expose the same opt-in controls:
+
+```sh
+neuralstrike corpus --adapter langgraph --graph-module target:graph \
+  --graph-thread-mode isolated --graph-reset target:reset \
+  --graph-cleanup target:cleanup --trials 2 --timeout 10 --fail-on vuln
+```
+
+Here `target` is a trusted local module supplied by the operator. Its hooks must
+be async functions taking `(graph, thread_id)`; `thread_id` is null in `none`
+mode. Importing these references executes trusted local code, just like the graph
+module itself. Other adapters reject these lifecycle options explicitly. The
+experimental LangGraph Server HTTP adapter does not implement this profile;
+local hooks must not be interpreted as remote thread cleanup support.
+
+Reset runs before state construction/invocation; cleanup runs once after graph
+resolution on success, reset/state/invocation/extraction exceptions, timeout and
+cancellation. Invalid hook configuration fails before application invocation.
+Reset failure prevents that invocation. When hooks are configured, a per-adapter lock serializes reset →
+invoke → cleanup; separate adapters/processes using the same application need
+caller coordination. Shielded cleanup is awaited before releasing the lock,
+including repeated caller cancellation. Queries without hooks preserve concurrent
+invocation compatibility. Its deadline is cooperative: callbacks
+or graph code that block the event loop or suppress cancellation cannot be
+forcibly stopped. Application-internal detached work is not controlled here.
+
+Private exchanges record reset/invocation/cleanup states, thread configuration,
+cleanup exception class and the ownership/attestation limits. A completed callback
+is only a caller-supplied callback receipt, not independent proof of target reset.
+Cleanup failures preserve already observed response/actions and mark execution
+incomplete (exit 3 under `vuln`), never resistance or a confirmed fix. Cancelled
+journals retain lifecycle receipts and observed actions but remain running and
+replay-rejected. No action, reset or cleanup is automatically retried.
+
+Comparison configuration binds thread mode, hook references, cleanup deadline and
+an optional `lifecycle_id`. Callable hooks require an explicit `lifecycle_id` for
+baseline comparability; that ID is caller-declared, not authenticated. Existing
+LangGraph baselines need regeneration because their configuration digest did not
+include these controls. Hook references and target IDs do not attest unchanged
+code behind a module name. Full source-code/closure identity is not inferred.
+
+`test_langgraph_lifecycle.py` checks real compiled LangGraph/InMemorySaver thread
+isolation and checkpoint deletion, application-global reset serialization, reset
+failure and failed-remediation comparison, cleanup failure/deadline, all exit paths,
+repeated cancellation, original-oracle replay and both CLI paths. These are local
+engineering checks; no real customer efficacy or universal reset claim follows.

@@ -978,3 +978,92 @@ Final verification for code commit `cc3f613`:
 - No release workflow dispatched. Phase 2 remains in progress with the limitations
   above; next required engineering work is explicit application reset/thread
   lifecycle with failing tests and honest reset/cleanup failure receipts.
+
+## 2026-11-07 — Explicit local graph reset, thread and cleanup lifecycle
+
+Started from clean `a724896`, matching the handoff. Read inherited instructions,
+assessment/master-plan/findings and current implementation records. Preserved the
+interruption checkpoints and existing CLI defaults. Previously named `/tmp` test
+environments were absent; repository `.venv` lacked pytest. Created
+`/tmp/neuralstrike-lifecycle-venv` with Python 3.12.14, installed the existing
+`requirements-dev.txt` with `--require-hashes`, then this checkout editable with
+`--no-deps`. No dependency/lock changes or credential files.
+
+Failing-first evidence:
+- Seven new lifecycle acceptance cases failed against the original adapter
+  (`/tmp/neuralstrike-lifecycle-red.log`): the reset/cleanup/thread configuration
+  API was absent. This demonstrates missing lifecycle capability, not an existing
+  independently verified target reset or a reproduced production false pass.
+- Comparison configuration ignored thread/lifecycle controls; CLI lifecycle
+  options were absent (`...-extra-red.log`, `...-cli-red.log`).
+- Two implementation defects were then separately reproduced before fixing:
+  invalid cleanup hooks allowed an application action before rejection, and
+  cancellation during reset incorrectly claimed invocation had been attempted
+  (`/tmp/neuralstrike-lifecycle-preflight-red.log`).
+
+Implemented explicit optional async reset/cleanup hooks and fresh per-query
+LangGraph thread configuration. Validated hook types/references before graph
+invocation. Serialized each adapter's reset/invoke/cleanup sequence; shielded,
+cooperatively deadline-limited cleanup runs once and is awaited under cancellation.
+Private receipts distinguish unconfigured, unattempted, completed, interrupted and
+failed stages. Callback completion does not attest independent target reset, and
+fresh thread IDs do not attest application-global isolation. The caller retains
+graph/store ownership. No inferred deletion, action retry or hard cancellation.
+
+Observed actions/text survive cleanup failure or cancellation during cleanup.
+Reset failures cannot invoke the graph or establish remediation; health remains
+incomplete. Ordinary error bundles verify with the original deterministic oracle;
+cancelled journals remain running and rejected by committed replay. Both `scan`
+and `corpus` expose opt-in thread/reset/cleanup options and reject other adapters.
+Comparison identity includes lifecycle configuration; callable hooks require a
+caller-declared lifecycle ID for comparability. Prior LangGraph baseline digests
+must be regenerated. See PHASE2_INTEROPERABILITY.md for exact semantics/limits.
+
+Initial full run: 1407 passed, 2 skipped, 3 failures; 91.71% coverage. All three
+failures were an existing corrupt-baseline assertion splitting "valid JSON"
+across Rich's line wrapping for the longer pytest scratch path. Exit 3 and the
+actual diagnostic were correct. Normalized whitespace in that assertion; no
+application error behavior changed. Final frozen-source gates follow below.
+
+Phase 2 remains in progress pending final acceptance review and hosted/wheel
+verification of this increment. Experimental remote LangGraph Server thread/SSE
+handling is outside this local profile, not silently promoted. Arbitrary native
+or detached application resources remain caller-owned; custom capture paths still
+require checkpoint participation. No canonical recovery of cancelled journals is
+introduced, no unattempted trials are fabricated, and no release, paid inference
+or external security exercise is performed.
+
+Installed-wheel checking exposed a scheduling regression missed by the first full
+suite: locking an adapter with no lifecycle hooks could cancel a concurrent trial
+before its input exchange was captured. Added a deterministic two-entry barrier
+regression, observed it fail (`/tmp/neuralstrike-lifecycle-concurrency-red.log`),
+and restricted serialization to configured reset/cleanup hooks. Unconfigured
+adapters retain concurrent invocation compatibility. This preserves the earlier
+partial-evidence/task-isolation contract rather than weakening its test.
+
+The first outside-checkout test invocation also omitted this repository's
+`asyncio_mode=auto` setting; reruns explicitly pass `--asyncio-mode=auto`.
+That collection/execution configuration error is not an adapter defect.
+
+Final local frozen-source verification:
+- `/tmp/neuralstrike-lifecycle-venv/bin/python -m pytest --cov=neuralstrike
+  --cov-fail-under=85`: **1414 passed, 2 skipped, 91.74% coverage**, 44.97s.
+  Log: `/tmp/neuralstrike-lifecycle-final-full.log`. Optional base58/real
+  NeuralGuard skips remain unverified integrations; coverage is not efficacy.
+- `ruff check src tests`: passed. Strict `mypy src/neuralstrike`: passed,
+  143 source files. `git diff --check`: passed.
+- `uv build --out-dir /tmp/neuralstrike-lifecycle-dist`: wheel and sdist built;
+  all **147 packaged Python/JSON/YAML files** match checkout bytes. Installed
+  the rebuilt wheel without dependency resolution into the separate hashed-lock
+  `/tmp/neuralstrike-lifecycle-wheel-venv` environment.
+- From `/tmp/neuralstrike-lifecycle-wheel-check`, outside the checkout:
+  `python -m pytest tests --asyncio-mode=auto -q`: **21 passed**, including
+  all 17 new lifecycle cases and four existing interruption cases. Log:
+  `/tmp/neuralstrike-lifecycle-wheel-tests.log`. Installed CLI offline smoke:
+  exit 0, three scenarios/three trials. No paid or external target calls.
+
+Next acceptance work: consolidate the exact supported target/capture/lifecycle
+capabilities and review every Phase 2 master-plan gate against current artifacts;
+do not promote experimental remote graph or custom capture paths. Hosted results
+for this implementation commit will be recorded after push, not inferred from
+earlier commits. Phase 2 is not declared complete by these local checks.
