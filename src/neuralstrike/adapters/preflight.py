@@ -90,7 +90,15 @@ async def check_openai_target(
     except asyncio.TimeoutError:
         error = "preflight timed out"
     finally:
-        await adapter.close()
+        cleanup = {"status": "started"}
+        try:
+            await adapter.close()
+        except Exception as exc:
+            cleanup = {"status": "failed", "error_type": type(exc).__name__}
+            failure = f"preflight cleanup failed ({type(exc).__name__})"
+            error = f"{error}; {failure}" if error else failure
+        else:
+            cleanup = {"status": "completed"}
     endpoint = httpx.URL(adapter._endpoint())
     return {
         "kind": "neuralstrike-target-preflight",
@@ -105,6 +113,7 @@ async def check_openai_target(
         "tool_call_required": require_tools,
         "tool_call_observed": tool_observed,
         "http_statuses": statuses,
+        "cleanup": cleanup,
         "error": error,
         "versions": {"neuralstrike": __version__, "httpx": version("httpx")},
         "limitations": [

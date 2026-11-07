@@ -327,35 +327,22 @@ class OpenAIEndpointAdapter(TargetAdapter):
             assert isinstance(msg, dict)  # validated above
             last_text = msg.get("content") or ""
             tool_calls = msg.get("tool_calls") or []
-
-            if not tool_calls:
+            # These complete, validated call objects are observed intent even
+            # when generation subsequently reports truncation/filtering. Never
+            # execute handlers or continue such a completion.
+            all_tool_calls.extend(_observed_calls(tool_calls))
+            error = _completion_problem(choice)
+            if error is None and tool_calls and self.tier == "text":
+                error = "tool calls unsupported in text tier"
+            if error is not None or not tool_calls:
                 break
 
             # Append the assistant message (with its tool_calls) to the conversation.
             messages.append({"role": "assistant", "content": last_text, "tool_calls": tool_calls})
 
-            # Serve each tool_call: execute canary tools (Behavioral), else canned result.
-            for tc in tool_calls:
-                fn = tc.get("function", {}) if isinstance(tc, dict) else {}
-                name = fn.get("name", "")
-                raw_args = fn.get("arguments", "{}")
-                args = _parse_args(raw_args)
-                all_tool_calls.append(ToolCall(name=name, arguments=args, tool_call_id=tc.get("id")))
-                result_content = _canned_tool_result(name)
-                if name in canary_by_name and trace is not None:
-                    try:
-                        result_content = canary_by_name[name].execute(args, trace, tool_call_id=tc.get("id"))
-                    except Exception as exc:
-                        result_content = f'{{"error":"{exc}"}}'
-                        logger.error("canary tool %s handler raised: %s", name, exc)
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tc.get("id"),
-                        "name": name,
-                        "content": result_content,
-                    }
-                )
+            error = self._serve_calls(tool_calls, messages, canary_by_name, trace, exchanges[-1])
+            if error is not None:
+                break
             # Loop again to let the SUT react to the tool results.
         else:
             # Loop exhausted without the SUT stopping tool-calls.
@@ -368,6 +355,33 @@ class OpenAIEndpointAdapter(TargetAdapter):
             error=error,
             exchanges=tuple(exchanges),
         )
+
+    def _serve_calls(
+        self,
+        calls: list[dict[str, Any]],
+        messages: list[dict[str, Any]],
+        canary_by_name: dict[str, CanaryTool],
+        trace: TraceLog | None,
+        exchange: dict[str, Any],
+    ) -> str | None:
+        for call in calls:
+            name = call["function"]["name"]
+            args = _parse_args(call["function"]["arguments"])
+            result_content = _canned_tool_result(name)
+            if self.tier == "instrumented" and name in canary_by_name and trace is not None:
+                try:
+                    result_content = canary_by_name[name].execute(args, trace, tool_call_id=call["id"])
+                except Exception as exc:
+                    exchange["tool_execution_error"] = {
+                        "tool_name": name, "tool_call_id": call["id"], "error_type": type(exc).__name__,
+                    }
+                    error = f"canary tool handler failed ({type(exc).__name__})"
+                    logger.error("canary tool handler failed (%s)", type(exc).__name__)
+                    return error
+            messages.append({
+                "role": "tool", "tool_call_id": call["id"], "name": name, "content": result_content,
+            })
+        return None
 
     @staticmethod
     def _record_delivery(
@@ -513,3 +527,29 @@ def _parse_args(raw: Any) -> Any:
 def _canned_tool_result(name: str) -> str:
     """A generic acknowledgement for non-canary tools so the conversation continues."""
     return json.dumps({"ok": True, "tool": name, "result": "served by NeuralStrike adapter"})
+
+
+def _observed_calls(calls: list[dict[str, Any]]) -> list[ToolCall]:
+    return [
+        ToolCall(
+            name=call["function"]["name"],
+            arguments=_parse_args(call["function"]["arguments"]),
+            tool_call_id=call["id"],
+        )
+        for call in calls
+    ]
+
+
+def _completion_problem(choice: dict[str, Any]) -> str | None:
+    # Some compatible endpoints omit this optional metadata. Preserve that
+    # legacy shape; when supplied, do not ignore an explicit incomplete state.
+    if "finish_reason" not in choice:
+        return None
+    reason = choice["finish_reason"]
+    if reason in ("stop", "tool_calls"):
+        return None
+    if reason == "length":
+        return "incomplete chat completion: generation token limit reached"
+    if reason == "content_filter":
+        return "incomplete chat completion: generation stopped by content filter"
+    return "incomplete chat completion: unsupported or unfinished finish_reason"

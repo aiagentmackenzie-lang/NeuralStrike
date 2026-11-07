@@ -215,6 +215,8 @@ class CanaryTool:
     def execute(self, arguments: dict[str, Any], trace: TraceLog, *, tool_call_id: str | None = None) -> str:
         """Run the handler and record the execution (Tier-2 evidence)."""
         result = self.handler(arguments)
+        if not isinstance(result, str):
+            raise ValueError("canary handler result must be text")
         trace.record(self.name, arguments, result, severity=self.severity, tool_call_id=tool_call_id)
         return result
 

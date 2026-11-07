@@ -67,3 +67,63 @@ async def test_preflight_records_observed_capability_and_closes(mode):
         assert receipt["error"] == "preflight timed out"
     if mode == "text":
         assert receipt["error"] == "requested tool capability was not demonstrated"
+
+
+@pytest.mark.parametrize("status", [200, 401])
+async def test_preflight_close_failure_retains_capability_receipt_as_incomplete(status):
+    class Transport(httpx.AsyncBaseTransport):
+        closed_attempts = 0
+
+        async def handle_async_request(self, request):
+            return httpx.Response(status, json={"choices": [{"message": {"content": "ok"}}]})
+
+        async def aclose(self):
+            self.closed_attempts += 1
+            raise RuntimeError("synthetic close failure")
+
+    transport = Transport()
+    receipt = await check_openai_target(
+        "http://fixture", model="fixture", require_tools=False, transport=transport
+    )
+    assert receipt["ready"] is False
+    assert receipt["status"] == "incomplete"
+    assert receipt["http_statuses"] == [status]
+    assert receipt["cleanup"] == {"status": "failed", "error_type": "RuntimeError"}
+    assert "cleanup failed" in receipt["error"]
+    if status == 401:
+        assert "401" in receipt["error"]
+    assert transport.closed_attempts == 1
+
+
+def test_doctor_persists_incomplete_receipt_when_client_close_fails(tmp_path, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from typer.testing import CliRunner
+
+    from neuralstrike.adapters.openai_endpoint import OpenAIEndpointAdapter
+    from neuralstrike.evaluation.verdict import SutResponse
+    from neuralstrike.main import app
+
+    monkeypatch.setattr(
+        OpenAIEndpointAdapter,
+        "query",
+        AsyncMock(
+            return_value=SutResponse(
+                text="ok",
+                exchanges=({"status_code": 200},),
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        OpenAIEndpointAdapter, "close", AsyncMock(side_effect=RuntimeError("synthetic close"))
+    )
+    output = tmp_path / "preflight.json"
+    result = CliRunner().invoke(
+        app, ["doctor", "--url", "http://fixture", "--model", "fixture", "--text-only", "--out", str(output)]
+    )
+    assert result.exit_code == 3, result.output
+    receipt = json.loads(output.read_text())
+    assert receipt["ready"] is False
+    assert receipt["cleanup"]["status"] == "failed"
+    assert receipt["http_statuses"] == [200]
+    assert output.stat().st_mode & 0o777 == 0o600
