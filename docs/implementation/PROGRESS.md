@@ -715,3 +715,68 @@ Final gates for the LangGraph increment:
   Installed CLI custom hardened scenario passed exit 0 with one resisted trial,
   full selected coverage and complete health; report/logs under
   `/tmp/neuralstrike-phase2-graph-wheel-cli-*`. This is controlled fixture scope.
+
+## 2026-11-07 — Phase 2: actual outbound request controls and honest token accounting
+
+Separate focused increment after bbe8e67. Previously, runtime helpers had tests
+but no adapter/CLI callers; grep confirmed they did not govern outbound work.
+The deterministic failing clock regression demonstrated a rate-limiter defect:
+waiting for a token was credited a second time on the next acquisition (0,10,10
+seconds instead of 0,10,20). `/tmp/neuralstrike-phase2-runtime-red.log` records
+that failure plus missing shared-policy behavior. A further failing regression
+(`/tmp/neuralstrike-phase2-admission-red.log`) proved exhausted caps could wait
+for a rate token before failing. Both defects are fixed.
+
+Implemented:
+- New shared OutboundPolicy composes existing rate/concurrency/token helpers at
+  actual OpenAI request admission. No retries added. One policy spans all corpus
+  scenario adapters and tool-continuation rounds. Cancellation frees slots; rate
+  waits are accounted once. Synchronous admission reservation prevents races.
+- CLI opt-in `--max-requests`, `--requests-per-minute`,
+  `--max-concurrent-requests`, `--max-total-tokens`. Unsupported adapter paths
+  reject the options before running; controls cannot silently become metadata.
+  Immutable assessment scope and baseline identity bind configuration, not counters.
+- Distinguish planned/unattempted envelopes from attempted requests. Capture
+  admission refusal and budget errors explicitly. Preserve completed private
+  response bodies even when accounting prevents processing their tool actions.
+- Usage is valid provider-reported total_tokens or explicitly estimated from
+  request/response JSON bytes. Malformed usage is not treated as measured zero.
+  Unmeasured failed requests block further token-budgeted dispatch. Cost remains
+  null/unavailable; no pricing or absolute billable-spend ceiling is promised.
+  Token thresholds are post-response, may overshoot with the crossing request
+  and already in-flight calls, and are enforced before executing returned tools.
+- Existing unauthenticated/default CLI behavior remains; no new implicit request
+  policy. Policies apply to OpenAI corpus, not opaque internal graph clients or
+  other transports. GracefulDrain/general retry helpers remain outside this scope.
+
+Meaningful tests: per-round shared cap, actual CLI cross-scenario cap and frozen
+plan, bounded concurrency across distinct adapters, cancelled queued task and
+subsequent reuse, token-exceeding response nonexecution with raw-body retention,
+unknown-usage follow-up refusal, invalid/missing usage labels, invalid limits,
+no delayed exhausted-cap failure and stable identity despite usage counters.
+A test-only class replacement initially contaminated a lazy import in another
+suite; replaced it with scoped client injection and reran the combined suites
+(40 passed). No production behavior was changed to accommodate that test bug.
+
+Final full Python gate: **1357 passed, 2 skipped, 91.74% coverage**, 35.87s;
+`/tmp/neuralstrike-phase2-runtime-full.log`. Optional base58/real NeuralGuard skips
+remain unverified. Static checks and installed-wheel gate are recorded below.
+No cloud inference, external target testing, dependency changes, publishing or
+fleet integration activation. Phase 2 remains open for pinned MCP stdio/HTTP
+profiles, broader lifecycle/reset failure and partial in-flight evidence paths,
+secret-store references, explicit consequential-action idempotency decisions and
+remaining interoperability receipts. Coverage is not security efficacy.
+
+Final runtime gates:
+- Ruff (`src tests examples/langgraph_account_support`) and mypy (`src`, 138
+  files): pass; `git diff --check`: pass. Dashboard unchanged.
+- Wheel/sdist built in `/tmp/neuralstrike-phase2-runtime-dist`. Reinstalled wheel
+  into the existing isolated environment with no dependency/lock changes.
+- From `/tmp`, confirmed installed-wheel imports and ran CLI against a separate
+  authenticated loopback HTTP server with two selected scenarios and max-requests
+  1. Exactly one actual dispatch occurred; the other trial retained an explicitly
+  planned/refused envelope, and the CLI exited 3. Verified reported token source,
+  unavailable/null cost, zero active slots after completion, frozen plan limits
+  and absence of the synthetic header credential in JSON artifacts. Scratch root:
+  `/var/folders/zv/n4210phd6_d5lqqfx462c9gw0000gn/T/neuralstrike-phase2-runtime-wheel-8yxp36u_`.
+- No hosted CI result, external provider compatibility or security efficacy claim.

@@ -38,6 +38,8 @@ def comparison_identity(adapter: Any, scenario: Any, tools: Any, oracles: Any) -
     target = {
         name: getattr(adapter, name, None) for name in ("name", "base_url", "model", "tier", "graph_id")
     }
+    if getattr(adapter, "outbound", None) is not None:
+        target["outbound_limits"] = adapter.outbound.configuration()
     if hasattr(adapter, "messages_mode"):
         target["graph_target_id"] = getattr(adapter, "target_id", None)
         target["graph_messages_mode"] = adapter.messages_mode

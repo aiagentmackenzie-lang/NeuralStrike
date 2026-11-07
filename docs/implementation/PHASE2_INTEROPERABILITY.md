@@ -148,13 +148,65 @@ Verified local versions: LangGraph 1.2.20, langchain-core 1.7.6 and
 langgraph-checkpoint 4.3.1. These receipts establish this local version profile,
 not support for every framework revision.
 
+## Actual OpenAI outbound limits
+
+The existing `RateLimiter`, `ConcurrencyLimiter` and `Budget` helpers are now
+wired to OpenAI request dispatch through one shared `OutboundPolicy` per corpus
+assessment. This includes every tool continuation and every scenario adapter.
+Controls remain opt-in, preserving existing CLI defaults:
+
+```sh
+neuralstrike corpus --adapter openai --url http://127.0.0.1:8000 --model local-fixture \
+  --target-api-key-env TARGET_TEST_KEY --max-requests 20 \
+  --requests-per-minute 30 --max-concurrent-requests 1 --max-total-tokens 10000 \
+  --timeout 10 --fail-on vuln
+```
+
+`--max-requests` limits admissions before transport; failed/cancelled admitted
+requests count conservatively. Exhausted caps fail immediately, without waiting
+for another rate token. Rate admission is evenly spaced, with one initial token;
+concurrency is shared across adapter instances and released on cancellation.
+Corpus still runs scenarios sequentially; the concurrency setting does not claim
+a parallel corpus scheduler. Limit configuration is frozen in declared scope
+and baseline comparison identity; mutable counters do not change identity.
+Adapters that cannot enforce these outbound options reject them explicitly.
+This increment applies to `corpus --adapter openai`, not opaque graph-internal
+clients, model-name workflows or MCP. There are no automatic request retries.
+
+`--max-total-tokens` is a **post-response stopping threshold**. Valid nonnegative
+integer `usage.total_tokens` is labeled provider-reported, not independently
+metered. Missing/malformed counts use an explicit JSON-byte/4 heuristic labeled
+estimated. Mixed sources remain labeled. Usage is accounted before any tool
+handler processes that response. Exceeding the threshold preserves the bounded
+raw response and produces a budget error; no tool from that response is executed.
+At/above the threshold, further dispatch is refused. Concurrent in-flight calls
+and the request that crosses the threshold can overshoot. Unknown usage after a
+failed request prevents further token-budgeted dispatch rather than assuming zero.
+
+Cost is `null`/unavailable: no price table or exact provider billing is inferred.
+There is no absolute token or spend ceiling. The older Budget helper's numeric
+accumulators are internal accounting, not proof of zero cost when usage is absent.
+Request-level receipts record source, count, limit semantics, shared-policy
+snapshot and available response evidence. `request_status=planned` distinguishes
+an admission-refused planned envelope from an attempted request; this is not a
+proof of remote receipt. Budget and transport errors remain incomplete trial
+results, never confirmed fixes or resistance. CLI `--fail-on never` retains its
+explicit report-only exit behavior and does not change recorded health.
+
+The rate helper's wait-accounting defect has a permanent deterministic clock
+regression: one request per ten seconds admits at 0, 10, 20, rather than 0, 10,
+10. Concurrency statistics no longer introduce a second cancellation-sensitive
+lock after semaphore acquisition. Tests cover shared caps, tool continuations,
+unknown usage, post-response tool nonexecution, waiting-task cancellation,
+malformed usage, invalid configuration and actual CLI cross-scenario wiring.
+
 ## Remaining Phase 2 gates
 
 The controlled LangGraph app gate now has runnable evidence. The master plan
 still requires pinned MCP stdio and declared HTTP revision profiles using
 appropriate maintained libraries; broader explicit hook/capability checks;
-actual outbound rate/concurrency/budget controls;
-reset/thread lifecycle and cleanup-failure verification; idempotency decisions
+outbound controls for remaining supported transports and complete in-flight
+partial-evidence preservation; reset/thread lifecycle and cleanup-failure verification; idempotency decisions
 for consequential actions; and versioned interoperability receipts across valid,
 invalid, timeout and authentication paths. Secret-store references are not yet
 implemented. A2A identity and other framework/protocol profiles remain

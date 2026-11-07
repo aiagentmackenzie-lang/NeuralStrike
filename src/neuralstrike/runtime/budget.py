@@ -16,7 +16,9 @@ class Budget:
     """A simple spend/token budget for a run.
 
     Token counts are estimates when the LLM response does not surface real
-    usage metadata. The budget fails closed: spending past the cap aborts.
+    usage metadata. Caps are checked after usage is reported; exceeding one
+    aborts subsequent work but cannot undo an already billable request. Callers
+    must label estimates and unavailable cost instead of claiming a spend ceiling.
     """
 
     max_cost_usd: float | None = None

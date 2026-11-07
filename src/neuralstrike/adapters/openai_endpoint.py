@@ -34,6 +34,8 @@ from neuralstrike.adapters.base import Message, TargetAdapter, ToolSchema
 from neuralstrike.evaluation.controls import current_trial_controls
 from neuralstrike.evaluation.verdict import SutResponse, ToolCall
 from neuralstrike.oracles.tool_harness import CanaryTool, TraceLog
+from neuralstrike.runtime.budget import BudgetExceeded
+from neuralstrike.runtime.outbound import OutboundPolicy
 from neuralstrike.utils.logging import get_logger
 
 __all__ = ["OpenAIEndpointAdapter"]
@@ -56,6 +58,7 @@ class OpenAIEndpointAdapter(TargetAdapter):
         timeout: float = 30.0,
         max_tool_rounds: int = _MAX_TOOL_ROUNDS,
         max_response_bytes: int = 16 * 1024 * 1024,
+        outbound: OutboundPolicy | None = None,
         seed: int | None = None,
         temperature: float = 0.0,
         transport: httpx.AsyncBaseTransport | None = None,
@@ -67,6 +70,7 @@ class OpenAIEndpointAdapter(TargetAdapter):
         if type(max_response_bytes) is not int or max_response_bytes < 1:
             raise ValueError("max_response_bytes must be a positive integer")
         self.max_response_bytes = max_response_bytes
+        self.outbound = outbound
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.api_key = api_key
@@ -190,12 +194,34 @@ class OpenAIEndpointAdapter(TargetAdapter):
         exchange: dict[str, Any] = {
             "exchange_id": uuid.uuid4().hex,
             "method": "POST",
+            "request_status": "planned",
             "endpoint": safe_endpoint,
             "request": copy.deepcopy(payload),
             "capture": "private HTTP JSON bodies; headers and URL userinfo/query/fragment excluded",
             "seed_semantics": "sent best-effort; provider support and determinism not asserted",
         }
         exchanges.append(exchange)
+        try:
+            if self.outbound is not None:
+                async with self.outbound.request() as receipt:
+                    exchange["runtime"] = receipt
+                    data = await self._exchange(payload, exchange, safe_endpoint, credentials_configured)
+                    self.outbound.account(receipt, payload, data)
+                    return data
+            return await self._exchange(payload, exchange, safe_endpoint, credentials_configured)
+        except BudgetExceeded as exc:
+            exchange["error"] = str(exc)
+            exchange["error_type"] = type(exc).__name__
+            raise AdapterTransportError(str(exc)) from None
+
+    async def _exchange(
+        self,
+        payload: dict[str, Any],
+        exchange: dict[str, Any],
+        safe_endpoint: str,
+        credentials_configured: bool,
+    ) -> dict[str, Any]:
+        exchange["request_status"] = "attempted"
         try:
             async with self.client.stream("POST", self._endpoint(), json=payload) as resp:
                 exchange["status_code"] = resp.status_code

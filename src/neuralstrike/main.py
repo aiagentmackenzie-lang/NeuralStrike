@@ -1873,6 +1873,18 @@ def corpus(
         16 * 1024 * 1024, "--max-response-bytes", min=1,
         help="Maximum decoded bytes per OpenAI response (including error responses).",
     ),
+    max_requests: int | None = typer.Option(
+        None, min=1, help="Maximum admitted OpenAI requests across the assessment."
+    ),
+    max_total_tokens: int | None = typer.Option(
+        None, min=1, help="Post-response token stopping threshold (reported or estimated; may overshoot)."
+    ),
+    requests_per_minute: float | None = typer.Option(
+        None, min=0.001, help="Shared OpenAI request rate; requests are evenly spaced."
+    ),
+    max_concurrent_requests: int | None = typer.Option(
+        None, min=1, help="Shared OpenAI in-flight request cap; default 1 when outbound limits are enabled."
+    ),
     tier: str = typer.Option(
         "instrumented",
         help="OpenAI SUT tier: text|function-calling|instrumented.",
@@ -1934,6 +1946,16 @@ def corpus(
     if adapter == "openai" and (not url or not model):
         raise ValidationError("--adapter openai requires --url and --model")
 
+    outbound_enabled = any(value is not None for value in (
+        max_requests, max_total_tokens, requests_per_minute, max_concurrent_requests,
+    ))
+    if outbound_enabled and adapter != "openai":
+        raise typer.BadParameter("outbound limits currently require --adapter openai")
+    if requests_per_minute is not None:
+        import math
+
+        if not math.isfinite(requests_per_minute):
+            raise typer.BadParameter("--requests-per-minute must be finite")
     allowed_channels = {"user_message", "system_prompt", "tool_result", "retrieved_document", "memory"}
     if graph_channel is not None and (
         adapter != "langgraph" or any(channel not in allowed_channels for channel in graph_channel)
@@ -1982,6 +2004,15 @@ def corpus(
             from pathlib import Path
 
             declared_scope["scope_file_sha256"] = hashlib.sha256(Path(scope_file).read_bytes()).hexdigest()
+        from neuralstrike.runtime.outbound import OutboundPolicy
+
+        outbound = OutboundPolicy(
+            max_requests=max_requests, max_total_tokens=max_total_tokens,
+            requests_per_minute=requests_per_minute,
+            max_concurrent_requests=max_concurrent_requests or 1,
+        ) if outbound_enabled else None
+        if outbound is not None:
+            declared_scope["outbound_limits"] = outbound.configuration()
         recorder = AssessmentRecorder(
             run_dir,
             scenarios=scenarios,
@@ -2025,7 +2056,7 @@ def corpus(
                     if adapter == "openai":
                         a = OpenAIEndpointAdapter(
                             url or "", model=model or "", tier=tier,
-                            api_key=target_api_key, max_response_bytes=max_response_bytes,
+                            api_key=target_api_key, max_response_bytes=max_response_bytes, outbound=outbound,
                         )
                     elif graph_module:
                         a = LangGraphAdapter(

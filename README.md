@@ -360,6 +360,10 @@ This is the part that makes results defensible:
   a harmless tool round-trip. `--target-api-key-env NAME` resolves a bearer
   credential; `--max-response-bytes` bounds accepted response data. Both options
   are also available on `corpus`. Readiness is not a security verdict.
+  OpenAI corpus runs also enforce shared request, rate, concurrency and token
+  stopping controls (`--max-requests`, `--requests-per-minute`,
+  `--max-concurrent-requests`, `--max-total-tokens`). Token estimates may overshoot;
+  unavailable provider cost is not reported as zero.
   See [Phase 2 scope and limits](docs/implementation/PHASE2_INTEROPERABILITY.md).
 - **Baseline gating.** Save a baseline, then fail CI on regression:
   exit `0` pass · `1` vulnerability · `3` runtime error · `4` regression
