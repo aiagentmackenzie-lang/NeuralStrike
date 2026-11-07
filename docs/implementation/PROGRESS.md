@@ -896,3 +896,13 @@ secret-store adapters are optional/unimplemented. Credential/build/principal
 identity is declared/self-reported, not authenticated by these receipts. Detailed
 commands/limits: MCP_PROFILES.md and PHASE2_INTEROPERABILITY.md. Coverage is not
 security efficacy. Raw MCP sharing is not implemented; retain private originals.
+
+Post-push verification for code commit **2fbb2eb**:
+- Pushed main fa8b895 → 2fbb2eb; working tree clean after the implementation commit.
+- `gh run list --repo aiagentmackenzie-lang/NeuralStrike --commit
+  2fbb2eb24f5324df06dea253f4df43d80074e08f ...` returned no registered runs.
+- GitHub Actions workflow API reports CI (`.github/workflows/ci.yml`) as
+  **disabled_manually**. Release remains active but is workflow_dispatch-only;
+  no release dispatch was performed. The existing disabled CI state was preserved.
+- Hosted Python/OS matrix verification therefore remains an explicit acceptance
+  gap. The local gates above passed; they are not a substitute for a hosted run.
