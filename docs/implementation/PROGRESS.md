@@ -407,3 +407,93 @@ artifacts are under `/tmp/neuralstrike-phase0-acceptance/`. No release published
 Phase 0 acceptance is complete within this documented fixture scope; later
 canonical evidence/replay, authorization preflight and independent validation
 remain unfinished. No efficacy or production-readiness claim is made.
+
+### Phase 1 — verified offline evidence increment, 2026-11-06
+
+User authorized proceeding after Phase 0. Started from clean main at 46f1849;
+read the Phase 1 gates and reconciled the existing canonical report work. This
+increment implements hands-on evidence replay/rescore and closes NS-09/NS-10
+counterexamples; it is not a claim of complete Phase 1 or production readiness.
+
+Implemented and demonstrated:
+
+- New replay acceptance tests failed before a bundle loader existed. Complete
+  per-run bundles now use manifest schema 2 and stable observation content IDs;
+  response presence, category/severity and actual completion time are recorded.
+  Loader rejects unknown/incomplete schemas, duplicate JSON keys, nonfinite
+  numbers, unsafe/unlisted/missing entries, hash/ID/component mismatches, invalid
+  known local receipts and contradictory scores/types. Reads are bounded. Known
+  Phase 0 schema-1 shapes remain readable with explicit legacy limitations.
+- `replay` recomputes recorded scores with no target/provider construction.
+  `--verify-oracles` also reconstructs only allowlisted built-in deterministic
+  policies, checks their implementation digest, and re-evaluates observations.
+  All 60 corpus policies round-trip identically offline. Changed implementation
+  is an explicit verification error, never a silent identical-replay claim.
+  Custom policies are marked unavailable; no import paths or executable code are
+  loaded from stored data. External schema references are rejected offline.
+- `rescore` uses an explicit versioned local policy and writes a new private
+  derived bundle. Source execution ID, manifest hash and implementation/config
+  digest are recorded; original bytes and observation IDs remain unchanged.
+  Exports/derivations inside the source bundle are rejected. Both new commands
+  default to `--fail-on vuln`; corruption still exits 3 under `never`.
+- Three NS-09 prose/prefix/suffix regressions failed before removing substring
+  attribution. Behavioral promotion now requires exact tool name, call ID,
+  argument digest and unique matching receipt. Findings retain receipt ID and
+  local-canary origin. Wrong IDs/arguments/names, duplicates, absent bindings and
+  non-success findings cannot promote. Legacy traces remain readable without
+  upgrading them. A bound behavioral receipt survives replay and same-policy
+  rescoring. Existing positive fixtures now supply genuine structured bindings.
+- Two independent ES256 regressions failed first: RFC 7515 Appendix A.3 raw
+  vector rejected, corresponding DER wire encoding accepted. Raw 64-byte R||S
+  is now converted to the backend's DER format; wrong length/curve and malformed
+  signatures fail. This is interoperability correction, not demonstrated forgery
+  remediation or a claim of comprehensive JOSE/HTTP-signature conformance.
+- Two report-source regressions showed phase5/phase10 locations guessed from ID
+  prefixes. Corpus loading now records portable source path/file hash and stable
+  normalized scenario fingerprint. All report views expose observation ID/origin,
+  scope, limits and recorded timestamps. Legacy completion remains unrecorded.
+- Shared four-trial synthetic fixture includes mixed oracle annotations, a later
+  violation plus late error, resistance and an unsupported delivery channel.
+  JSON/SARIF/JUnit/Markdown/PDF and dashboard agree on total 4, S1/R1/I2, coverage
+  50%, ASR 50%, incomplete health, and link to the actual later violation.
+- Independent PDF parsing and rendered visual review exposed an orphan error on
+  the next page. A failing regression now passes after keeping fitting trial
+  blocks together. Both final PNG pages were inspected: legible IDs and labels,
+  no clipping/overlap, trial identity and error together, correct page numbers.
+- Final recipe review reproduced three malformed configurations that escaped as
+  unexpected errors or changed policy semantics. Exact allowlisted fields/types,
+  predicate polarity and argument operators now reject them explicitly. Failed
+  evaluation writes no completed derived report. No arbitrary validator is loaded.
+
+Verification (frozen source, refreshed Python 3.12.14 environment):
+
+- `python -m pytest --cov=neuralstrike --cov-fail-under=85`: **1249 passed,
+  2 skipped, 91.71% coverage**, `/tmp/neuralstrike-phase1-final.log`.
+- `ruff check src tests`: pass. `mypy src`: pass, 133 source files.
+- Dashboard: **15 tests pass** and production build passes (no dependency changes).
+- Wheel/sdist built; rebuilt wheel reinstalled into isolated runtime-lock env.
+  Installed-wheel smoke/replay/rescore/corruption results recorded after completion.
+- `git diff --check`: pass. Optional base58/real NeuralGuard tests remain skipped;
+  they are not verified integrations. No cloud inference, external target testing,
+  release publication, new attack families or optional service activation.
+
+Remaining Phase 1 signoff work: consolidate multi-scenario selection/scope into a
+portable assessment-level bundle rather than only per-run manifests; finish the
+request-capture/sanitized-envelope scope audit and sharing/export compatibility
+review. Exact exchanges currently cover the OpenAI-compatible profile; other
+adapters still record planned inputs. Original-oracle verification is limited to
+supported deterministic policies and does not rerun advisory model judges.
+Hashes are not author authenticity or remote-build attestations, local receipts
+are fixture effects, and coverage is not security efficacy. Broader protocol and
+independent target validation remain later-phase gates. See REPLAY.md for usable
+commands and compatibility limits; no Phase 2 readiness claim is made.
+
+Installed final wheel verification completed outside the checkout: bundled
+three-scenario smoke passed; a freshly recorded synthetic indirect run verified
+with original oracles (exit 0 under explicit `never`), derived rescore passed,
+source bytes were unchanged, and a corrupted disposable copy exited 3 even
+under `never`. Final wheel source:
+`/var/folders/zv/n4210phd6_d5lqqfx462c9gw0000gn/T/neuralstrike-phase1-final-wheel-1ifby4k_/source/run-fbf83137755c47158d355414ad934a68`.
+These raw artifacts are local only and are not committed. Full-suite counts above
+are final after the strict recipe-validation changes. No hosted CI result is
+claimed for this new increment until its pushed commit is independently checked.

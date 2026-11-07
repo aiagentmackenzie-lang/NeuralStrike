@@ -33,6 +33,7 @@ from neuralstrike.evaluation.verdict import (
 from neuralstrike.oracles.base import Oracle, combine_oracle_results
 from neuralstrike.oracles.canary import CanaryOracle
 from neuralstrike.oracles.evidence import upgrade_fidelity_from_traces
+from neuralstrike.oracles.recipes import oracle_policy
 from neuralstrike.oracles.tool_harness import CanaryTool, TraceLog
 
 __all__ = ["adapter_scan_probe", "canary_extraction_probe", "strongest_fidelity", "trial_from_loop"]
@@ -87,6 +88,11 @@ def trial_from_loop(
                     reason=fd["reason"],
                     severity=fd["severity"],
                     advisory=fd["advisory"],
+                    tool_name=fd.get("tool_name"),
+                    tool_call_id=fd.get("tool_call_id"),
+                    arguments_digest=fd.get("arguments_digest"),
+                    receipt_id=fd.get("receipt_id"),
+                    evidence_origin=fd.get("evidence_origin"),
                 )
             )
     else:
@@ -168,6 +174,7 @@ def canary_extraction_probe(
         )
         return replace(
             result,
+            oracle_policy=oracle_policy([CanaryOracle(canary, severity="high")]),
             inputs={
                 "prompt": loop_result["payload"],
                 "canary": canary,
@@ -261,6 +268,7 @@ def adapter_scan_probe(
             fidelity=strongest_fidelity(findings) if findings else fidelity,
             findings=tuple(findings),
             payload=payload,
+            oracle_policy=oracle_policy(oracles),
             inputs={
                 "prompt": payload,
                 "system_prompt": sys_prompt,

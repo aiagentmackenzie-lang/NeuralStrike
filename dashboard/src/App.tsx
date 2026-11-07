@@ -71,6 +71,8 @@ export default function App() {
               { label: "Format", value: report.format },
               { label: "Tool", value: report.tool },
               { label: "Version", value: report.version },
+              { label: "Started", value: report.startedAt || "Unrecorded" },
+              { label: "Completed", value: report.completedAt || "Unrecorded" },
               { label: "Target", value: report.target || "—" },
               { label: report.countBasis === "trials" ? "Recorded trials" : "Rows (legacy)", value: report.summary.total },
               { label: "Selected trials", value: report.selectedTrials ?? "Unavailable" },
@@ -89,6 +91,12 @@ export default function App() {
             ))}
           </div>
 
+          <p>Scope: {report.scope ? "configured target and selected scenarios" : "not recorded"}.
+            Authorization is not independently attested by this report.</p>
+          <details style={{ marginBottom: 12 }}>
+            <summary>Evidence limitations</summary>
+            <ul>{report.limitations.map((limit, index) => <li key={index}>{limit}</li>)}</ul>
+          </details>
           <div style={{ marginBottom: 12 }}>
             <label style={{ marginRight: 8 }}>Filter:</label>
             <select value={filter} onChange={(e) => setFilter(e.target.value as any)}>
@@ -116,7 +124,16 @@ export default function App() {
                   <td style={{ padding: 8 }}>{f.owaspCategory} — {f.owaspName}</td>
                   <td style={{ padding: 8 }}>{f.severity}</td>
                   <td style={{ padding: 8 }}><Badge verdict={f.verdict} /></td>
-                  <td style={{ padding: 8, maxWidth: 400, wordBreak: "break-word" }}>{f.reason}</td>
+                  <td style={{ padding: 8, maxWidth: 400, wordBreak: "break-word" }}>
+                    {f.reason}
+                    <details>
+                      <summary>Evidence origin: {f.evidenceOrigin || "unverified-observation"}</summary>
+                      <div>Evidence ID: {f.evidenceId || "not recorded"}</div>
+                      <div>Source: {f.sourcePath || "not recorded"}</div>
+                      <div>Scenario fingerprint: {f.sourceFingerprint || "not recorded"}</div>
+                      {f.receiptId && <div>Local fixture receipt: {f.receiptId}</div>}
+                    </details>
+                  </td>
                 </tr>
               ))}
             </tbody>

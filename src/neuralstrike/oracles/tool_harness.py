@@ -28,6 +28,7 @@ prompt": the test reads :attr:`TraceLog.delivery_records`, never the prompt.
 from __future__ import annotations
 
 import time
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -55,6 +56,9 @@ class TraceRecord:
     result: str
     executed_at: str
     severity: str = "critical"
+    tool_call_id: str | None = None
+    receipt_id: str = field(default_factory=lambda: f"receipt-{uuid.uuid4().hex}")
+    origin: str = "local-canary-fixture"
 
 
 @dataclass(frozen=True)
@@ -88,8 +92,44 @@ class TraceLog:
         self._records: list[TraceRecord] = []
         self._deliveries: list[DeliveryRecord] = []
 
+    @classmethod
+    def from_list(cls, records: tuple[dict[str, Any], ...]) -> TraceLog:
+        """Restore recorded local execution receipts without re-executing tools.
+
+        Delivery observations are separate from execution receipts and cannot
+        promote fidelity. Recorded timestamps/results are preserved verbatim.
+        """
+        trace = cls()
+        for record in records:
+            if record.get("origin") != "local-canary-fixture":
+                continue
+            required = {
+                "tool",
+                "arguments",
+                "result",
+                "executed_at",
+                "severity",
+                "tool_call_id",
+                "receipt_id",
+                "origin",
+            }
+            if set(record) != required or not isinstance(record["arguments"], dict):
+                raise ValueError("invalid execution trace record")
+            if any(type(record[key]) is not str for key in required - {"arguments", "tool_call_id"}):
+                raise ValueError("invalid execution trace field")
+            if record["tool_call_id"] is not None and type(record["tool_call_id"]) is not str:
+                raise ValueError("invalid execution call ID")
+            trace._records.append(TraceRecord(**record))
+        return trace
+
     def record(
-        self, tool: str, arguments: dict[str, Any], result: str, *, severity: str = "critical"
+        self,
+        tool: str,
+        arguments: dict[str, Any],
+        result: str,
+        *,
+        severity: str = "critical",
+        tool_call_id: str | None = None,
     ) -> None:
         rec = TraceRecord(
             tool=tool,
@@ -97,6 +137,7 @@ class TraceLog:
             result=result,
             executed_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             severity=severity,
+            tool_call_id=tool_call_id,
         )
         self._records.append(rec)
         logger.warning("CANARY TOOL EXECUTED: %s(%r) -> %r", tool, arguments, result[:80])
@@ -140,6 +181,9 @@ class TraceLog:
                 "result": r.result,
                 "executed_at": r.executed_at,
                 "severity": r.severity,
+                "tool_call_id": r.tool_call_id,
+                "receipt_id": r.receipt_id,
+                "origin": r.origin,
             }
             for r in self._records
         ]
@@ -168,10 +212,10 @@ class CanaryTool:
     severity: str = "critical"
     handler: CanaryHandler = field(default=lambda _args: "ok")
 
-    def execute(self, arguments: dict[str, Any], trace: TraceLog) -> str:
+    def execute(self, arguments: dict[str, Any], trace: TraceLog, *, tool_call_id: str | None = None) -> str:
         """Run the handler and record the execution (Tier-2 evidence)."""
         result = self.handler(arguments)
-        trace.record(self.name, arguments, result, severity=self.severity)
+        trace.record(self.name, arguments, result, severity=self.severity, tool_call_id=tool_call_id)
         return result
 
 

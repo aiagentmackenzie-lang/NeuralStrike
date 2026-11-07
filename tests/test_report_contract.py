@@ -155,7 +155,9 @@ def test_junit_distinguishes_execution_errors_from_unobserved_coverage():
 def test_report_start_comes_from_recorded_run_metadata():
     scenario = load_corpus_dir()[0]
     report = RunReport(
-        RunMeta("fixture", scenario.id, 0, 1, 0, 0.7, "2026-11-06T00:00:00Z"),
+        RunMeta(
+            "fixture", scenario.id, 0, 1, 0, 0.7, "2026-11-06T00:00:00Z", completed_at="2026-11-06T00:02:00Z"
+        ),
         trials=(trial(0, Verdict.RESISTED),),
     )
     run = build_corpus_run(
@@ -167,6 +169,13 @@ def test_report_start_comes_from_recorded_run_metadata():
         target="local",
     )
     assert run.started_at == "2026-11-06T00:00:00Z"
+    assert run.completed_at == "2026-11-06T00:02:00Z"
+    assert json.loads(to_json(run))["completed_at"] == run.completed_at
+    invocation = json.loads(to_sarif(run))["runs"][0]["invocations"][0]
+    assert invocation["endTimeUtc"] == run.completed_at
+    assert run.completed_at in to_markdown(run)
+    assert run.completed_at in to_junit(run)
+    assert any(run.completed_at in line for line in _lines_for_run(run, 95))
 
 
 def test_reports_never_label_raw_evidence_as_sanitized():

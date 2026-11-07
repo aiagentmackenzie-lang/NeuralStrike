@@ -55,6 +55,10 @@ def _lines_for_run(run: CorpusRun, max_chars: int) -> list[str]:
         "Handling:          Private raw evidence; not sanitized for sharing.",
         f"Assessment health: {run.health.status if run.health else 'unavailable'}",
         f"Started:           {run.started_at}",
+        f"Completed:         {run.completed_at or 'unrecorded'}",
+        f"Scope:             {len(run.scenario_results)} selected scenarios; "
+        f"{run.assessment_scope['planned_trials']} planned trials; authorization not attested.",
+        "Limitations:       " + " ".join(run.limitations),
         f"Adapter:           {run.adapter}",
         f"Target:            {run.target}",
         f"Base seed:         {run.base_seed}",
@@ -75,6 +79,7 @@ def _lines_for_run(run: CorpusRun, max_chars: int) -> list[str]:
         s = sr.scenario
         atlas = ", ".join(s.mitre_atlas) if s.mitre_atlas else "none"
         lines.append(f"[{s.id}] {s.owasp_category} - {s.owasp_name}")
+        lines.append(f"  Source:     {s.source_path or 'unrecorded'} ({s.fingerprint})")
         lines.append(f"  Intent:     {s.intent}")
         lines.append(f"  ATLAS:      {atlas}")
         lines.append(f"  Delivery:   {s.delivery_vector}")
@@ -95,6 +100,10 @@ def _lines_for_run(run: CorpusRun, max_chars: int) -> list[str]:
                 f"    trial {t.trial_index} {t.oracle_id}: {t.verdict.value.upper()} "
                 f"[{t.fidelity.value}] {ev}"
             )
+            lines.append(f"      Evidence: {t.evidence_id}")
+            lines.append(f"      Origin: {t.evidence_origin}; source run: {t.source_run_id}")
+            if t.receipt_id:
+                lines.append(f"      Local fixture receipt: {t.receipt_id}")
             if t.error:
                 lines.append(f"      Execution error: {t.error}")
             for finding in t.findings:
@@ -106,6 +115,32 @@ def _lines_for_run(run: CorpusRun, max_chars: int) -> list[str]:
     return lines
 
 
+def _paginate(raw_lines: list[str], max_chars: int) -> list[list[str]]:
+    # Keep a trial's identity, observation link and error/annotations together
+    # when the whole block fits a page. Oversized blocks still split safely.
+    blocks: list[list[str]] = []
+    trial_block: list[str] | None = None
+    for line in raw_lines:
+        if line.startswith("    trial "):
+            trial_block = [line]
+            blocks.append(trial_block)
+        elif trial_block is not None and line:
+            trial_block.append(line)
+        else:
+            trial_block = None
+            blocks.append([line])
+    pages: list[list[str]] = [[]]
+    for block in blocks:
+        wrapped = [part for line in block for part in _wrap_line(line, max_chars)]
+        if len(wrapped) <= _LINES_PER_PAGE and pages[-1] and len(pages[-1]) + len(wrapped) > _LINES_PER_PAGE:
+            pages.append([])
+        for line in wrapped:
+            if len(pages[-1]) == _LINES_PER_PAGE:
+                pages.append([])
+            pages[-1].append(line)
+    return pages
+
+
 def to_pdf(run: CorpusRun, *, max_chars: int = 95) -> bytes:
     """Render the corpus run as a valid PDF 1.4 document (bytes)."""
     if max_chars < 1:
@@ -113,17 +148,7 @@ def to_pdf(run: CorpusRun, *, max_chars: int = 95) -> bytes:
     # Courier has a fixed 0.6-em character advance. Never exceed the page margins.
     max_chars = min(max_chars, int((_PAGE_WIDTH - 2 * _MARGIN) / (_FONT_SIZE * 0.6)))
     raw_lines = _lines_for_run(run, max_chars)
-    # Wrap every logical line to the page width.
-    wrapped: list[str] = []
-    for ln in raw_lines:
-        wrapped.extend(_wrap_line(ln, max_chars))
-
-    # Chunk into pages.
-    pages: list[list[str]] = []
-    for i in range(0, len(wrapped), _LINES_PER_PAGE):
-        pages.append(wrapped[i : i + _LINES_PER_PAGE])
-    if not pages:
-        pages.append(["(no content)"])
+    pages = _paginate(raw_lines, max_chars)
 
     objects: list[bytes] = []
     # Object 1: Catalog

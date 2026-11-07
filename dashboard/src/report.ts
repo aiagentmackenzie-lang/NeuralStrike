@@ -17,6 +17,11 @@ export interface Finding {
   evidence?: string;
   mitreAtlas?: string[];
   deliveryVector?: string;
+  evidenceId?: string;
+  evidenceOrigin?: string;
+  receiptId?: string;
+  sourcePath?: string;
+  sourceFingerprint?: string;
 }
 
 export interface Report {
@@ -24,11 +29,24 @@ export interface Report {
   tool: string;
   version: string;
   target?: string;
+  startedAt?: string;
+  completedAt?: string;
   health: "complete" | "incomplete" | "unavailable";
   countBasis: "trials" | "legacy rows";
   selectedTrials: number | null;
+  scope: Record<string, unknown> | null;
+  limitations: string[];
   summary: Summary;
   findings: Finding[];
+}
+
+function provenance(raw: any): Pick<Report, "scope" | "limitations"> {
+  return {
+    scope: raw.assessment_scope && typeof raw.assessment_scope === "object" && !Array.isArray(raw.assessment_scope)
+      ? raw.assessment_scope : null,
+    limitations: Array.isArray(raw.limitations) ? raw.limitations.filter((value: any) => typeof value === "string")
+      : ["Legacy report: scope and evidence provenance are not fully recorded."],
+  };
 }
 
 function emptySummary(): Summary {
@@ -97,6 +115,11 @@ function parseNeuralStrikeJson(data: any): Report {
       severity: trial.severity || scenario.severity || "info",
       reason: trial.reason || "No matching trial evidence available",
       evidence: trial.evidence_quote || undefined,
+      evidenceId: trial.evidence_id,
+      evidenceOrigin: trial.evidence_origin || "unverified-observation",
+      receiptId: trial.receipt_id,
+      sourcePath: scenario.source?.path,
+      sourceFingerprint: scenario.source?.scenario_fingerprint,
       mitreAtlas: scenario.mitre_atlas || [],
       deliveryVector: scenario.delivery_vector || "",
     });
@@ -108,6 +131,8 @@ function parseNeuralStrikeJson(data: any): Report {
   const summary = summaryFrom(data.overall || {}, fallback);
   return {
     format: "neuralstrike-json", tool: "NeuralStrike", version: data.tool_version || "",
+    ...provenance(data),
+    startedAt: data.started_at, completedAt: data.completed_at || undefined,
     target: data.target, health: healthFrom(data.health, summary), countBasis: "trials",
     selectedTrials: Number.isSafeInteger(data.health?.selected) ? data.health.selected : null, summary, findings,
   };
@@ -153,6 +178,11 @@ function parseSarif(data: any): Report {
       severity: row?.result.properties?.severity || rule.properties?.severity || "info",
       reason: row?.result.message?.text || "No matching trial evidence available",
       evidence: row?.result.message?.text || undefined,
+      evidenceId: row?.result.properties?.evidence_id,
+      evidenceOrigin: row?.result.properties?.evidence_origin || "unverified-observation",
+      receiptId: row?.result.properties?.receipt_id,
+      sourcePath: rule.properties?.source_path,
+      sourceFingerprint: rule.properties?.scenario_fingerprint,
       mitreAtlas: rule.properties?.mitre_atlas || [], deliveryVector: rule.properties?.delivery_vector || "",
     });
   }
@@ -165,6 +195,8 @@ function parseSarif(data: any): Report {
   const summary = summaryFrom(overall, fallback);
   return {
     format: "sarif", tool: driver.name || "NeuralStrike", version: driver.version || "",
+    ...provenance(props),
+    startedAt: invocation.startTimeUtc, completedAt: invocation.endTimeUtc,
     target: props.target, health: healthFrom(props.health, summary, invocation.executionSuccessful),
     countBasis: props.overall || !legacyRows ? "trials" : "legacy rows",
     selectedTrials: Number.isSafeInteger(props.health?.selected) ? props.health.selected : null, summary, findings,
@@ -180,6 +212,6 @@ export function parseReport(text: string): Report {
   }
   if (data?.$schema && data.version === "2.1.0" && Array.isArray(data.runs)) return parseSarif(data);
   if (data?.overall && Array.isArray(data.scenario_results)) return parseNeuralStrikeJson(data);
-  return { format: "unknown", tool: "Unknown", version: "", health: "unavailable",
+  return { ...provenance({}), format: "unknown", tool: "Unknown", version: "", health: "unavailable",
     countBasis: "legacy rows", selectedTrials: null, summary: emptySummary(), findings: [] };
 }

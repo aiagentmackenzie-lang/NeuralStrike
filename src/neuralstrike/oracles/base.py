@@ -43,6 +43,10 @@ class OracleResult:
     reason: str = ""
     severity: str = "info"
 
+    tool_name: str | None = None
+    tool_call_id: str | None = None
+    arguments_digest: str | None = None
+
     def to_finding(self, *, advisory: bool = False) -> Finding:
         """Promote an oracle result into a :class:`Finding` for the report."""
         return Finding(
@@ -53,6 +57,9 @@ class OracleResult:
             reason=self.reason,
             severity=self.severity,
             advisory=advisory,
+            tool_name=self.tool_name,
+            tool_call_id=self.tool_call_id,
+            arguments_digest=self.arguments_digest,
         )
 
 

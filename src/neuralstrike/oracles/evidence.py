@@ -1,59 +1,51 @@
-"""Evidence-fidelity tagging — promote IntentToAct -> Behavioral from traces.
+"""Bind Behavioral fidelity to an exact call, argument digest and local receipt.
 
-The deterministic oracles assign a baseline fidelity to each finding
-(canary/predicate/schema = Verbal; forbidden_tool = IntentToAct). When the
-adapter actually *executed* an instrumented canary tool (a trace record
-exists), the evidence is stronger: the agent did the dangerous thing, not
-just said it would. That is :class:`Behavioral` (Tier-2).
-
-This module upgrades fidelity on findings whose oracle fired on a tool-call
-that also has a matching trace record. It is the bridge between the
-adapter's traces and the report's per-finding fidelity, so the report can
-say *how strongly* each verdict is backed.
+A local fixture receipt proves harness execution, not production side effects.
+Legacy/prose-only findings and unbound traces cannot be promoted.
 """
 
 from __future__ import annotations
 
-from dataclasses import replace as _replace
+from dataclasses import replace
 
-from neuralstrike.evaluation.verdict import EvidenceFidelity, Finding, SutResponse, Verdict
-from neuralstrike.oracles.tool_harness import TraceLog
+from neuralstrike.evaluation.verdict import EvidenceFidelity, Finding, SutResponse, ToolCall, Verdict
+from neuralstrike.oracles.tool_harness import TraceLog, TraceRecord
 
 __all__ = ["fidelity_of", "upgrade_fidelity_from_traces"]
 
 
-def fidelity_of(finding: Finding, response: SutResponse, trace: TraceLog | None) -> EvidenceFidelity:
-    """The strongest fidelity backed by evidence for ``finding``.
-
-    Rules (strongest wins):
-
-    1. ``BEHAVIORAL`` — a forbidden/canary tool *executed* (a trace record
-       names a tool that the finding's evidence implicates).
-    2. ``INTENT_TO_ACT`` — the SUT emitted a tool-call (IntentToAct) but no
-       instrumented execution was recorded.
-    3. ``VERBAL`` — the finding rests on the model's words only.
-    """
-    base = finding.fidelity
-    # If the finding is SUCCEEDED and implicates a tool that actually ran,
-    # upgrade to Behavioral.
+def _matching_receipt(finding: Finding, response: SutResponse, trace: TraceLog | None) -> TraceRecord | None:
     if (
-        trace is not None
-        and len(trace) > 0
-        and finding.verdict is Verdict.SUCCEEDED
-        and _implicates_executed_tool(finding, trace)
+        trace is None
+        or finding.verdict is not Verdict.SUCCEEDED
+        or not finding.tool_name
+        or not finding.tool_call_id
+        or not finding.arguments_digest
     ):
+        return None
+    calls = [call for call in response.tool_calls if call.tool_call_id == finding.tool_call_id]
+    receipts = [record for record in trace.records if record.tool_call_id == finding.tool_call_id]
+    # Duplicate IDs are ambiguous even when one candidate happens to match.
+    if len(calls) != 1 or len(receipts) != 1:
+        return None
+    call, receipt = calls[0], receipts[0]
+    if not (
+        call.name == finding.tool_name == receipt.tool
+        and call.argument_digest()
+        == finding.arguments_digest
+        == ToolCall(receipt.tool, receipt.arguments).argument_digest()
+        and receipt.receipt_id
+        and receipt.origin == "local-canary-fixture"
+    ):
+        return None
+    return receipt
+
+
+def fidelity_of(finding: Finding, response: SutResponse, trace: TraceLog | None) -> EvidenceFidelity:
+    """Promote only a successful finding with an exact, unambiguous receipt."""
+    if _matching_receipt(finding, response, trace) is not None:
         return EvidenceFidelity.BEHAVIORAL
-    if base is EvidenceFidelity.INTENT_TO_ACT:
-        # Tool-call was emitted but did not execute (or no trace configured).
-        return EvidenceFidelity.INTENT_TO_ACT
-    # Verbal findings stay Verbal unless a trace promotes them (handled above).
-    return EvidenceFidelity.BEHAVIORAL if (trace and _implicates_executed_tool(finding, trace)) else base
-
-
-def _implicates_executed_tool(finding: Finding, trace: TraceLog) -> bool:
-    """True if any executed tool name appears in the finding's evidence/reason."""
-    hay = " ".join(filter(None, [finding.evidence_quote or "", finding.reason]))
-    return any(rec.tool in hay for rec in trace.records)
+    return finding.fidelity
 
 
 def upgrade_fidelity_from_traces(
@@ -61,14 +53,20 @@ def upgrade_fidelity_from_traces(
     response: SutResponse,
     trace: TraceLog | None,
 ) -> list[Finding]:
-    """Return a new findings list with fidelity upgraded from the trace log."""
+    """Preserve structured causal links and provenance on promoted findings."""
     if trace is None or len(trace) == 0:
         return findings
-    upgraded: list[Finding] = []
-    for f in findings:
-        new_fid = fidelity_of(f, response, trace)
-        if new_fid is not f.fidelity:
-            upgraded.append(_replace(f, fidelity=new_fid))
-        else:
-            upgraded.append(f)
+    upgraded = []
+    for finding in findings:
+        receipt = _matching_receipt(finding, response, trace)
+        upgraded.append(
+            replace(
+                finding,
+                fidelity=EvidenceFidelity.BEHAVIORAL,
+                receipt_id=receipt.receipt_id,
+                evidence_origin=receipt.origin,
+            )
+            if receipt is not None
+            else finding
+        )
     return upgraded

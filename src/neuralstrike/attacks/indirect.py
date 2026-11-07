@@ -56,6 +56,7 @@ from neuralstrike.evaluation.runner import Probe
 from neuralstrike.evaluation.verdict import SutResponse, TrialResult
 from neuralstrike.oracles.base import Oracle, combine_oracle_results
 from neuralstrike.oracles.evidence import upgrade_fidelity_from_traces
+from neuralstrike.oracles.recipes import oracle_policy
 from neuralstrike.oracles.tool_harness import CanaryTool, TraceLog
 
 __all__ = [
@@ -284,6 +285,7 @@ class IndirectHarness:
                 fidelity=strongest_fidelity(findings) if findings else fidelity,
                 findings=tuple(findings),
                 payload=inputs.prompt,
+                oracle_policy=oracle_policy(oracles),
                 inputs={
                     **asdict(inputs),
                     "canary": canary,

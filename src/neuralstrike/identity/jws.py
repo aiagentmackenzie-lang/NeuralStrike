@@ -25,7 +25,7 @@ from neuralstrike.identity.jcs import canonicalize
 
 try:
     from cryptography.hazmat.primitives import hashes, serialization
-    from cryptography.hazmat.primitives.asymmetric import ec, padding
+    from cryptography.hazmat.primitives.asymmetric import ec, padding, utils
 except ImportError:  # pragma: no cover
     hashes = None  # type: ignore[assignment]
     serialization = None  # type: ignore[assignment]
@@ -111,7 +111,8 @@ def verify_compact_jws(
     if alg in ("RS256", "ES256"):
         if public_key_pem is None:
             raise JWSVerifyError(f"{alg} requires a PEM public key")
-        return _verify_asymmetric(alg, signing_input, signature, public_key_pem), payload_bytes
+        _verify_asymmetric(alg, signing_input, signature, public_key_pem)
+        return header, payload_bytes
 
     raise JWSVerifyError(f"unsupported JWS algorithm: {alg}")
 
@@ -135,11 +136,18 @@ def _verify_asymmetric(
         return {"alg": alg}
 
     if alg == "ES256":
-        if not hasattr(public_key, "verify"):
-            raise JWSVerifyError("loaded key is not a verify-capable asymmetric key")
-        # JWS ECDSA signatures are raw r||s, each curve-size bytes.
+        if not isinstance(public_key, ec.EllipticCurvePublicKey) or not isinstance(
+            public_key.curve, ec.SECP256R1
+        ):
+            raise JWSVerifyError("ES256 requires a P-256 public key")
+        if len(signature) != 64:
+            raise JWSVerifyError("ES256 requires a 64-byte raw R || S signature")
+        # JOSE uses fixed-width unsigned R/S; cryptography consumes DER.
+        r = int.from_bytes(signature[:32], "big")
+        s = int.from_bytes(signature[32:], "big")
+        der = utils.encode_dss_signature(r, s)
         try:
-            public_key.verify(signature, signing_input, ec.ECDSA(hashes.SHA256()))
+            public_key.verify(der, signing_input, ec.ECDSA(hashes.SHA256()))
         except Exception as exc:
             raise JWSVerifyError(f"ES256 signature mismatch: {exc}") from exc
         return {"alg": alg}

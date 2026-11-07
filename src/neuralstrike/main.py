@@ -3537,5 +3537,73 @@ def judge_audit(
     _run(run())
 
 
+@app.command()
+def replay(
+    bundle: str = typer.Argument(..., help="Directory containing a committed run manifest."),
+    out: str | None = typer.Option(None, help="Private JSON export outside the source bundle."),
+    verify_oracles: bool = typer.Option(
+        False, help="Re-evaluate the recorded built-in deterministic policy offline."
+    ),
+    fail_on: str = typer.Option("vuln", help="never|vuln|regression; health is always displayed."),
+) -> None:
+    """Verify a run bundle and recompute recorded-outcome scores offline."""
+    from pathlib import Path
+
+    from neuralstrike.evaluation.bundle import BundleError, replay_bundle
+
+    if fail_on not in {"never", "vuln", "regression"}:
+        raise typer.BadParameter("--fail-on must be never|vuln|regression")
+    try:
+        source = Path(bundle).resolve()
+        if out and (Path(out).resolve() == source or source in Path(out).resolve().parents):
+            raise BundleError("replay export must be outside the source bundle")
+        report = replay_bundle(source, verify_oracles=verify_oracles)
+        if out:
+            import json
+
+            write_private_artifact(Path(out), json.dumps(report.to_dict(), indent=2, sort_keys=True))
+    except (BundleError, OSError) as exc:
+        console.print(f"[red]Bundle error:[/red] {exc}")
+        raise typer.Exit(3) from exc
+    console.print(
+        "Offline replay: original deterministic oracles verified; no target/model calls."
+        if verify_oracles
+        else "Offline replay: verified recorded outcomes; no target or oracle calls."
+    )
+    console.print("Private raw evidence; hashes do not authenticate the author.")
+    _finish_assessment([report], fail_on, selected=report.meta.trials)
+
+
+@app.command()
+def rescore(
+    bundle: str = typer.Argument(..., help="Directory containing a committed source run."),
+    forbid_tool: list[str] = typer.Option(..., help="Exact forbidden tool name (repeatable)."),
+    oracle_version: str = typer.Option(..., help="Explicit version label for this local policy."),
+    out_dir: str = typer.Option("runs", help="Root for a new private derived bundle."),
+    fail_on: str = typer.Option("vuln", help="never|vuln|regression."),
+) -> None:
+    """Rescore recorded responses with an explicit deterministic tool policy."""
+    from neuralstrike.evaluation.bundle import BundleError, rescore_bundle
+    from neuralstrike.oracles.forbidden_tool import ForbiddenToolOracle, ForbiddenToolSpec
+
+    if fail_on not in {"never", "vuln", "regression"}:
+        raise typer.BadParameter("--fail-on must be never|vuln|regression")
+    if not forbid_tool or any(not name.strip() for name in forbid_tool):
+        raise typer.BadParameter("--forbid-tool must contain a tool name")
+    try:
+        report = rescore_bundle(
+            bundle,
+            [ForbiddenToolOracle(ForbiddenToolSpec(forbidden_tools=tuple(forbid_tool)))],
+            output_root=out_dir,
+            oracle_version=oracle_version,
+        )
+    except (BundleError, OSError) as exc:
+        console.print(f"[red]Bundle error:[/red] {exc}")
+        raise typer.Exit(3) from exc
+    console.print(f"Offline rescore saved → {out_dir}/{report.meta.run_id}")
+    console.print("Private raw evidence; source preserved; no target/model calls.")
+    _finish_assessment([report], fail_on, selected=report.meta.trials)
+
+
 if __name__ == "__main__":
     app()

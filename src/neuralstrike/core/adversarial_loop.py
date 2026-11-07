@@ -387,6 +387,11 @@ def _finding_dict(f: Finding) -> dict[str, Any]:
         "reason": f.reason,
         "severity": f.severity,
         "advisory": f.advisory,
+        "tool_name": f.tool_name,
+        "tool_call_id": f.tool_call_id,
+        "arguments_digest": f.arguments_digest,
+        "receipt_id": f.receipt_id,
+        "evidence_origin": f.evidence_origin,
     }
 
 

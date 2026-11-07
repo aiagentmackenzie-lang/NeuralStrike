@@ -29,6 +29,7 @@ from neuralstrike import __version__
 from neuralstrike.corpus.loader import Scenario
 from neuralstrike.evaluation.health import AssessmentHealth, assessment_health
 from neuralstrike.evaluation.runner import RunReport
+from neuralstrike.evaluation.runner import _trial_to_dict as serialize_trial
 from neuralstrike.evaluation.scoring import score_trials
 from neuralstrike.evaluation.verdict import EvidenceFidelity, Finding, Verdict, normalize_trial
 from neuralstrike.reports.compliance import ControlRef, crosswalk
@@ -60,6 +61,10 @@ class TrialOutcome:
     response_text: str
     error: str | None
     findings: tuple[Finding, ...] = field(default_factory=tuple)
+    evidence_id: str = ""
+    evidence_origin: str = "unverified-observation"
+    source_run_id: str = ""
+    receipt_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -99,10 +104,31 @@ class CorpusRun:
     asr: float
     coverage: float
     health: AssessmentHealth | None = None
+    completed_at: str | None = None
 
     @property
     def artifact_policy(self) -> dict[str, Any]:
         return {"classification": "private-raw", "sanitized": False}
+
+    @property
+    def assessment_scope(self) -> dict[str, Any]:
+        return {
+            "adapter": self.adapter,
+            "configured_target": self.target,
+            "selected_scenarios": [sr.scenario.id for sr in self.scenario_results],
+            "planned_trials": len(self.scenario_results) * self.trials_per_scenario,
+            "authorization": "not attested by this report",
+        }
+
+    @property
+    def limitations(self) -> tuple[str, ...]:
+        return (
+            "Remote builds and authorization are not authenticated by this report.",
+            "Delivery observations show the sent channel, not target consumption.",
+            "Local canary receipts prove fixture execution, not production side effects.",
+            "Hashes detect changed bytes; they do not authenticate the evidence author.",
+            "Raw target content is private; report formats are not sanitizers.",
+        )
 
     @property
     def measured_asr(self) -> float | None:
@@ -125,8 +151,11 @@ class CorpusRun:
     def to_dict(self) -> dict[str, Any]:
         return {
             "artifact_policy": self.artifact_policy,
+            "assessment_scope": self.assessment_scope,
+            "limitations": list(self.limitations),
             "health": self.health.to_dict() if self.health else None,
             "started_at": self.started_at,
+            "completed_at": self.completed_at,
             "base_seed": self.base_seed,
             "trials_per_scenario": self.trials_per_scenario,
             "adapter": self.adapter,
@@ -141,6 +170,11 @@ class CorpusRun:
 def _scenario_to_dict(s: ScenarioResult) -> dict[str, Any]:
     return {
         "id": s.scenario.id,
+        "source": {
+            "path": s.scenario.source_path,
+            "sha256": s.scenario.source_sha256,
+            "scenario_fingerprint": s.scenario.fingerprint,
+        },
         "evidence": s.evidence,
         "owasp_category": s.scenario.owasp_category,
         "owasp_name": s.scenario.owasp_name,
@@ -164,6 +198,10 @@ def _scenario_to_dict(s: ScenarioResult) -> dict[str, Any]:
 def _trial_to_dict(t: TrialOutcome) -> dict[str, Any]:
     return {
         "scenario_id": t.scenario_id,
+        "evidence_id": t.evidence_id,
+        "evidence_origin": t.evidence_origin,
+        "source_run_id": t.source_run_id,
+        "receipt_id": t.receipt_id,
         "trial_index": t.trial_index,
         "seed": t.seed,
         "verdict": t.verdict.value,
@@ -211,6 +249,16 @@ def _trial_outcomes(report: RunReport) -> tuple[TrialOutcome, ...]:
                 response_text=t.response.text if t.response else "",
                 error=error,
                 findings=t.findings,
+                evidence_id=serialize_trial(t)["evidence_id"],
+                evidence_origin=(
+                    primary.evidence_origin
+                    if primary and primary.evidence_origin
+                    else "captured-provider-response"
+                    if t.response and t.response.exchanges
+                    else "unverified-observation"
+                ),
+                source_run_id=report.meta.run_id,
+                receipt_id=primary.receipt_id if primary else None,
             )
         )
     return tuple(out)
@@ -241,6 +289,19 @@ def _recorded_start(reports: list[RunReport], override: str | None) -> str:
     except ValueError as exc:
         raise ValueError("invalid run start timestamp; an explicit timezone is required") from exc
     return min(timestamps).astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _recorded_completion(reports: list[RunReport]) -> str | None:
+    if not reports or any(report.meta.completed_at is None for report in reports):
+        return None
+    completed = []
+    for report in reports:
+        end = datetime.fromisoformat(str(report.meta.completed_at).replace("Z", "+00:00"))
+        start = datetime.fromisoformat(report.meta.started_at.replace("Z", "+00:00"))
+        if end.utcoffset() is None or start.utcoffset() is None or end < start:
+            raise ValueError("invalid recorded completion timestamp")
+        completed.append(end)
+    return max(completed).astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def build_corpus_run(
@@ -309,6 +370,7 @@ def build_corpus_run(
 
     return CorpusRun(
         started_at=_recorded_start(reports, started_at),
+        completed_at=_recorded_completion(reports),
         base_seed=base_seed,
         trials_per_scenario=trials_per_scenario,
         adapter=adapter,

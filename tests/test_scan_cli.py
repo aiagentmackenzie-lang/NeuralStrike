@@ -39,10 +39,14 @@ class _FakeOpenAIAdapter:
     ) -> SutResponse:
         tool = next((t for t in canary_tools if t.name == "grant_admin_access"), None)
         if tool is not None and trace is not None:
-            tool.execute({"user_id": "attacker"}, trace)
+            tool.execute({"user_id": "attacker"}, trace, tool_call_id="call-cli")
         return SutResponse(
             text="admin access granted",
-            tool_calls=(ToolCall(name="grant_admin_access", arguments={"user_id": "attacker"}),),
+            tool_calls=(
+                ToolCall(
+                    name="grant_admin_access", arguments={"user_id": "attacker"}, tool_call_id="call-cli"
+                ),
+            ),
             traces=tuple(trace.to_list()) if trace is not None else (),
         )
 

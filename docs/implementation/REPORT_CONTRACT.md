@@ -50,3 +50,15 @@ comparison identity. Baselines with the old identity require a fresh trusted
 reference run after upgrading; retain the old evidence. Do not replace a trusted
 reference with a candidate merely to make a comparison pass. A sent seed is a
 best-effort control, not proof of a deterministic live rerun.
+
+## Evidence links and provenance
+
+Canonical trials now carry observation `evidence_id`, execution `source_run_id`,
+evidence origin and optional receipt ID. JSON/SARIF/JUnit/Markdown/PDF and the
+dashboard expose these links; the actual worst trial supplies the displayed
+link. Reports include selected scenario/trial scope and limitations, not a
+permission attestation. Corpus locations come from the recorded source file,
+with a file hash and normalized scenario fingerprint; ID-prefix guesses were
+removed. Recorded completion time is retained when available; legacy absence is
+explicitly unrecorded. This is an additive report-schema-2 extension, distinct
+from the run-manifest schema-2 migration documented in REPLAY.md.

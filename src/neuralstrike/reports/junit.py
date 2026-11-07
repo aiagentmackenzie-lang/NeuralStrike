@@ -56,6 +56,8 @@ def to_junit(run: CorpusRun) -> str:
             sysout = (
                 f"[{s.owasp_category} {s.owasp_name}] "
                 f"ATLAS={atlas}; controls={controls}; "
+                f"evidence_id={t.evidence_id}; origin={t.evidence_origin}; run={t.source_run_id}; "
+                f"receipt={t.receipt_id or 'none'}; "
                 f"delivery={s.delivery_vector}; verdict={t.verdict.value}; fidelity={t.fidelity.value}; "
                 f"findings={json.dumps([asdict(f) for f in t.findings])}; error={t.error or ''}"
             )
@@ -75,6 +77,13 @@ def to_junit(run: CorpusRun) -> str:
             f"            skipped={quoteattr(str(n_skipped))} errors={quoteattr(str(n_errors))}>\n"
             f"    <properties>\n"
             f"      <property name='artifact_policy' value='private-raw' />\n"
+            f"      <property name='started_at' value={quoteattr(run.started_at)} />\n"
+            f"      <property name='completed_at' value={quoteattr(run.completed_at or 'unrecorded')} />\n"
+            f"      <property name='assessment_scope' "
+            f"value={quoteattr(json.dumps(run.assessment_scope))} />\n"
+            f"      <property name='limitations' value={quoteattr(json.dumps(run.limitations))} />\n"
+            f"      <property name='scenario_fingerprint' value={quoteattr(s.fingerprint)} />\n"
+            f"      <property name='source_path' value={quoteattr(s.source_path or 'unrecorded')} />\n"
             f"      <property name='assessment_health' value={quoteattr(health)} />\n"
             f"      <property name='inconclusive' value={quoteattr(str(sr.inconclusive))} />\n"
             f"      <property name='succeeded' value={quoteattr(str(sr.succeeded))} />\n"

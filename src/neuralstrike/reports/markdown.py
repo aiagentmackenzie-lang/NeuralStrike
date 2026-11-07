@@ -32,6 +32,7 @@ def _scenario_section(sr: ScenarioResult) -> str:
     lines = [
         f"### `{s.id}` — {owasp_line}",
         "",
+        f"- **Source:** {s.source_path or 'unrecorded'} ({s.fingerprint})",
         f"- **Intent:** {s.intent}",
         f"- **MITRE ATLAS:** {atlas}",
         f"- **Delivery vector:** `{s.delivery_vector}`",
@@ -60,7 +61,21 @@ def _scenario_section(sr: ScenarioResult) -> str:
             f"| {t.fidelity.value} | {escape_md(ev or reason)} |"
         )
     lines.append("")
+    lines.extend(_trial_annotations(sr))
+    if s.mitigations:
+        lines.append("**Mitigations:**")
+        for m in s.mitigations:
+            lines.append(f"- {m}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _trial_annotations(sr: ScenarioResult) -> list[str]:
+    lines: list[str] = []
     for t in sr.trials:
+        lines.append(f"Evidence {t.evidence_id}; origin: {t.evidence_origin}; run: {t.source_run_id}.")
+        if t.receipt_id:
+            lines.append(f"Local fixture receipt: {t.receipt_id}.")
         if t.error:
             lines.append(f"Execution error for trial {t.trial_index}: {escape_md(t.error)}")
         if t.findings:
@@ -71,12 +86,7 @@ def _scenario_section(sr: ScenarioResult) -> str:
                     f"{'(advisory) ' if finding.advisory else ''}{escape_md(finding.reason)}"
                 )
             lines.append("")
-    if s.mitigations:
-        lines.append("**Mitigations:**")
-        for m in s.mitigations:
-            lines.append(f"- {m}")
-        lines.append("")
-    return "\n".join(lines)
+    return lines
 
 
 def escape_md(text: str) -> str:
@@ -91,6 +101,10 @@ def to_markdown(run: CorpusRun) -> str:
         "- **Handling:** Private raw evidence; not sanitized for sharing.",
         f"- **Assessment health:** {run.health.status if run.health else 'unavailable'}",
         f"- **Started:** {run.started_at}",
+        f"- **Completed:** {run.completed_at or 'unrecorded'}",
+        f"- **Scope:** {len(run.scenario_results)} selected scenarios; "
+        f"{run.assessment_scope['planned_trials']} planned trials; authorization not attested.",
+        "- **Limitations:** " + " ".join(run.limitations),
         f"- **Adapter:** `{run.adapter}` — target: `{run.target}`",
         f"- **Base seed:** {run.base_seed} · **Trials per scenario:** {run.trials_per_scenario}",
         f"- **Overall:** {run.overall_total} trials — "

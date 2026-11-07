@@ -124,3 +124,33 @@ describe("invalid or unsupported reports", () => {
     expect(report.summary.asr).toBeNull();
   });
 });
+
+describe("evidence provenance", () => {
+  it("keeps the selected later trial's links and explicit report limits", () => {
+    const document = JSON.parse(fixture("report.json"));
+    document.assessment_scope = { selected_scenarios: ["fixture"] };
+    document.limitations = ["fixture receipts are not production effects"];
+    document.scenario_results[0].counts = { total: 2, succeeded: 1, resisted: 1, inconclusive: 0 };
+    document.scenario_results[0].source = { path: "corpus/fixture.yaml", scenario_fingerprint: "sha256:scenario" };
+    document.scenario_results[0].trials = [
+      { verdict: "resisted", evidence_id: "sha256:first" },
+      { verdict: "succeeded", evidence_id: "sha256:actual", evidence_origin: "local-canary-fixture", receipt_id: "receipt-fixture" },
+    ];
+    const report = parseReport(JSON.stringify(document));
+    expect(report.findings[0].evidenceId).toBe("sha256:actual");
+    expect(report.findings[0].evidenceOrigin).toBe("local-canary-fixture");
+    expect(report.findings[0].sourcePath).toBe("corpus/fixture.yaml");
+    expect(report.scope).toEqual(document.assessment_scope);
+    expect(report.limitations).toEqual(document.limitations);
+  });
+});
+
+it.each(["phase1-mixed.json", "phase1-mixed.sarif"])("matches canonical mixed/error/unsupported counts in %s", (name) => {
+  const report = parseReport(fixture(name));
+  expect(report.summary).toEqual({ total: 4, succeeded: 1, resisted: 1, inconclusive: 2, asr: 0.5, coverage: 0.5 });
+  expect(report.health).toBe("incomplete");
+  expect(report.findings[0].evidence).toContain("actual violation");
+  expect(report.findings[0].evidenceId).toMatch(/^sha256:/);
+  expect(report.limitations.length).toBeGreaterThan(0);
+  expect(report.scope?.planned_trials).toBe(4);
+});

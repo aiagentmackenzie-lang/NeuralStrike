@@ -41,3 +41,16 @@ def test_long_unbroken_evidence_wraps_within_page_columns():
     lines = _wrap_line("W" * 240, 80)
     assert all(len(line) <= 80 for line in lines)
     assert "".join(lines) == "W" * 240
+
+
+def test_pdf_keeps_trial_identity_with_its_execution_error():
+    from tests.test_report_provenance import mixed_run
+
+    pages = PdfReader(BytesIO(to_pdf(mixed_run())), strict=True).pages
+    error_page = next(
+        page.extract_text()
+        for page in pages
+        if "Execution error: unsupported delivery channel: memory" in page.extract_text()
+    )
+    assert "trial 3 " in error_page
+    assert "Evidence: sha256:" in error_page

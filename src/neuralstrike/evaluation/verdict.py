@@ -14,6 +14,7 @@ Conclusive-only contract (non-negotiable):
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass, field, replace
 from enum import Enum
@@ -66,6 +67,12 @@ class ToolCall:
     name: str
     arguments: Any = None
     tool_call_id: str | None = None
+
+    def argument_digest(self) -> str:
+        """Canonical argument identity for a call/receipt binding."""
+        return hashlib.sha256(
+            json.dumps(self.arguments, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        ).hexdigest()
 
     def argument_text(self) -> str:
         """Best-effort flat string of the arguments for substring/regex oracles."""
@@ -130,6 +137,12 @@ class Finding:
     severity: str = "info"
     advisory: bool = False
 
+    tool_name: str | None = None
+    tool_call_id: str | None = None
+    arguments_digest: str | None = None
+    receipt_id: str | None = None
+    evidence_origin: str | None = None
+
 
 @dataclass(frozen=True)
 class TrialResult:
@@ -159,6 +172,7 @@ class TrialResult:
     empty when the scenario predates the trajectory layer or has no turns)."""
 
     inputs: dict[str, Any] = field(default_factory=dict)
+    oracle_policy: dict[str, Any] = field(default_factory=dict)
 
 
 def normalize_trial(trial: TrialResult) -> TrialResult:

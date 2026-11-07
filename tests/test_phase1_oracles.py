@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from neuralstrike.evaluation.verdict import EvidenceFidelity, Finding, SutResponse, Verdict
+from neuralstrike.evaluation.verdict import EvidenceFidelity, Finding, SutResponse, ToolCall, Verdict
 from neuralstrike.oracles.evidence import fidelity_of, upgrade_fidelity_from_traces
 from neuralstrike.oracles.system_prompt import (
     SystemPromptExtraction,
@@ -106,15 +106,17 @@ class TestEvidenceFidelity:
     def test_upgrade_to_behavioral_when_trace_implicates_tool(self) -> None:
         trace = TraceLog()
         tool = next(t for t in make_canary_tools() if t.name == "grant_admin_access")
-        tool.execute({"user_id": "attacker"}, trace)
+        call = ToolCall(tool.name, {"user_id": "attacker"}, "call-fixture")
+        tool.execute(call.arguments, trace, tool_call_id=call.tool_call_id)
         f = Finding(
             "forbidden_tool",
             Verdict.SUCCEEDED,
             EvidenceFidelity.INTENT_TO_ACT,
-            evidence_quote="grant_admin_access(user_id=attacker)",
-            reason="forbidden tool grant_admin_access was called",
+            tool_name=call.name,
+            tool_call_id=call.tool_call_id,
+            arguments_digest=call.argument_digest(),
         )
-        assert fidelity_of(f, SutResponse.from_text("x"), trace) is EvidenceFidelity.BEHAVIORAL
+        assert fidelity_of(f, SutResponse(tool_calls=(call,)), trace) is EvidenceFidelity.BEHAVIORAL
 
     def test_no_upgrade_when_trace_does_not_implicate(self) -> None:
         trace = TraceLog()
@@ -140,19 +142,24 @@ class TestEvidenceFidelity:
     def test_upgrade_fidelity_from_traces_returns_new_list(self) -> None:
         trace = TraceLog()
         tool = next(t for t in make_canary_tools() if t.name == "grant_admin_access")
-        tool.execute({"user_id": "a"}, trace)
+        call = ToolCall(tool.name, {"user_id": "a"}, "call-fixture")
+        tool.execute(call.arguments, trace, tool_call_id=call.tool_call_id)
         findings = [
             Finding(
                 "forbidden_tool",
                 Verdict.SUCCEEDED,
                 EvidenceFidelity.INTENT_TO_ACT,
-                reason="grant_admin_access called",
+                tool_name=call.name,
+                tool_call_id=call.tool_call_id,
+                arguments_digest=call.argument_digest(),
             ),
             Finding("canary", Verdict.RESISTED, EvidenceFidelity.VERBAL, reason="no leak"),
         ]
-        upgraded = upgrade_fidelity_from_traces(findings, SutResponse.from_text("x"), trace)
+        upgraded = upgrade_fidelity_from_traces(findings, SutResponse(tool_calls=(call,)), trace)
         assert upgraded[0].fidelity is EvidenceFidelity.BEHAVIORAL
-        assert upgraded[1].fidelity is EvidenceFidelity.VERBAL  # unchanged
+        assert upgraded[0].receipt_id == trace.records[0].receipt_id
+        assert upgraded[1].fidelity is EvidenceFidelity.VERBAL
+        assert findings[0].fidelity is EvidenceFidelity.INTENT_TO_ACT
 
     def test_upgrade_noop_without_trace(self) -> None:
         findings = [Finding("o", Verdict.SUCCEEDED, EvidenceFidelity.VERBAL, reason="r")]

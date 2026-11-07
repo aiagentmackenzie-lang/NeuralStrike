@@ -30,7 +30,9 @@ Schema (per case, see ``corpus/asi01-asi10.yaml``)::
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import hashlib
+import json
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -116,6 +118,22 @@ class Scenario:
     execution-context attack rode along (the stealth/UGS half of the dual
     scoring). Consumed by the execution-context harness — never by the
     attack-verdict path. Empty for all pre-Phase-10 scenarios."""
+
+    source_path: str | None = None
+    source_sha256: str | None = None
+
+    @property
+    def fingerprint(self) -> str:
+        """Stable normalized scenario identity, independent of installation path."""
+        definition = asdict(self)
+        definition.pop("source_path")
+        definition.pop("source_sha256")
+        return (
+            "sha256:"
+            + hashlib.sha256(
+                json.dumps(definition, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+        )
 
     def build_oracles(self, canary: str) -> list[Oracle]:
         """Materialize the deterministic oracles for this scenario.
@@ -254,11 +272,16 @@ def _scenario_from_dict(d: dict[str, Any]) -> Scenario:
 
 def load_corpus(path: str | Path) -> list[Scenario]:
     """Load scenarios from a single YAML file."""
-    with open(path, encoding="utf-8") as fh:
-        data = yaml.safe_load(fh)
+    source = Path(path)
+    raw = source.read_bytes()
+    data = yaml.safe_load(raw.decode("utf-8"))
     if not isinstance(data, list):
         raise ValueError(f"corpus file {path} must be a YAML list of scenarios")
-    return [_scenario_from_dict(c) for c in data]
+    portable_path = (
+        f"corpus/{source.name}" if source.parent.resolve() == corpus_path().resolve() else source.name
+    )
+    digest = hashlib.sha256(raw).hexdigest()
+    return [replace(_scenario_from_dict(c), source_path=portable_path, source_sha256=digest) for c in data]
 
 
 def load_corpus_dir(directory: str | Path | None = None) -> list[Scenario]:

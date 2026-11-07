@@ -28,7 +28,7 @@ import secrets
 import time
 import uuid
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -98,7 +98,7 @@ def _manifest(path: Path, meta: RunMeta, *, complete: bool) -> None:
     _atomic_json(
         path / "manifest.json",
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "run_id": meta.run_id,
             "state": "complete" if complete else "running",
             "comparison_key": hashlib.sha256(
@@ -160,6 +160,10 @@ class RunMeta:
 
     comparison_identity: dict[str, Any] = field(default_factory=dict)
     seed_derivation: str | None = None
+    category: str = "uncategorized"
+    severity: str = "high"
+    provenance: dict[str, Any] = field(default_factory=dict)
+    completed_at: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -175,6 +179,10 @@ class RunMeta:
             "intensity": self.intensity,
             "comparison_identity": self.comparison_identity,
             "seed_derivation": self.seed_derivation,
+            "category": self.category,
+            "severity": self.severity,
+            "provenance": self.provenance,
+            "completed_at": self.completed_at,
         }
 
 
@@ -199,16 +207,18 @@ class RunReport:
 
 
 def _trial_to_dict(t: TrialResult) -> dict[str, Any]:
-    return {
+    document: dict[str, Any] = {
         "trial_index": t.trial_index,
         "scenario_id": t.scenario_id,
         "seed": t.seed,
-        "temperature": t.temperature,
+        "temperature": float(t.temperature),
         "verdict": t.verdict.value,
         "fidelity": t.fidelity.value,
         "payload": t.payload,
         "inputs": t.inputs,
+        "oracle_policy": t.oracle_policy,
         "exchanges": list(t.response.exchanges) if t.response else [],
+        "response_present": t.response is not None,
         "response_text": t.response.text if t.response else "",
         "tool_calls": [
             {"name": tc.name, "arguments": tc.arguments, "tool_call_id": tc.tool_call_id}
@@ -228,10 +238,29 @@ def _trial_to_dict(t: TrialResult) -> dict[str, Any]:
                 "reason": f.reason,
                 "severity": f.severity,
                 "advisory": f.advisory,
+                "tool_name": f.tool_name,
+                "tool_call_id": f.tool_call_id,
+                "arguments_digest": f.arguments_digest,
+                "receipt_id": f.receipt_id,
+                "evidence_origin": f.evidence_origin,
             }
             for f in t.findings
         ],
     }
+
+    document = json.loads(json.dumps(document, allow_nan=False))
+    observation = {
+        key: value
+        for key, value in document.items()
+        if key not in {"verdict", "fidelity", "findings", "oracle_policy"}
+    }
+    document["evidence_id"] = (
+        "sha256:"
+        + hashlib.sha256(
+            json.dumps(observation, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        ).hexdigest()
+    )
+    return document
 
 
 def _score_to_dict(score: ScoreCard | None) -> dict[str, Any] | None:
@@ -252,6 +281,20 @@ def _score_to_dict(score: ScoreCard | None) -> dict[str, Any] | None:
         "per_category_counts": {k: list(v) for k, v in score.per_category_counts.items()},
         "headline": score.headline,
     }
+
+
+def persist_report(report: RunReport, root: str | Path) -> Path:
+    """Persist a new private execution/derivation without reusing a directory."""
+    directory = Path(root) / report.meta.run_id
+    directory.parent.mkdir(parents=True, exist_ok=True)
+    directory.mkdir(mode=0o700, exist_ok=False)
+    _atomic_json(directory / "meta.json", report.meta.to_dict())
+    _manifest(directory, report.meta, complete=False)
+    for trial in report.trials:
+        _atomic_json(directory / f"trial-{trial.trial_index}.json", _trial_to_dict(trial))
+    _atomic_json(directory / "report.json", report.to_dict())
+    _manifest(directory, report.meta, complete=True)
+    return directory
 
 
 class TrialRunner:
@@ -335,6 +378,8 @@ class TrialRunner:
             intensity=intensity,
             comparison_identity=probe.comparison_identity,
             seed_derivation=SEED_DERIVATION,
+            category=probe.category,
+            severity=probe.severity,
         )
 
         run_path: Path | None = None
@@ -401,9 +446,11 @@ class TrialRunner:
 
         category_of = {probe.scenario_id: probe.category}
         score = score_trials(results, category_of=category_of)
+        meta = replace(meta, completed_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
         report = RunReport(meta=meta, trials=tuple(results), score=score)
 
         if run_path is not None:
+            _atomic_json(run_path / "meta.json", meta.to_dict())
             _atomic_json(run_path / "report.json", report.to_dict())
             _manifest(run_path, meta, complete=True)
 

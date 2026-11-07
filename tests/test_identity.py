@@ -10,7 +10,7 @@ import json
 import httpx
 import pytest
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec, ed25519, rsa
+from cryptography.hazmat.primitives.asymmetric import ec, ed25519, rsa, utils
 
 from neuralstrike.identity import (
     DIDResolver,
@@ -124,7 +124,9 @@ class TestJWSVerify:
         from cryptography.hazmat.primitives.asymmetric import ec as ec_crypto
 
         sig = private_key.sign(signing_input, ec_crypto.ECDSA(hashes.SHA256()))
-        signature_b64 = base64.urlsafe_b64encode(sig).decode().rstrip("=")
+        r, s = utils.decode_dss_signature(sig)
+        raw = r.to_bytes(32, "big") + s.to_bytes(32, "big")
+        signature_b64 = base64.urlsafe_b64encode(raw).decode().rstrip("=")
         jws = f"{header_b64}.{payload_b64}.{signature_b64}"
         out_header, _out_payload = verify_compact_jws(jws, public_key_pem=public_pem)
         assert out_header["alg"] == "ES256"

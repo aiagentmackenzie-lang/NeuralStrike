@@ -81,7 +81,7 @@ NeuralGuard validates the controls, and the two repos talk directly via the
    a forbidden tool call), *Behavioral* (an instrumented canary tool actually
    executed).
 4. **Statistics you can defend.** k-trial runs with Wilson confidence
-   intervals, seed/temperature-pinned replays, flaky detection, and a
+   intervals, recorded seed/temperature controls, offline evidence replay, flaky detection, and a
    baseline gate that fails CI on regressions.
 
 ---
@@ -344,11 +344,14 @@ This is the part that makes results defensible:
 
 - **Three-outcome verdicts.** `Resisted` / `Succeeded` / `Inconclusive`.
   Inconclusive is surfaced (SARIF `note`, JUnit `skipped`) — a coverage gap,
-  never a fabricated pass. Headline score: `Resisted / (Resisted + Succeeded)`.
+  never a fabricated pass. Attack success rate: `Succeeded / (Resisted + Succeeded)`; unavailable without conclusive trials.
 - **Wilson confidence intervals** on every k-trial run, plus coverage and
   per-category attack-success rates and a severity-weighted 0–100 risk index.
-- **Replayability.** Seed-pinned, temperature-pinned; per-trial transcripts
-  land in `runs/<run-id>/trial-<n>.json`.
+- **Replayability.** Private per-trial transcripts land in unique `runs/<run-id>/`
+  directories. `neuralstrike replay <directory> --verify-oracles` checks integrity
+  and re-evaluates supported recorded deterministic policies without model calls.
+  `rescore` creates a derived bundle under an explicit new local policy. Live
+  providers may ignore controls or vary. See [offline replay](docs/implementation/REPLAY.md).
 - **Baseline gating.** Save a baseline, then fail CI on regression:
   exit `0` pass · `1` vulnerability · `3` runtime error · `4` regression
   (regression outranks absolute vulnerabilities). Probe-profile (intensity)
@@ -452,7 +455,7 @@ NEURALSTRIKE_REDACT_LOGS=true
 | `ATTACKER_MODEL` | Model that generates payloads |
 | `JUDGE_MODEL` | The judge — deliberately a **stronger, distinct** model so an attack run never scores itself and the judge is harder to confuse |
 | `JUDGE_MODEL_FALLBACKS` | Ordered fallback chain tried before refusing to run |
-| `VICTIM_TEMPERATURE` | Pinned to `0.0` so a replay with the same seed reproduces identical verdicts |
+| `VICTIM_TEMPERATURE` | Requested at `0.0`; providers may vary or ignore controls. Offline evidence replay is separate |
 | `ATTACKER_TEMPERATURE` | Attacker creativity (per-trial seed keeps runs deterministic) |
 | `SKIP_REACHABILITY_CHECK` | Tests/offline only — a startup check normally fails closed if the Attacker or Judge is unreachable |
 | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | Optional, for `--target-type remote` |

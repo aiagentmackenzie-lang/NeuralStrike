@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict
 from typing import Any
+from urllib.parse import quote
 
 from neuralstrike import __version__
 from neuralstrike.evaluation.verdict import Verdict
@@ -65,6 +66,9 @@ def _rule_for(scenario_result: ScenarioResult) -> dict[str, Any]:
             )
         },
         "properties": {
+            "source_path": s.source_path,
+            "source_sha256": s.source_sha256,
+            "scenario_fingerprint": s.fingerprint,
             "owasp_category": s.owasp_category,
             "owasp_name": s.owasp_name,
             "owasp_framework": owasp_framework,
@@ -94,9 +98,11 @@ def _result_for(scenario_result: ScenarioResult, trial: Any) -> dict[str, Any]:
         "message": {"text": " | ".join(message_parts)},
         "locations": [
             {
-                "physicalLocation": {
-                    "artifactLocation": {"uri": f"corpus/{_corpus_file(s.id)}"},
-                },
+                **(
+                    {"physicalLocation": {"artifactLocation": {"uri": quote(s.source_path, safe="/._-")}}}
+                    if s.source_path
+                    else {}
+                ),
                 "logicalLocations": [
                     {
                         "name": s.id,
@@ -110,6 +116,10 @@ def _result_for(scenario_result: ScenarioResult, trial: Any) -> dict[str, Any]:
             }
         ],
         "properties": {
+            "evidence_id": trial.evidence_id,
+            "evidence_origin": trial.evidence_origin,
+            "source_run_id": trial.source_run_id,
+            "receipt_id": trial.receipt_id,
             "findings": [asdict(finding) for finding in trial.findings],
             "verdict": trial.verdict.value,
             "fidelity": trial.fidelity.value,
@@ -122,18 +132,10 @@ def _result_for(scenario_result: ScenarioResult, trial: Any) -> dict[str, Any]:
         },
         "partialFingerprints": {
             "primary": f"{s.id}:{trial.trial_index}",
+            "scenario": s.fingerprint,
+            "evidence": trial.evidence_id,
         },
     }
-
-
-def _corpus_file(scenario_id: str) -> str:
-    """The corpus file a scenario lives in (asi01-asi10.yaml or llm01-llm10.yaml)."""
-    sid = scenario_id.lower()
-    if sid.startswith("asi"):
-        return "asi01-asi10.yaml"
-    if sid.startswith("llm"):
-        return "llm01-llm10.yaml"
-    return "corpus.yaml"
 
 
 def to_sarif(run: CorpusRun) -> str:
@@ -174,8 +176,11 @@ def to_sarif(run: CorpusRun) -> str:
                     {
                         "executionSuccessful": run.health.complete if run.health else False,
                         "startTimeUtc": run.started_at,
+                        **({"endTimeUtc": run.completed_at} if run.completed_at else {}),
                         "properties": {
                             "artifact_policy": run.artifact_policy,
+                            "assessment_scope": run.assessment_scope,
+                            "limitations": list(run.limitations),
                             "health": run.health.to_dict() if run.health else None,
                             "base_seed": run.base_seed,
                             "trials_per_scenario": run.trials_per_scenario,

@@ -258,7 +258,7 @@ class OpenAIEndpointAdapter(TargetAdapter):
                 result_content = _canned_tool_result(name)
                 if name in canary_by_name and trace is not None:
                     try:
-                        result_content = canary_by_name[name].execute(args, trace)
+                        result_content = canary_by_name[name].execute(args, trace, tool_call_id=tc.get("id"))
                     except Exception as exc:
                         result_content = f'{{"error":"{exc}"}}'
                         logger.error("canary tool %s handler raised: %s", name, exc)

@@ -19,8 +19,9 @@ sanitizers. Embedding or publishing the JSON can disclose target content.
 Runner seeds/temperatures are task-local and supplied to supported OpenAI and
 LiteLLM requests. Recording a sent seed does not prove a provider honored it or
 that a live rerun will match. Other adapters currently preserve planned inputs,
-not complete provider envelopes. Offline integrity-checked replay is still a
-separate outstanding workflow.
+not complete provider envelopes. Integrity-checked offline replay and derived
+rescoring are now available for per-run bundles; see REPLAY.md for modes and
+compatibility limits.
 
 Modern adapter baselines bind scenario, target configuration, tool definitions,
 oracle configuration and implementation digests. Credentials are excluded from
@@ -50,3 +51,12 @@ reference update, not an immutable run-evidence write; retain trusted references
 Smoke, NeuralGuard benchmark and purple-report JSON exports also use private
 atomic writes. This does not make optional integration state or raw bodies safe
 to publish.
+
+Phase 1 run manifests now declare schema 2, retain completion/scoring context and
+separate observation IDs from evaluation policies. Behavioral promotion requires
+an exact call ID/name/argument digest and a unique local receipt; prose and legacy
+unbound traces cannot promote fidelity. Reports retain the receipt origin so
+local fixture execution is not mistaken for production side effects. Corpus
+sources record their actual portable file path, file hash and normalized scenario
+fingerprint. Baselines whose scenario/oracle identities changed require a trusted
+reference rerun; preserve the old evidence rather than overwriting it to pass.
