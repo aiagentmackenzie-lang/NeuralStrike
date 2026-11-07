@@ -1157,3 +1157,24 @@ Final local gates for the acceptance fixes:
 Acceptance remains a candidate until hosted verification of this source commit
 finishes. The new matrix names experimental exclusions instead of inheriting
 capabilities across adapters. No Phase 3 independent efficacy/pilot claim.
+
+Hosted verification and Phase 2 engineering acceptance:
+- Focused source commits pushed to main: `ec421e2` (completion/dispatch/doctor
+  health) and `f373987` (live graph capture/signatures and consolidated review).
+  Working tree clean after push; `git status --short` checked before push.
+- Hosted CI **all passed for f373987**: Python **3.11/3.12/3.14** quality,
+  hash-pinned installation/tests/audit/SBOM and dashboard checks/build.
+  https://github.com/aiagentmackenzie-lang/NeuralStrike/actions/runs/42413425742
+- The six master-plan Phase 2 engineering gates are now accepted for the exact
+  controlled profiles in PHASE2_ACCEPTANCE.md. This record closes Phase 2's
+  consolidated acceptance review, preserving all named capability/capture/
+  ownership/version/usage limitations. Historical open entries above remain
+  checkpoints, superseded by this acceptance decision.
+- This final documentation update records verification of **f373987**; it is not
+  a claim that the hosted run tested a later source change. No release dispatched.
+
+Next phase is independent efficacy/ground-truth cohort and consenting pilot work,
+not more attack-count expansion. No independent third-party efficacy, customer
+pilot, universal protocol compatibility, independent reset/build attestation or
+production-readiness conclusion has been established. No Phase 3 work, external
+security exercise or paid inference was performed in this increment.

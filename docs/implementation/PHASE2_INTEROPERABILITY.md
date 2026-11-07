@@ -1,7 +1,10 @@
-# Phase 2 interoperability — work in progress
+# Phase 2 interoperability — declared controlled profiles
 
-Current implementation increments: 2026-11-07. Phase 2 is **not accepted** yet.
-Phase 1 evidence gates remain the prerequisite; see PHASE1_ACCEPTANCE.md.
+Phase 2 engineering acceptance: **passed for the declared controlled profiles**,
+2026-11-07, implementation `f373987`. See PHASE2_ACCEPTANCE.md for the six-gate
+review, verification evidence and exclusions. Phase 1 evidence gates remain the
+prerequisite; see PHASE1_ACCEPTANCE.md. This is not customer efficacy or universal
+adapter/production acceptance.
 
 ## Implemented OpenAI boundary
 
@@ -217,20 +220,20 @@ never a security verdict, and the dashboard does not score such receipts. See
 features, evidence and lifecycle semantics. These tests establish a narrow local
 protocol profile, not complete MCP/OAuth conformance or customer-agent efficacy.
 
-## Remaining Phase 2 gates
+## Acceptance scope and remaining limits
 
-The controlled LangGraph app gate now has runnable evidence. The master plan
-now has a pinned, locally verified MCP stdio/HTTP profile. Phase 2 still requires
-a consolidated acceptance review of the declared hook/capability support matrix.
-The interruption and explicit local reset/thread/cleanup increments below now have
-regressions and receipts; they do not extend the supported profile to experimental
-remote LangGraph Server or arbitrary custom capture implementations. Arbitrary application-owned
-resources and detached processes are not guaranteed cancellable. Credential/build/
-principal identity remains unverified beyond declared configuration and captured
-self-reports; the protocol receipts do not establish live remediation. Environment
-references are supported; secret-store adapters are optional and unimplemented. A2A identity and other framework/protocol profiles remain
-experimental. Provider usage/cost unavailable means unknown/estimated, not zero
-and not an absolute spend ceiling.
+The separate controlled LangGraph application, authenticated loopback OpenAI
+endpoint and pinned MCP stdio/HTTP profiles satisfy the six engineering gates
+reviewed in PHASE2_ACCEPTANCE.md. Interruption/reset/cleanup and live-stream
+failure cases now have regressions and receipts. These claims do not extend to
+experimental remote LangGraph Server or arbitrary custom capture implementations.
+Arbitrary application-owned resources and detached processes are not guaranteed
+cancellable. Credential/build/principal identity remains unverified beyond declared
+configuration and captured self-reports; protocol receipts do not establish live
+remediation. Environment references are supported; secret-store adapters remain
+optional/unimplemented. A2A identity and other framework/protocol profiles remain
+experimental. Usage/cost unavailable means unknown/estimated, not zero or an
+absolute spend ceiling. Phase 3 independent efficacy and pilots remain unverified.
 
 ## Interrupted trial evidence
 

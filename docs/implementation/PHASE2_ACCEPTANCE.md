@@ -1,6 +1,7 @@
 # Phase 2 engineering acceptance — 2026-11-07
 
-Status: **candidate; final hosted verification pending**. This review covers the
+Status: **accepted for the declared controlled engineering profiles**. Source
+acceptance commit: `f373987` (includes OpenAI fix `ec421e2`). This review covers the
 explicit controlled profiles below. It does not establish customer security
 efficacy, production readiness, universal framework compatibility, independent
 reset attestation or authenticated remote build identity. Phase 3 efficacy/pilot
@@ -69,6 +70,13 @@ fixture handlers; emitted intent alone is not production execution.
   Roles admin/reader/admin, task completion all three stages, reset completed,
   original-oracle replay agrees, fix exit 0 and regression exit 4. Installed CLI
   offline smoke also passes (three scenarios/trials).
-- Hosted verification for the frozen implementation commit is pending. No Release
-  workflow is part of acceptance. Do not infer results for a later source commit
-  from an older green run.
+- Hosted CI **passed** for implementation `f373987`:
+  https://github.com/aiagentmackenzie-lang/NeuralStrike/actions/runs/42413425742
+  Python **3.11/3.12/3.14** quality, hash-lock installation/tests/audit/SBOM and
+  dashboard checks/build all passed. This documentation-only acceptance record
+  does not claim that run tested a later source change. No Release dispatched.
+
+All six Phase 2 master-plan engineering gates have controlled-profile evidence
+under the interpretations and exclusions above. This closes Phase 2 engineering
+acceptance; it does not close Phase 3 independent efficacy/pilots or authorize
+external testing, paid inference or release publication.
