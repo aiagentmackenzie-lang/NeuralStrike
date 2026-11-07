@@ -230,3 +230,30 @@ self-reports; the protocol receipts do not establish live remediation. Environme
 references are supported; secret-store adapters are optional and unimplemented. A2A identity and other framework/protocol profiles remain
 experimental. Provider usage/cost unavailable means unknown/estimated, not zero
 and not an absolute spend ceiling.
+
+## Interrupted trial evidence
+
+OpenAI and LangGraph calls driven by the deterministic scan/corpus probes now
+register task-local observation checkpoints. A deadline preserves the original
+inputs and oracle policy, completed exchanges, tool calls, and any local execution
+receipts before scoring the partial response. A demonstrated violation survives
+a later timeout; the execution error still makes assessment coverage incomplete
+(exit 3 under fail-on=vuln). Without demonstrated evidence, partial execution
+remains inconclusive. This does not hard-cancel arbitrary application code.
+
+Interrupted OpenAI streams retain the accepted decoded byte prefix as base64 in
+`response_prefix_base64`, explicitly `capture_complete=false`. This private prefix
+is not parsed as a completed response or used to execute tools. Stream cleanup
+runs on cancellation. Graph checkpoints retain only observed input state while
+`ainvoke` is pending; unseen node actions are not invented.
+
+User cancellation writes the current trial to its private running journal and
+propagates cancellation. It does not mark the manifest complete or fabricate
+remaining trials. Running journals cannot be loaded as committed canonical replay
+bundles. Ordinary timeout runs finish their selected trials and support offline
+original-oracle verification. Custom probe factories/adapters must register live
+checkpoints to provide the same partial observation coverage; unsupported custom
+paths retain explicit errors, without claiming complete capture.
+
+Supported Python minimum is now 3.11: the mandatory `filelock>=4.2.1` security
+floor cannot install on 3.10. Hosted CI exercises 3.11, 3.12, and 3.14.

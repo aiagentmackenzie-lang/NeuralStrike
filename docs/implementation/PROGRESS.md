@@ -957,3 +957,24 @@ Remaining Phase 2 limitations: explicit state/reset lifecycle is still outstandi
 interrupted user-cancelled journals are recoverable private evidence, not committed
 replayable assessment bundles; arbitrary graph internals are not observable through
 ainvoke. No external target or paid inference was exercised.
+
+Final verification for code commit `cc3f613`:
+
+- `/tmp/neuralstrike-phase0-venv/bin/python -m pytest --cov=neuralstrike --cov-fail-under=85`:
+  **1397 passed, 2 skipped; 91.70% coverage**. Log:
+  `/tmp/neuralstrike-phase2-partial-final-full.log`.
+- `ruff check src tests`, strict `mypy src/neuralstrike` (143 files),
+  and `git diff --check` passed. CLI rejection also passed with `FORCE_COLOR=1`.
+- `uv build --wheel --out-dir /tmp/neuralstrike-phase2-partial-dist` succeeded;
+  all 147 checked packaged Python/JSON/YAML source/data files byte-match source,
+  and wheel Requires-Python is >=3.11,<3.15. Reinstalled without dependencies into
+  `/tmp/neuralstrike-wheel-venv`; all four interruption regressions passed from
+  `/tmp` against that installed wheel, outside the checkout. Log:
+  `/tmp/neuralstrike-partial-wheel-tests.log`.
+- Hosted CI **all green** for `cc3f613`: Python **3.11/3.12/3.14** quality,
+  hashed dependency installation/tests/audit/SBOM, and dashboard checks/build.
+  https://github.com/aiagentmackenzie-lang/NeuralStrike/actions/runs/42405111185
+  Python 3.11 specifically ran 1397 passed, 2 skipped (91.58% coverage).
+- No release workflow dispatched. Phase 2 remains in progress with the limitations
+  above; next required engineering work is explicit application reset/thread
+  lifecycle with failing tests and honest reset/cleanup failure receipts.
