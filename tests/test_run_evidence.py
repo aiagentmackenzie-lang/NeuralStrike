@@ -47,7 +47,14 @@ async def test_simultaneous_runs_never_merge(tmp_path):
     reports = await asyncio.gather(runner.run(probe), runner.run(probe))
     assert reports[0].meta.run_id != reports[1].meta.run_id
     for report in reports:
-        assert (tmp_path / report.meta.run_id / "manifest.json").exists()
+        directory = tmp_path / report.meta.run_id
+        manifest = json.loads((directory / "manifest.json").read_text())
+        assert manifest["state"] == "complete"
+        assert manifest["expected_trials"] == len(report.trials) == 1
+        assert set(manifest["files"]) == {"meta.json", "report.json", "trial-0.json"}
+        for name, digest in manifest["files"].items():
+            assert hashlib.sha256((directory / name).read_bytes()).hexdigest() == digest
+        assert json.loads((directory / "meta.json").read_text())["run_id"] == report.meta.run_id
 
 
 @pytest.mark.asyncio

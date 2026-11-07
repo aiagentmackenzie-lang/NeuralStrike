@@ -382,3 +382,28 @@ evidence review. Later-phase offline integrity/replay, sanitized sharing,
 authenticated remote build identity and broad protocol conformance remain open.
 Next: reconcile every Phase 0 acceptance row with supplied reproductions and
 current checks, record any concrete gaps, then proceed to canonical evidence.
+
+### Phase 0 acceptance closed for controlled fixtures — 2026-11-06
+
+See PHASE0_ACCEPTANCE.md for the requirements-to-evidence matrix and limits.
+The unchanged supplied deep probe was rerun outside the checkout; its baseline,
+outage, log, rerun and indirect-request observations now show the intended
+behavior. Permissive empty scope remains explicitly recorded for canonical
+permission preflight work; this does not authorize external testing.
+
+Final acceptance review found and fixed one more demonstrated gate defect:
+scan/evaluate/pack could save over the reference before comparison and exit 0.
+All six same-directory/symlink regressions failed first with exit 0; the guard
+now exits 3 before execution and preserves reference bytes. The strict history
+fixture now also runs all 60 scenarios over a real loopback HTTP server and
+rejects two malformed negative controls. Concurrent manifests are checked for
+hash integrity, exact file inventories and source execution IDs.
+
+Final frozen-source gate: **1135 passed, 2 skipped, 91.83% coverage**;
+Ruff/mypy/diff checks pass. Wheel/sdist rebuilt and isolated installed-wheel
+smoke passed (three synthetic scenarios/trials). Optional base58/real NeuralGuard
+tests remain skipped, not counted as verified integrations. Local logs and
+artifacts are under `/tmp/neuralstrike-phase0-acceptance/`. No release published.
+Phase 0 acceptance is complete within this documented fixture scope; later
+canonical evidence/replay, authorization preflight and independent validation
+remain unfinished. No efficacy or production-readiness claim is made.

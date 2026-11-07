@@ -70,6 +70,15 @@ def _run_value(coro: Coroutine[Any, Any, _T]) -> _T:
         raise typer.Exit(3) from exc
 
 
+def _validate_baseline_destinations(reference: str | None, destination: str | None) -> None:
+    """Never replace the trusted reference with the candidate before comparison."""
+    from pathlib import Path
+
+    if reference and destination and Path(reference).resolve() == Path(destination).resolve():
+        console.print("[red]Baseline error: cannot save candidate over the comparison reference.[/red]")
+        raise typer.Exit(3)
+
+
 def _finish_assessment(reports: Sequence[RunReport], fail_on: str, *, selected: int) -> NoReturn:
     """One standalone policy boundary for every existing --fail-on command."""
     from neuralstrike.evaluation.health import assessment_health
@@ -763,6 +772,7 @@ def evaluate(
 
     Exit codes: 0 pass · 1 vuln · 3 runtime error · 4 regression.
     """
+    _validate_baseline_destinations(baseline_dir, save_baseline_dir)
     validate_target_model(target)
     if target_type not in {"local", "remote"}:
         raise ValidationError("target_type must be 'local' or 'remote'")
@@ -960,6 +970,7 @@ def scan(
     (IntentToAct) and, with --tier instrumented, Behavioral (Tier-2). Evidence
     fidelity is tagged on every finding. Exit codes: 0/1/3/4.
     """
+    _validate_baseline_destinations(baseline_dir, save_baseline_dir)
     if adapter not in {"openai", "mcp", "langgraph", "langgraph-server", "a2a"}:
         raise ValidationError("--adapter must be openai|mcp|langgraph|langgraph-server|a2a")
     if tier not in {"text", "function-calling", "instrumented"}:
@@ -2057,6 +2068,7 @@ def pack(
 
     Exit codes: 0 pass · 1 vuln · 3 runtime error · 4 regression.
     """
+    _validate_baseline_destinations(baseline_dir, save_baseline_dir)
     if target_type not in {"local", "remote"}:
         raise ValidationError("target_type must be 'local' or 'remote'")
     if trials < 1:
