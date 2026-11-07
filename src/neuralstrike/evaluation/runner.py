@@ -32,6 +32,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+from neuralstrike.evaluation.checkpoint import TrialCheckpoint, trial_checkpoint
 from neuralstrike.evaluation.controls import SEED_DERIVATION, trial_controls
 from neuralstrike.evaluation.scoring import ScoreCard, score_trials
 from neuralstrike.evaluation.verdict import (
@@ -350,6 +351,16 @@ class TrialRunner:
 
         return mint_canary(rng=self._rng)
 
+    async def _execute(
+        self, probe: Probe, trial_index: int, seed: int, canary: str, checkpoint: TrialCheckpoint
+    ) -> TrialResult:
+        with trial_checkpoint(checkpoint), trial_controls(seed, self.victim_temperature):
+            if self.trial_timeout is not None:
+                return await asyncio.wait_for(
+                    probe.factory(trial_index, seed, canary), timeout=self.trial_timeout
+                )
+            return await probe.factory(trial_index, seed, canary)
+
     async def run(
         self,
         probe: Probe,
@@ -397,14 +408,17 @@ class TrialRunner:
             seed = _derive_seed(self.base_seed, trial_index)
             canary = self._mint()
             logger.info("run %s trial %d/%d seed=%d canary=%s", run_id, trial_index + 1, trials, seed, canary)
+            checkpoint = TrialCheckpoint()
             try:
-                with trial_controls(seed, self.victim_temperature):
-                    if self.trial_timeout is not None:
-                        trial = await asyncio.wait_for(
-                            probe.factory(trial_index, seed, canary), timeout=self.trial_timeout
-                        )
-                    else:
-                        trial = await probe.factory(trial_index, seed, canary)
+                trial = await self._execute(probe, trial_index, seed, canary, checkpoint)
+            except asyncio.CancelledError:
+                partial = checkpoint.interrupted("trial cancelled before completion")
+                if partial is not None and run_path is not None:
+                    _atomic_json(
+                        run_path / f"trial-{trial_index}.json", _trial_to_dict(normalize_trial(partial))
+                    )
+                    _manifest(run_path, meta, complete=False)
+                raise
             except asyncio.TimeoutError:
                 # A hung trial is a coverage gap, not a fabricated pass. The
                 # run continues (other trials may conclude); the timeout is
@@ -437,11 +451,12 @@ class TrialRunner:
                     error=f"{type(exc).__name__}: {exc}",
                     scenario_id=probe.scenario_id,
                 )
+            if trial.error:
+                trial = checkpoint.interrupted(trial.error) or trial
             trial = normalize_trial(trial)
             results.append(trial)
             if run_path is not None:
-                path = run_path / f"trial-{trial_index}.json"
-                _atomic_json(path, _trial_to_dict(trial))
+                _atomic_json(run_path / f"trial-{trial_index}.json", _trial_to_dict(trial))
                 _manifest(run_path, meta, complete=False)
 
         category_of = {probe.scenario_id: probe.category}

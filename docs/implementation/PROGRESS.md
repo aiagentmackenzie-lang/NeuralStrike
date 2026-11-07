@@ -924,3 +924,36 @@ Rich terminal wrapping/ANSI output. Raised declared minimum to Python 3.11,
 updated the matrix/documented support, and made the assertion independent of
 wrapping and ANSI styling. No security dependency downgrade. This intentionally
 ends the previously advertised but non-installable Python 3.10 support.
+
+## 2026-11-07 — Preserve observations when a trial is interrupted
+
+Demonstrated defects before fixes: timeout erased an already executed synthetic
+`grant_admin_access` receipt and provider exchanges; user cancellation left no
+current trial journal; response bytes received before timeout were discarded.
+Failing regressions are recorded in `/tmp/neuralstrike-phase2-partial-red.log`
+and `/tmp/neuralstrike-partial-prefix-red.log`.
+
+Added a task-local observation checkpoint shared by runner, deterministic probe
+scoring, and OpenAI/LangGraph adapters. Interruption snapshots retain original
+inputs, policy, completed exchanges, observed calls and execution receipts. A
+confirmed violation remains confirmed alongside an explicit execution error;
+coverage stays incomplete and fail-on=vuln exits 3. Negative partial observations
+remain inconclusive. OpenAI retains a bounded base64 decoded response prefix,
+explicitly incomplete and excluded from tool execution/oracle scoring; HTTP
+stream cancellation still closes the stream. Graph capture claims only observed
+input state, never unseen internal execution.
+
+Cancellation persists the current trial and running manifest before re-raising;
+it does not fabricate unattempted trials or commit a complete report. Such journals
+remain rejected by canonical bundle replay. Timeout bundles retain the original
+deterministic policy and pass offline original-oracle replay. Concurrent graph
+timeouts exercise task isolation. No callable code is loaded from evidence.
+
+Validation: first full local gate 1396 passed, 2 skipped, 91.70% coverage;
+Ruff and strict mypy (143 source files) pass. Final prefix regression and hosted
+matrix results follow below. Coverage measures exercised code, not security efficacy.
+
+Remaining Phase 2 limitations: explicit state/reset lifecycle is still outstanding;
+interrupted user-cancelled journals are recoverable private evidence, not committed
+replayable assessment bundles; arbitrary graph internals are not observable through
+ainvoke. No external target or paid inference was exercised.

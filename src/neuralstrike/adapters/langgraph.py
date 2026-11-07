@@ -24,6 +24,7 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 from neuralstrike.adapters.base import Message, TargetAdapter, ToolSchema
+from neuralstrike.evaluation.checkpoint import capture_response
 from neuralstrike.evaluation.verdict import SutResponse, ToolCall
 from neuralstrike.utils.logging import get_logger
 
@@ -244,6 +245,7 @@ class LangGraphAdapter(TargetAdapter):
             "delivery_semantics": "input state observed; target consumption not attested",
             "versions": _package_versions(),
         }
+        capture_response(lambda: SutResponse(text="", exchanges=(exchange,)))
         try:
             state = self.state_builder(prompt, system_prompt, history)
             # Freeze before invocation: graphs/reducers can mutate the input object.

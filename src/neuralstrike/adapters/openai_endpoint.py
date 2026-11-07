@@ -22,6 +22,8 @@ Fail-closed: a transport error is recorded as ``error`` on the
 
 from __future__ import annotations
 
+import asyncio
+import base64
 import copy
 import json
 import uuid
@@ -31,6 +33,7 @@ from urllib.parse import unquote
 import httpx
 
 from neuralstrike.adapters.base import Message, TargetAdapter, ToolSchema
+from neuralstrike.evaluation.checkpoint import capture_response
 from neuralstrike.evaluation.controls import current_trial_controls
 from neuralstrike.evaluation.verdict import SutResponse, ToolCall
 from neuralstrike.oracles.tool_harness import CanaryTool, TraceLog
@@ -209,6 +212,10 @@ class OpenAIEndpointAdapter(TargetAdapter):
                     self.outbound.account(receipt, payload, data)
                     return data
             return await self._exchange(payload, exchange, safe_endpoint, credentials_configured)
+        except asyncio.CancelledError:
+            exchange["capture_complete"] = False
+            exchange["error_type"] = "CancelledError"
+            raise
         except BudgetExceeded as exc:
             exchange["error"] = str(exc)
             exchange["error_type"] = type(exc).__name__
@@ -222,11 +229,11 @@ class OpenAIEndpointAdapter(TargetAdapter):
         credentials_configured: bool,
     ) -> dict[str, Any]:
         exchange["request_status"] = "attempted"
+        body = bytearray()
         try:
             async with self.client.stream("POST", self._endpoint(), json=payload) as resp:
                 exchange["status_code"] = resp.status_code
                 exchange["capture_complete"] = False
-                body = bytearray()
                 # Count decoded bytes, including compressed responses. Do not trust
                 # Content-Length, which may be absent or refer to compressed data.
                 async for chunk in resp.aiter_bytes():
@@ -247,6 +254,11 @@ class OpenAIEndpointAdapter(TargetAdapter):
                 exchange["capture_complete"] = True
                 exchange["response_text"] = buffered.text
                 buffered.raise_for_status()
+        except asyncio.CancelledError:
+            # A bounded decoded prefix is private evidence, never a complete
+            # JSON response and never input to tool execution or the oracles.
+            exchange["response_prefix_base64"] = base64.b64encode(body).decode("ascii")
+            raise
         except httpx.HTTPError as exc:
             diagnostic = _http_error_diagnostic(exc, safe_endpoint, credentials_configured)
             exchange["error"] = diagnostic
@@ -287,6 +299,13 @@ class OpenAIEndpointAdapter(TargetAdapter):
         last_text = ""
         error: str | None = None
         exchanges: list[dict[str, Any]] = []
+
+        capture_response(lambda: SutResponse(
+            text=last_text,
+            tool_calls=tuple(all_tool_calls),
+            traces=tuple(trace.to_list()) if trace is not None else (),
+            exchanges=tuple(exchanges),
+        ))
 
         for _round in range(self.max_tool_rounds):
             try:

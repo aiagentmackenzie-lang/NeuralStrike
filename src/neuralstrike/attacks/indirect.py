@@ -50,6 +50,7 @@ from dataclasses import replace as _replace
 
 from neuralstrike.adapters.base import Message, TargetAdapter, ToolSchema
 from neuralstrike.corpus.loader import CANARY_PLACEHOLDER, DeliveryVector, Scenario
+from neuralstrike.evaluation.checkpoint import capture_scoring
 from neuralstrike.evaluation.identity import comparison_identity
 from neuralstrike.evaluation.probes import strongest_fidelity
 from neuralstrike.evaluation.runner import Probe
@@ -260,6 +261,37 @@ class IndirectHarness:
         async def _factory(trial_index: int, seed: int, canary: str) -> TrialResult:
             inputs = self.build_inputs(canary)
             trace = TraceLog()
+            oracles: list[Oracle] = scenario.build_oracles(canary)
+
+            def finish(response: SutResponse) -> TrialResult:
+                results = [o.check(response) for o in oracles]
+                verdict, fidelity, findings = combine_oracle_results(results)
+                findings = upgrade_fidelity_from_traces(findings, response, trace)
+                # Attach the delivery trace to the persisted SutResponse so the
+                # report can cite which channel the payload rode on.
+                response = _with_delivery_trace(response, trace)
+                return TrialResult(
+                    trial_index=trial_index,
+                    seed=seed,
+                    temperature=0.0,
+                    verdict=verdict,
+                    fidelity=strongest_fidelity(findings) if findings else fidelity,
+                    findings=tuple(findings),
+                    payload=inputs.prompt,
+                    oracle_policy=oracle_policy(oracles),
+                    inputs={
+                        **asdict(inputs),
+                        "canary": canary,
+                        "scenario": asdict(scenario),
+                        "tools": [asdict(tool) for tool in tools],
+                        "capture_status": "adapter-inputs; see exchanges for actual provider bodies",
+                    },
+                    response=response,
+                    scenario_id=scenario.id,
+                    iterations=max_iterations,
+                )
+
+            capture_scoring(finish)
             response = await adapter.query(
                 inputs.prompt,
                 system_prompt=inputs.system_prompt,
@@ -270,33 +302,7 @@ class IndirectHarness:
                 delivery_channel=inputs.delivery_channel,
                 delivery_marker=inputs.injection_marker,
             )
-            oracles: list[Oracle] = scenario.build_oracles(canary)
-            results = [o.check(response) for o in oracles]
-            verdict, fidelity, findings = combine_oracle_results(results)
-            findings = upgrade_fidelity_from_traces(findings, response, trace)
-            # Attach the delivery trace to the persisted SutResponse so the
-            # report can cite which channel the payload rode on.
-            response = _with_delivery_trace(response, trace)
-            return TrialResult(
-                trial_index=trial_index,
-                seed=seed,
-                temperature=0.0,
-                verdict=verdict,
-                fidelity=strongest_fidelity(findings) if findings else fidelity,
-                findings=tuple(findings),
-                payload=inputs.prompt,
-                oracle_policy=oracle_policy(oracles),
-                inputs={
-                    **asdict(inputs),
-                    "canary": canary,
-                    "scenario": asdict(scenario),
-                    "tools": [asdict(tool) for tool in tools],
-                    "capture_status": "adapter-inputs; see exchanges for actual provider bodies",
-                },
-                response=response,
-                scenario_id=scenario.id,
-                iterations=max_iterations,
-            )
+            return finish(response)
 
         return Probe(
             scenario_id=scenario.id,

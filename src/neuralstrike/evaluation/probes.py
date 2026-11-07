@@ -21,6 +21,7 @@ from neuralstrike.adapters.base import Message, TargetAdapter, ToolSchema
 from neuralstrike.core.adversarial_loop import AdversarialLoop, LoopResult
 from neuralstrike.core.llm_manager import LLMManager, llm_manager
 from neuralstrike.core.trajectory import fingerprint, trajectory_from_loop_history
+from neuralstrike.evaluation.checkpoint import capture_scoring
 from neuralstrike.evaluation.identity import comparison_identity, model_comparison_identity
 from neuralstrike.evaluation.runner import Probe
 from neuralstrike.evaluation.verdict import (
@@ -249,6 +250,33 @@ def adapter_scan_probe(
     async def _factory(trial_index: int, seed: int, canary: str) -> TrialResult:
         trace = TraceLog()
         sys_prompt = system_prompt.replace("{CANARY}", canary) if system_prompt else None
+        def finish(response: SutResponse) -> TrialResult:
+            results = [o.check(response) for o in oracles]
+            verdict, fidelity, findings = combine_oracle_results(results)
+            findings = upgrade_fidelity_from_traces(findings, response, trace)
+            return TrialResult(
+                trial_index=trial_index,
+                seed=seed,
+                temperature=0.0,
+                verdict=verdict,
+                fidelity=strongest_fidelity(findings) if findings else fidelity,
+                findings=tuple(findings),
+                payload=payload,
+                oracle_policy=oracle_policy(oracles),
+                inputs={
+                    "prompt": payload,
+                    "system_prompt": sys_prompt,
+                    "history": [asdict(message) for message in history],
+                    "tools": [asdict(tool) for tool in tools],
+                    "canary": canary,
+                    "capture_status": "adapter-inputs; see exchanges for actual provider bodies",
+                },
+                response=response,
+                scenario_id=scenario_id,
+                iterations=1,
+            )
+
+        capture_scoring(finish)
         response = await adapter.query(
             payload,
             system_prompt=sys_prompt,
@@ -257,30 +285,7 @@ def adapter_scan_probe(
             canary_tools=canary_tools,
             trace=trace,
         )
-        results = [o.check(response) for o in oracles]
-        verdict, fidelity, findings = combine_oracle_results(results)
-        findings = upgrade_fidelity_from_traces(findings, response, trace)
-        return TrialResult(
-            trial_index=trial_index,
-            seed=seed,
-            temperature=0.0,
-            verdict=verdict,
-            fidelity=strongest_fidelity(findings) if findings else fidelity,
-            findings=tuple(findings),
-            payload=payload,
-            oracle_policy=oracle_policy(oracles),
-            inputs={
-                "prompt": payload,
-                "system_prompt": sys_prompt,
-                "history": [asdict(message) for message in history],
-                "tools": [asdict(tool) for tool in tools],
-                "canary": canary,
-                "capture_status": "adapter-inputs; see exchanges for actual provider bodies",
-            },
-            response=response,
-            scenario_id=scenario_id,
-            iterations=1,
-        )
+        return finish(response)
 
     return Probe(
         scenario_id=scenario_id,
