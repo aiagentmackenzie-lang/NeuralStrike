@@ -153,9 +153,11 @@ def save_baseline(directory: str | Path, report: RunReport) -> Path:
         "trial_indices": _trial_indices(report),
         "succeeded_severities": severities,
         "score": {
-            "asr": report.score.asr if report.score else None,
+            "asr": report.score.measured_asr if report.score else None,
             "coverage": report.score.coverage if report.score else None,
-            "risk_index": report.score.risk_index if report.score else None,
+            "risk_index": (
+                report.score.risk_index if report.score and report.score.measured_asr is not None else None
+            ),
         },
     }
     path = baseline_path(directory, report.meta.scenario_id)
@@ -180,10 +182,17 @@ def _load_baseline(path: Path) -> Mapping[str, Any]:
         data = json.loads(path.read_text(encoding="utf-8"))
     except OSError as exc:
         raise BaselineError(f"baseline could not be read: {path}: {exc}") from exc
+    except UnicodeError as exc:
+        raise BaselineError(f"baseline {path} is not valid UTF-8") from exc
     except json.JSONDecodeError as exc:
         raise BaselineError(f"baseline {path} is not valid JSON: {exc.msg}") from exc
     if not isinstance(data, dict) or "verdicts" not in data:
         raise BaselineError(f"baseline {path} missing 'verdicts' map")
+    if "trials" in data and (type(data["trials"]) is not int or data["trials"] < 1):
+        raise BaselineError(f"baseline {path} has invalid trial count")
+    context_types = {"scenario_id": str, "base_seed": int, "intensity": str, "comparison_identity": dict}
+    if any(key in data and type(data[key]) is not expected for key, expected in context_types.items()):
+        raise BaselineError(f"baseline {path} has invalid comparison metadata types")
     verdicts = data["verdicts"]
     if (
         not isinstance(verdicts, dict)
@@ -228,6 +237,10 @@ def _coverage_gaps(
 
 
 def _compatibility_issue(baseline: Mapping[str, Any], report: RunReport) -> str | None:
+    if baseline.get("scenario_id", report.meta.scenario_id) != report.meta.scenario_id:
+        return "baseline scenario identity mismatch; refusing to compare"
+    if baseline.get("base_seed", report.meta.base_seed) != report.meta.base_seed:
+        return "baseline seed mismatch; refusing to compare different trial controls"
     pinned = baseline.get("comparison_identity", {})
     current = report.meta.comparison_identity
     if (pinned or current) and (pinned != current or not current.get("comparable", False)):

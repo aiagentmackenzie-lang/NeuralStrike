@@ -659,8 +659,11 @@ class TestJudgeEnsembleFlag:
         assert result.exit_code == 0, result.stdout
         assert "trial 0: inconclusive" in result.stdout
 
-    def test_auto_insufficient_reachable_fails_closed(self, runner: CliRunner) -> None:
-        from neuralstrike.core.exceptions import ConfigError
+    def test_auto_insufficient_reachable_fails_closed(
+        self,
+        runner: CliRunner,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
         from neuralstrike.core.runtime import ResolvedModels
 
         resolved = ResolvedModels(
@@ -696,9 +699,10 @@ class TestJudgeEnsembleFlag:
                     "/tmp/ns-adaptive-test",
                 ],
             )
-        assert result.exit_code != 0
-        assert isinstance(result.exception, ConfigError)
-        assert ">= 2 reachable judge models" in str(result.exception)
+        assert result.exit_code == 3
+        assert "incomplete" in result.output
+        assert "ConfigError" in caplog.text
+        assert "requires >= 2 reachable judge models" in caplog.text
 
     def test_auto_selects_primary_plus_reachable_fallbacks(
         self, runner: CliRunner, tmp_path, monkeypatch

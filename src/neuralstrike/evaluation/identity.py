@@ -14,6 +14,7 @@ from dataclasses import asdict, is_dataclass
 from typing import Any
 
 from neuralstrike import __version__
+from neuralstrike.evaluation.controls import SEED_DERIVATION
 from neuralstrike.oracles.base import combine_oracle_results
 
 
@@ -52,6 +53,7 @@ def comparison_identity(adapter: Any, scenario: Any, tools: Any, oracles: Any) -
         oracle_digest = None
     return {
         "schema_version": 1,
+        "seed_derivation": SEED_DERIVATION,
         "engine_version": __version__,
         "oracle_composition_digest": configuration_digest(inspect.getsource(combine_oracle_results)),
         "scenario_digest": configuration_digest(scenario),

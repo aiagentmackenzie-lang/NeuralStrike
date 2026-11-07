@@ -33,6 +33,7 @@ def test_outage_exit_and_report_health(tmp_path, command, policy, expected):
         result = CliRunner().invoke(app, args)
     assert result.exit_code == expected, result.output
     assert "incomplete" in result.output.lower()
+    assert "unavailable" in result.output.lower()
     if command == "corpus":
         sarif = json.loads((tmp_path / "report.sarif").read_text())
         assert sarif["runs"][0]["invocations"][0]["executionSuccessful"] is False
@@ -89,7 +90,7 @@ def test_report_health_is_independent_of_vulnerability():
     scenario = load_corpus_dir()[0]
     for verdict, status in [(Verdict.SUCCEEDED, "complete"), (Verdict.INCONCLUSIVE, "incomplete")]:
         trial = TrialResult(0, 0, 0, verdict, EvidenceFidelity.VERBAL, scenario_id=scenario.id)
-        report = RunReport(RunMeta("run", scenario.id, 0, 1, 0, 0.7, "t"), trials=(trial,))
+        report = RunReport(RunMeta("run", scenario.id, 0, 1, 0, 0.7, "2026-11-06T00:00:00Z"), trials=(trial,))
         run = build_corpus_run(
             scenarios=[scenario],
             reports=[report],
@@ -115,3 +116,32 @@ def test_wrong_trial_index_is_incomplete_without_baseline():
     trial = TrialResult(99, 0, 0, Verdict.RESISTED, EvidenceFidelity.VERBAL, scenario_id="s")
     report = RunReport(RunMeta("r", "s", 0, 1, 0, 0.7, "t"), trials=(trial,))
     assert assessment_health([report]).exit_code("vuln") == 3
+
+
+@pytest.mark.parametrize("policy", ["vuln", "regression", "never"])
+def test_corrupt_baseline_is_runtime_exit_not_vulnerability(tmp_path, policy):
+    from neuralstrike.evaluation.baseline import baseline_path
+
+    baseline_path(tmp_path, "asi01-scan").write_text("{invalid JSON")
+    with patch.object(OpenAIEndpointAdapter, "query", AsyncMock(return_value=SutResponse(text="fixture"))):
+        result = CliRunner().invoke(
+            app,
+            [
+                "scan",
+                "--adapter",
+                "openai",
+                "--url",
+                "http://fixture",
+                "--model",
+                "fixture",
+                "--baseline-dir",
+                str(tmp_path),
+                "--fail-on",
+                policy,
+                "--run-dir",
+                str(tmp_path / "runs"),
+            ],
+        )
+    assert result.exit_code == 3, result.output
+    assert "baseline" in result.output.lower()
+    assert "valid json" in result.output.lower()

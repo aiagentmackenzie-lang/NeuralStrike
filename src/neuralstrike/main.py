@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Coroutine, Sequence
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, NoReturn, TypeVar
 
 import typer
 from rich.console import Console
@@ -17,6 +17,7 @@ from neuralstrike.safety import HITLGate, classify_intent
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from neuralstrike.evaluation.runner import RunReport
     from neuralstrike.integrations.neuralguard import NeuralGuardScreen
     from neuralstrike.integrations.scarletai import ExerciseTelemetry
 from neuralstrike.scope import load_scope
@@ -50,11 +51,36 @@ _T = TypeVar("_T")
 
 def _run_value(coro: Coroutine[Any, Any, _T]) -> _T:
     """Run an async coroutine with consistent error reporting; return its value."""
+    from neuralstrike.evaluation.baseline import BaselineError
+
     try:
         return asyncio.run(coro)
+    except typer.Exit:
+        raise
+    except BaselineError as exc:
+        console.print(f"[red]Baseline error:[/red] {exc}")
+        raise typer.Exit(3) from exc
     except ValidationError as exc:
         console.print(f"[red]Validation error:[/red] {exc}")
         raise typer.Exit(1) from exc
+    except Exception as exc:
+        logger.error("Assessment runtime error (%s): %s", type(exc).__name__, exc)
+        console.print("[red]Assessment runtime error; assessment incomplete.[/red]")
+        raise typer.Exit(3) from exc
+
+
+def _finish_assessment(reports: Sequence[RunReport], fail_on: str, *, selected: int) -> NoReturn:
+    """One standalone policy boundary for every existing --fail-on command."""
+    from neuralstrike.evaluation.health import assessment_health
+
+    health = assessment_health(reports, selected=selected)
+    code = health.exit_code(fail_on)
+    console.print(f"Assessment {health.status} (exit {code}; fail-on={fail_on})")
+    console.print(
+        f"  selected trials={health.selected} attempted={health.attempted} "
+        f"conclusive={health.conclusive} execution errors={health.errors}"
+    )
+    raise typer.Exit(code)
 
 
 def _apply_verbosity(quiet: bool, verbose: bool) -> None:
@@ -881,6 +907,7 @@ def evaluate(
                 )
             )
             raise typer.Exit(result.exit_code)
+        _finish_assessment([report], fail_on, selected=trials)
 
     _run(run())
 
@@ -1018,12 +1045,7 @@ def scan(
                 )
             )
             raise typer.Exit(result.exit_code)
-        from neuralstrike.evaluation.health import assessment_health
-
-        health = assessment_health([report])
-        code = health.exit_code(fail_on)
-        console.print(f"Assessment {health.status} (exit {code}; fail-on={fail_on})")
-        raise typer.Exit(code)
+        _finish_assessment([report], fail_on, selected=trials)
 
     _run(run())
 
@@ -1958,16 +1980,11 @@ def corpus(
         write_private_artifact(out_path, content)
         console.print(Panel(corpus_run_summary(corpus_run), title=f"Corpus run → {path}"))
         console.print(
-            f"[green]{len(scenarios)} scenarios · {corpus_run.overall_total} trials · "
-            f"ASR {corpus_run.asr:.2%} · coverage {corpus_run.coverage:.2%}[/green]"
+            f"{len(scenarios)} scenarios · {corpus_run.overall_total} trials · "
+            f"ASR {corpus_run.asr_display} · coverage {corpus_run.coverage:.2%}"
         )
 
-        from neuralstrike.evaluation.health import assessment_health
-
-        health = assessment_health(reports, selected=len(scenarios) * trials)
-        code = health.exit_code(fail_on)
-        console.print(f"Assessment {health.status} (exit {code}; fail-on={fail_on})")
-        raise typer.Exit(code)
+        _finish_assessment(reports, fail_on, selected=len(scenarios) * trials)
 
     _run(run())
 
@@ -1979,8 +1996,9 @@ def load_corpus_dir_safe() -> Sequence[object]:
 
 
 def corpus_run_summary(run: object) -> str:
+    asr = getattr(run, "asr_display", "unavailable")
     return (
-        f"ASR={getattr(run, 'asr', 0.0):.2%} coverage={getattr(run, 'coverage', 0.0):.2%}\n"
+        f"ASR={asr} coverage={getattr(run, 'coverage', 0.0):.2%}\n"
         f"succeeded={getattr(run, 'overall_succeeded', 0)} resisted={getattr(run, 'overall_resisted', 0)} "
         f"inconclusive={getattr(run, 'overall_inconclusive', 0)} total={getattr(run, 'overall_total', 0)}"
     )
@@ -2157,6 +2175,7 @@ def pack(
                 worst_exit = max(worst_exit, result.exit_code)
             console.print(Panel(f"pack gate -> exit {worst_exit}", title=f"fail-on={fail_on}"))
             raise typer.Exit(worst_exit)
+        _finish_assessment(reports, fail_on, selected=len(probes) * trials)
 
     _run(run())
 

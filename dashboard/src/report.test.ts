@@ -40,3 +40,87 @@ describe("parseReport", () => {
     expect(report.findings).toHaveLength(0);
   });
 });
+
+describe("measurement integrity", () => {
+  it("preserves unavailable ASR and incomplete health", () => {
+    const report = parseReport(JSON.stringify({
+      health: { status: "incomplete" },
+      overall: { total: 1, succeeded: 0, resisted: 0, inconclusive: 1, asr: null, coverage: 0 },
+      scenario_results: [{ id: "s", counts: { total: 1, inconclusive: 1 },
+        trials: [{ verdict: "inconclusive", reason: "outage" }] }],
+    }));
+    expect(report.summary.asr).toBeNull();
+    expect((report as any).health).toBe("incomplete");
+  });
+
+  it("uses the actual later violation's evidence", () => {
+    const report = parseReport(JSON.stringify({
+      overall: { total: 2, succeeded: 1, resisted: 1, inconclusive: 0, asr: .5, coverage: 1 },
+      scenario_results: [{ id: "s", counts: { total: 2, succeeded: 1, resisted: 1 }, trials: [
+        { trial_index: 0, verdict: "resisted", reason: "first benign", evidence_quote: "benign" },
+        { trial_index: 1, verdict: "succeeded", reason: "later violation", evidence_quote: "actual breach" },
+      ] }],
+    }));
+    expect(report.findings[0].reason).toBe("later violation");
+    expect(report.findings[0].evidence).toBe("actual breach");
+  });
+
+  it("uses canonical SARIF counts rather than oracle rows", () => {
+    const report = parseReport(JSON.stringify({ $schema: "sarif", version: "2.1.0", runs: [{
+      invocations: [{ executionSuccessful: false, properties: {
+        health: { status: "incomplete" }, overall: { total: 1, succeeded: 0, resisted: 0,
+          inconclusive: 1, asr: null, coverage: 0 }, overall_asr: null, overall_coverage: 0,
+      } }],
+      results: [{ ruleId: "s", level: "none", message: { text: "oracle resisted" } },
+                { ruleId: "s", level: "note", message: { text: "oracle inconclusive" } }],
+    }] }));
+    expect(report.summary.total).toBe(1);
+    expect(report.summary.resisted).toBe(0);
+    expect(report.summary.inconclusive).toBe(1);
+    expect(report.summary.asr).toBeNull();
+    expect((report as any).health).toBe("incomplete");
+  });
+
+  it("does not show an empty scenario as resisted", () => {
+    const report = parseReport(JSON.stringify({ overall: { total: 0 },
+      scenario_results: [{ id: "omitted", counts: { total: 0 }, trials: [] }] }));
+    expect(report.findings[0].verdict).toBe("inconclusive");
+    expect(report.summary.asr).toBeNull();
+  });
+});
+
+for (const name of ["canonical-mixed.json", "canonical-mixed.sarif"]) {
+  it(`round-trips the Python mixed-trial export ${name}`, () => {
+    const report = parseReport(fixture(name));
+    expect(report.summary.total).toBe(3);
+    expect(report.summary.succeeded).toBe(1);
+    expect(report.summary.resisted).toBe(1);
+    expect(report.summary.inconclusive).toBe(1);
+    expect(report.summary.asr).toBe(.5);
+    expect(report.summary.coverage).toBeCloseTo(2 / 3);
+    expect(report.health).toBe("incomplete");
+    expect(report.countBasis).toBe("trials");
+    expect(report.selectedTrials).toBe(3);
+    expect(report.findings).toHaveLength(1);
+    expect(report.findings[0].verdict).toBe("succeeded");
+    expect(report.findings[0].evidence).toContain("actual violation");
+  });
+}
+
+describe("invalid or unsupported reports", () => {
+  it("rejects unknown canonical schema versions", () => {
+    expect(() => parseReport(JSON.stringify({ schema_version: 999, overall: { total: 0 }, scenario_results: [] })))
+      .toThrow(/schema/i);
+  });
+  it("rejects corrupt metric types", () => {
+    expect(() => parseReport(JSON.stringify({ overall: { total: "1", resisted: 1 }, scenario_results: [] })))
+      .toThrow(/count|metric/i);
+  });
+  it("treats an unrecognized SARIF verdict as inconclusive", () => {
+    const report = parseReport(JSON.stringify({ $schema: "sarif", version: "2.1.0", runs: [{
+      results: [{ ruleId: "s", level: "warning", properties: { verdict: "unknown" } }],
+    }] }));
+    expect(report.findings[0].verdict).toBe("inconclusive");
+    expect(report.summary.asr).toBeNull();
+  });
+});

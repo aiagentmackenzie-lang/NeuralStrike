@@ -896,7 +896,7 @@ class TestMissingBranchCoverage:
         assert result.exit_code == 3, result.output
         assert "Could not list" in result.output
 
-    def test_pack_local_happy(self, runner: CliRunner, tmp_path: Path) -> None:
+    def test_pack_empty_report_is_incomplete(self, runner: CliRunner, tmp_path: Path) -> None:
         probe_file = tmp_path / "probes.json"
         probe_file.write_text('[{"id":"p1","goal":"g","payload":"p","category":"c"}]')
         fake_report = type("R", (), {})()
@@ -913,7 +913,9 @@ class TestMissingBranchCoverage:
                 "asr": 0.0,
             },
         )()
-        fake_report.meta = type("M", (), {"run_id": "r1", "intensity": "standard", "scenario_id": "p1"})()
+        fake_report.meta = type(
+            "M", (), {"run_id": "r1", "intensity": "standard", "scenario_id": "p1", "trials": 1}
+        )()
         fake_report.trials = []
         with (
             patch("neuralstrike.packs.local.LocalPack.probes", return_value=[object()]),
@@ -934,7 +936,8 @@ class TestMissingBranchCoverage:
                 ],
                 env={"NEURALSTRIKE_SKIP_REACHABILITY_CHECK": "true"},
             )
-        assert result.exit_code == 0, result.output
+        assert result.exit_code == 3, result.output
+        assert "incomplete" in result.output
 
     def test_adaptive_happy(self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
         from neuralstrike.core.config import settings
@@ -953,6 +956,7 @@ class TestMissingBranchCoverage:
                 "coverage": 1.0,
                 "total": 1,
                 "asr": 0.0,
+                "measured_asr": 0.0,
                 "asr_ci_low": 0.0,
                 "asr_ci_high": 0.0,
                 "risk_index": 0.0,

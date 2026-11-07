@@ -32,3 +32,9 @@ The rejected unconstrained candidate included an OpenAI major upgrade. The final
 security-constrained resolution retains OpenAI 2.54.0; fixture
 checks cover local interfaces, not live provider compatibility. Independent
 protocol/provider validation and container validation remain outstanding.
+
+Follow-up report verification added `pypdf>=6` to development dependencies only,
+resolved to 7.0.0 with hashes. Independent parsing exposed an actual blank-PDF
+bug missed by prefix/xref string checks. Runtime dependencies are unchanged.
+A complete refreshed dev-lock audit returned exit 0, no known vulnerabilities;
+no advisory ignores were added. See the progress ledger for final test gates.

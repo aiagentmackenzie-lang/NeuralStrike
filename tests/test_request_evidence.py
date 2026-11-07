@@ -218,5 +218,6 @@ def test_adapters_close_when_evidence_persistence_raises(tmp_path, command):
         patch.object(OpenAIEndpointAdapter, "close", AsyncMock()) as close,
     ):
         result = CliRunner().invoke(app, args)
-    assert result.exit_code != 0
+    assert result.exit_code == 3, result.output
+    assert "incomplete" in result.output.lower()
     close.assert_awaited_once()

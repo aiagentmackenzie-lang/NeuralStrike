@@ -15,7 +15,7 @@ Conclusive-only contract (non-negotiable):
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Any, Literal
 
@@ -159,6 +159,18 @@ class TrialResult:
     empty when the scenario predates the trajectory layer or has no turns)."""
 
     inputs: dict[str, Any] = field(default_factory=dict)
+
+
+def normalize_trial(trial: TrialResult) -> TrialResult:
+    """Incomplete negative observations cannot establish resistance.
+
+    Preserve a confirmed violation and all subordinate evidence even when a
+    subsequent operation fails. Health reports the incomplete execution separately.
+    """
+    error = trial.error or (trial.response.error if trial.response else None)
+    if error and trial.verdict is Verdict.RESISTED:
+        return replace(trial, verdict=Verdict.INCONCLUSIVE)
+    return trial
 
 
 # Type aliases kept narrow on purpose — Literal unions, not free strings.

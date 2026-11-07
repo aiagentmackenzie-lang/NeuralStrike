@@ -32,12 +32,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from neuralstrike.evaluation.controls import trial_controls
+from neuralstrike.evaluation.controls import SEED_DERIVATION, trial_controls
 from neuralstrike.evaluation.scoring import ScoreCard, score_trials
 from neuralstrike.evaluation.verdict import (
     EvidenceFidelity,
     TrialResult,
     Verdict,
+    normalize_trial,
 )
 from neuralstrike.utils.logging import get_logger
 
@@ -64,7 +65,9 @@ def _derive_seed(base_seed: int, trial_index: int) -> int:
     would break replayability.
     """
     digest = hashlib.blake2b(f"{base_seed}:{trial_index}".encode(), digest_size=8).digest()
-    return int.from_bytes(digest, "big", signed=False)
+    # Provider JSON bindings commonly accept signed 64-bit integers. Keep the
+    # low 63 bits so every recorded seed is also a valid nonnegative wire seed.
+    return int.from_bytes(digest, "big", signed=False) & ((1 << 63) - 1)
 
 
 def _run_id(base_seed: int, scenario_id: str) -> str:
@@ -156,6 +159,7 @@ class RunMeta:
     a baseline with no recorded intensity skips the check."""
 
     comparison_identity: dict[str, Any] = field(default_factory=dict)
+    seed_derivation: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -170,6 +174,7 @@ class RunMeta:
             "attacker_model": self.attacker_model,
             "intensity": self.intensity,
             "comparison_identity": self.comparison_identity,
+            "seed_derivation": self.seed_derivation,
         }
 
 
@@ -237,11 +242,11 @@ def _score_to_dict(score: ScoreCard | None) -> dict[str, Any] | None:
         "resisted": score.resisted,
         "succeeded": score.succeeded,
         "inconclusive": score.inconclusive,
-        "asr": score.asr,
-        "asr_ci_low": score.asr_ci_low,
-        "asr_ci_high": score.asr_ci_high,
+        "asr": score.measured_asr,
+        "asr_ci_low": score.asr_ci_low if score.measured_asr is not None else None,
+        "asr_ci_high": score.asr_ci_high if score.measured_asr is not None else None,
         "coverage": score.coverage,
-        "risk_index": score.risk_index,
+        "risk_index": score.risk_index if score.measured_asr is not None else None,
         "flaky": score.flaky,
         "per_category": dict(score.per_category),
         "per_category_counts": {k: list(v) for k, v in score.per_category_counts.items()},
@@ -329,6 +334,7 @@ class TrialRunner:
             attacker_model=attacker_model,
             intensity=intensity,
             comparison_identity=probe.comparison_identity,
+            seed_derivation=SEED_DERIVATION,
         )
 
         run_path: Path | None = None
@@ -386,6 +392,7 @@ class TrialRunner:
                     error=f"{type(exc).__name__}: {exc}",
                     scenario_id=probe.scenario_id,
                 )
+            trial = normalize_trial(trial)
             results.append(trial)
             if run_path is not None:
                 path = run_path / f"trial-{trial_index}.json"

@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 from neuralstrike.evaluation.runner import RunReport
-from neuralstrike.evaluation.verdict import Verdict
+from neuralstrike.evaluation.verdict import Verdict, normalize_trial
 
 
 @dataclass(frozen=True)
@@ -40,7 +40,7 @@ class AssessmentHealth:
 
 def assessment_health(reports: Sequence[RunReport], *, selected: int | None = None) -> AssessmentHealth:
     expected = sum(r.meta.trials for r in reports) if selected is None else selected
-    trials = [t for report in reports for t in report.trials]
+    trials = [normalize_trial(t) for report in reports for t in report.trials]
     conclusive = sum(t.verdict is not Verdict.INCONCLUSIVE for t in trials)
     errors = sum(bool(t.error or (t.response and t.response.error)) for t in trials)
     valid_indices = all(

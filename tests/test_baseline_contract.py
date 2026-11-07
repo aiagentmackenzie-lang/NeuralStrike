@@ -122,3 +122,53 @@ def test_extra_trials_cannot_disagree_with_declared_plan(tmp_path):
     current = report(Verdict.RESISTED)
     current = replace(current, trials=(*current.trials, replace(current.trials[0], trial_index=1)))
     assert compare_baseline(tmp_path, current).exit_code == 3
+
+
+def test_non_utf8_baseline_is_an_explicit_baseline_error(tmp_path):
+    from neuralstrike.evaluation.baseline import BaselineError, baseline_path
+
+    baseline_path(tmp_path, "suite").write_bytes(b"\xff")
+    with pytest.raises(BaselineError):
+        compare_baseline(tmp_path, report(Verdict.RESISTED))
+
+
+@pytest.mark.parametrize("trials", ["1", 1.5, False, 0, -1])
+def test_invalid_declared_baseline_trials_cannot_bypass_comparability(tmp_path, trials):
+    import json
+
+    from neuralstrike.evaluation.baseline import BaselineError
+
+    path = save_baseline(tmp_path, report(Verdict.RESISTED))
+    payload = json.loads(path.read_text())
+    payload["trials"] = trials
+    path.write_text(json.dumps(payload))
+    with pytest.raises(BaselineError):
+        compare_baseline(tmp_path, report(Verdict.RESISTED))
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [("base_seed", False), ("intensity", 42), ("scenario_id", []), ("comparison_identity", None)],
+)
+def test_invalid_comparison_metadata_is_not_ignored(tmp_path, field, value):
+    import json
+
+    from neuralstrike.evaluation.baseline import BaselineError
+
+    path = save_baseline(tmp_path, report(Verdict.RESISTED))
+    payload = json.loads(path.read_text())
+    payload[field] = value
+    path.write_text(json.dumps(payload))
+    with pytest.raises(BaselineError):
+        compare_baseline(tmp_path, report(Verdict.RESISTED))
+
+
+@pytest.mark.parametrize("field,value", [("base_seed", 99), ("scenario_id", "different-suite")])
+def test_different_recorded_comparison_context_is_not_comparable(tmp_path, field, value):
+    import json
+
+    path = save_baseline(tmp_path, report(Verdict.RESISTED))
+    payload = json.loads(path.read_text())
+    payload[field] = value
+    path.write_text(json.dumps(payload))
+    assert compare_baseline(tmp_path, report(Verdict.RESISTED)).exit_code == 3

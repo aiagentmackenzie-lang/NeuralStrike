@@ -17,13 +17,14 @@ be surfaced, not dropped):
   with ``level: "none"`` so a reviewer sees the full picture, but not a
   finding).
 
-One rule per scenario (ruleId = scenario.id); one result per trial-finding.
+One rule per scenario (ruleId = scenario.id); one result per canonical trial.
 The rule's ``driver`` is NeuralStrike; the run's tool version is recorded.
 """
 
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 from typing import Any
 
 from neuralstrike import __version__
@@ -109,6 +110,7 @@ def _result_for(scenario_result: ScenarioResult, trial: Any) -> dict[str, Any]:
             }
         ],
         "properties": {
+            "findings": [asdict(finding) for finding in trial.findings],
             "verdict": trial.verdict.value,
             "fidelity": trial.fidelity.value,
             "severity": trial.severity,
@@ -119,7 +121,7 @@ def _result_for(scenario_result: ScenarioResult, trial: Any) -> dict[str, Any]:
             "delivery_channels": list(trial.delivery_channels),
         },
         "partialFingerprints": {
-            "primary": f"{s.id}:{trial.trial_index}:{trial.oracle_id}:{trial.verdict.value}",
+            "primary": f"{s.id}:{trial.trial_index}",
         },
     }
 
@@ -159,7 +161,7 @@ def to_sarif(run: CorpusRun) -> str:
                                 f"OWASP Agentic ASI01-10 + LLM01-10 corpus run; "
                                 f"adapter={run.adapter}; target={run.target}; "
                                 f"seed={run.base_seed}; "
-                                f"ASR={run.asr:.4f}; coverage={run.coverage:.4f}; "
+                                f"ASR={run.asr_display}; coverage={run.coverage:.4f}; "
                                 f"succeeded={run.overall_succeeded}; "
                                 f"inconclusive={run.overall_inconclusive}; "
                                 f"resisted={run.overall_resisted}."
@@ -173,12 +175,15 @@ def to_sarif(run: CorpusRun) -> str:
                         "executionSuccessful": run.health.complete if run.health else False,
                         "startTimeUtc": run.started_at,
                         "properties": {
+                            "artifact_policy": run.artifact_policy,
                             "health": run.health.to_dict() if run.health else None,
                             "base_seed": run.base_seed,
                             "trials_per_scenario": run.trials_per_scenario,
                             "adapter": run.adapter,
                             "target": run.target,
-                            "overall_asr": run.asr,
+                            "report_schema_version": 2,
+                            "overall": run.overall(),
+                            "overall_asr": run.measured_asr,
                             "overall_coverage": run.coverage,
                         },
                     }

@@ -51,3 +51,28 @@ async def test_identical_configuration_is_comparable_across_run_ids(tmp_path):
     assert compare_baseline(tmp_path, second).exit_code == 0
     assert first.meta.run_id != second.meta.run_id
     assert "SYNTHETIC_SECRET" not in str(first.meta.to_dict())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["model", "endpoint", "iterations"])
+async def test_model_name_probe_context_cannot_change_silently(tmp_path, change):
+    from neuralstrike.core.llm_manager import LLMManager
+    from neuralstrike.evaluation.probes import canary_extraction_probe
+
+    async def run(changed=False):
+        manager = LLMManager(
+            base_url="http://other" if changed and change == "endpoint" else "http://fixture"
+        )
+        manager.call_local = AsyncMock(return_value="synthetic benign answer")
+        probe = canary_extraction_probe(
+            "model-b" if changed and change == "model" else "model-a",
+            llm=manager,
+            judge_model=None,
+            max_iterations=2 if changed and change == "iterations" else 1,
+        )
+        return await TrialRunner(run_dir=None).run(probe)
+
+    save_baseline(tmp_path, await run())
+    result = compare_baseline(tmp_path, await run(changed=True))
+    assert result.exit_code == 3
+    assert not result.fixed

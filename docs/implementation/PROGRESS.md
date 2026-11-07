@@ -208,3 +208,130 @@ Phase 0 still needs all-format trial/health consistency, unavailable-ASR display
 full private/sanitized artifact policy enforcement, and independent compatible
 implementation checks before signoff. Full integrity-checked offline replay is
 still outstanding. Passing local fixtures is not proof of real-target efficacy.
+
+## 2026-11-06 — canonical report outcomes and independent compatibility checks
+
+Started from clean main at `6b20430`. Continued Phase 0 without external targets,
+paid inference, release publication or integration requirements.
+
+### Demonstrated defects and fixes
+
+- **Reports counted oracle rows as trials.** The new mixed-oracle/mixed-trial
+  regression failed: three trials became five exported rows. JSON, SARIF, JUnit,
+  Markdown and PDF now derive one outcome per trial, retaining every oracle in
+  subordinate `findings`. The representative evidence matches the canonical
+  verdict. Dashboard evidence comes from the actual later failing trial.
+- **Incomplete negatives were presented as resistance.** A Resisted result with a
+  response error failed the new regression. One normalization rule now makes that
+  Inconclusive across runner persistence, scoring, health and reporting. Confirmed
+  Succeeded evidence survives later errors; health remains incomplete.
+- **Zero observations looked like a measurement.** New tests failed on ASR 0.0.
+  Exports now use null for unavailable ASR, CI bounds and risk. Human summaries
+  display unavailable. Existing numerical ScoreCard API fields remain compatible;
+  `measured_asr` distinguishes absent measurement. Reports identify private raw
+  evidence explicitly and never label it sanitized.
+- **Dashboard interpretation failed four initial regressions**, then three more
+  invalid-input cases: missing ASR became zero, first-trial evidence was reused,
+  SARIF oracle rows inflated counts, empty scenarios became Resisted, unsupported
+  schemas were accepted, corrupt numeric types were accepted and unknown verdicts
+  became Resisted. These now pass. Shared Python-generated JSON/SARIF fixtures
+  round-trip through the dashboard. Legacy row counts are labeled; recorded and
+  selected trial counts and assessment health are visible.
+- **Mislabeled scope passed reporting.** A same-length wrong-scenario report was
+  accepted before the new test. Reporting now validates scenario alignment,
+  duplicate selected IDs and declared trial plans. It uses recorded start times
+  instead of inventing a new start at report export.
+- **JUnit execution outages were merely skips.** Transport-error Inconclusive
+  trials now emit native errors, ordinary inconclusive observations remain
+  skipped, and confirmed violations remain failures. Canonical counts and health
+  remain separate metadata; do not use skipped counts as a security policy.
+- **Corrupt baseline errors used the vuln exit.** Three CLI policy regressions
+  failed before mapping BaselineError to runtime exit 3. Non-UTF-8 baseline data
+  and invalid explicit trial counts also failed six regressions; both now reject
+  explicitly. Other runtime failures (including evidence I/O) return 3 with
+  incomplete status and redacted diagnostic logging; explicit policy exits remain
+  untouched. Legacy argument validation behavior is preserved.
+- **evaluate/pack still ignored standalone fail-on.** Ten new contract cases
+  initially failed (policy enforcement or absent health status). All four existing
+  fail-on command surfaces now share one standalone policy boundary. `never`
+  preserves incomplete health while exiting 0; vuln enforces observed violations
+  without requiring a baseline. Regression without a baseline retains the earlier
+  documented legacy informational vulnerability policy while enforcing health.
+
+### Additional defects found through independent checks
+
+1. **Unsigned provider seeds were rejected by a real implementation.** Local
+   Ollama 0.40.14, already-installed qwen3.5:2b (2.74 GB local artifact), rejected
+   the former derived seed 11143675092282761955 with HTTP 400: its request decoder
+   requires a signed integer. Two new regressions failed before the fix. Seed
+   derivation is now `blake2b-63bit-v2`, versioned in actual runner metadata and
+   modern comparison identity. Old modern baselines require a trusted rerun.
+   The same synthetic retrieved-document request then returned HTTP 200 using
+   seed 1920303055427986147. **The assessment remained Inconclusive, with zero
+   conclusive coverage.** This proves this request's interoperability, not
+   resistance, a real breach, or model efficacy. Both calls were bounded by
+   HTTP/trial deadlines and used harmless canary handlers; no real credentials.
+
+   Private immutable local evidence:
+   - Before: `runs/run-13f1273d84c74a03b6e1f5b656e21bad/`, manifest SHA-256
+     `54cbd0fd5eb4d2c6dab9a263ecad9ba1bcab44acf6d366fcea0bd8fd7a7995cb`.
+   - After: `runs/run-a292c27a613b4bbda81e14359f582dff/`, manifest SHA-256
+     `cddc7d6e433148869c0de9d97e3229c1566f69b556cce25c739c60e76ffb627b`.
+   These ignored raw evidence directories were preserved, not published.
+
+2. **PDF headers passed tests while actual pages were blank.** Poppler reported
+   a page-tree child with the wrong type and rendered a 1x1 image. The writer
+   emitted streams where page references pointed and referenced an incorrect
+   font object. Three independent parser/wrapping regressions failed first.
+   Page/content/font references are corrected; Courier text stays within page
+   margins, long unbroken evidence wraps, and pages have footers. pypdf 7.0.0 now
+   verifies single/multiple page trees and extracts all 80 trial receipts. It is
+   a development-only dependency; production PDF output remains dependency-free.
+   Final Poppler render was visually inspected: Letter-size page, legible
+   counts/outcomes/annotations, visible late error, private handling label,
+   correct recorded start and footer. Poppler emitted a local fontconfig warning;
+   the rendering and independent parsing succeeded.
+
+### Compatibility and remaining scope
+
+See REPORT_CONTRACT.md for schema 2 and seed migration. Retain old evidence and
+rebuild baselines from a trusted reference, not from the candidate under test.
+The optional NeuralGuard/Scarlet integrations remain optional. No hosted service,
+new attack family, dashboard redesign or release publication was introduced.
+
+Phase 0 signoff is still open. Remaining work includes a final acceptance audit
+of artifact destinations outside scan/corpus and failure-path/protocol coverage.
+Integrity-checked offline replay, exact causal/provenance binding, authenticated
+remote build identity and broad protocol conformance remain later-phase work.
+Outgoing history/marker records prove the sent surface, not that an application
+consumed a document. A sanitized sharing exporter is not implemented. The one
+independent endpoint check does not establish universal provider support.
+
+Final verification results are recorded below after the frozen-source gates.
+
+### Resumed checkpoint verification
+
+Work was paused at the user's request for API limits and resumed on request.
+All local source/evidence remained intact; nothing from the paused increment had
+been committed or pushed. Additional pre-pause checks bound baseline context to
+recorded seed/scenario and rejected invalid comparison metadata types. Runtime
+I/O failures now use exit 3 while preserving original diagnostics and cleanup.
+
+Model-name canary probes also failed three scope regressions before their fix:
+changing model, local endpoint or iteration budget could silently compare.
+They now carry configuration identity and explicit planned input/canary data.
+Provider-resolved endpoints that cannot be identified are non-comparable; no
+request envelope is claimed for these legacy model-name calls.
+
+Resumed frozen-source gates (Python 3.12.14 refreshed hash-pinned environment):
+- `python -m pytest --cov=neuralstrike --cov-fail-under=85`: **1108 passed,
+  2 skipped, 90.90% coverage**.
+- `ruff check src tests`: passed; mypy: passed, 131 source files.
+- Dashboard: 12 tests passed; production build passed.
+- Wheel/sdist rebuilt; isolated runtime-lock environment reinstalled the wheel
+  outside the source checkout. Offline wheel smoke result is checked before push.
+- `git diff --check`: passed. No release or external-target testing.
+
+Next acceptance work: imported benchmark pack comparisons still need explicit
+full-plan/target binding; audit private artifact destinations and complete the
+remaining negative-path checks. These are not Phase 0 signoff or efficacy claims.

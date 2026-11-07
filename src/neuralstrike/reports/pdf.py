@@ -12,15 +12,16 @@ works on a fresh clone with no extra install.
 PDF structure (one object stream is not used; objects are emitted directly):
 
 - Header: ``%PDF-1.4``.
-- A font object (Helvetica, a standard 14 PDF font — no embedding needed).
+- A font object (Courier, a standard 14 PDF font — no embedding needed).
 - One page object per ~50 lines, with a content stream of ``BT`` text.
 - A cross-reference table + trailer.
 
-The implementation is small and well-tested; PDF is a strict format but the
-text-only subset is genuinely simple.
+Independent parser and rendering checks verify page, content and font references.
 """
 
 from __future__ import annotations
+
+import textwrap
 
 from neuralstrike.reports.model import CorpusRun
 
@@ -42,27 +43,16 @@ def _escape_pdf_text(text: str) -> str:
 
 def _wrap_line(line: str, max_chars: int) -> list[str]:
     """Wrap a long line to ``max_chars`` columns (best-effort, on word boundaries)."""
-    if len(line) <= max_chars:
-        return [line]
-    out: list[str] = []
-    cur = ""
-    for word in line.split(" "):
-        if not cur:
-            cur = word
-        elif len(cur) + 1 + len(word) <= max_chars:
-            cur = cur + " " + word
-        else:
-            out.append(cur)
-            cur = word
-    if cur:
-        out.append(cur)
-    return out
+    return textwrap.wrap(
+        line, width=max_chars, drop_whitespace=False, break_long_words=True, break_on_hyphens=False
+    ) or [""]
 
 
 def _lines_for_run(run: CorpusRun, max_chars: int) -> list[str]:
     lines: list[str] = [
         "NeuralStrike Corpus Run Report",
         "",
+        "Handling:          Private raw evidence; not sanitized for sharing.",
         f"Assessment health: {run.health.status if run.health else 'unavailable'}",
         f"Started:           {run.started_at}",
         f"Adapter:           {run.adapter}",
@@ -72,7 +62,7 @@ def _lines_for_run(run: CorpusRun, max_chars: int) -> list[str]:
         f"Overall:           {run.overall_total} trials  "
         f"({run.overall_succeeded} succeeded / {run.overall_resisted} resisted / "
         f"{run.overall_inconclusive} inconclusive)",
-        f"ASR (conclusive):  {run.asr:.2%}",
+        f"ASR (conclusive):  {run.asr_display}",
         f"Coverage:          {run.coverage:.2%}",
         "",
         "Legend: SUCCEEDED = exploitable | RESISTED | INCONCLUSIVE = coverage gap (surfaced)",
@@ -105,12 +95,23 @@ def _lines_for_run(run: CorpusRun, max_chars: int) -> list[str]:
                 f"    trial {t.trial_index} {t.oracle_id}: {t.verdict.value.upper()} "
                 f"[{t.fidelity.value}] {ev}"
             )
+            if t.error:
+                lines.append(f"      Execution error: {t.error}")
+            for finding in t.findings:
+                lines.append(
+                    f"      Oracle annotation {finding.oracle_id}: {finding.verdict.value} "
+                    f"{'(advisory) ' if finding.advisory else ''}{finding.reason}"
+                )
         lines.append("")
     return lines
 
 
 def to_pdf(run: CorpusRun, *, max_chars: int = 95) -> bytes:
     """Render the corpus run as a valid PDF 1.4 document (bytes)."""
+    if max_chars < 1:
+        raise ValueError("max_chars must be positive")
+    # Courier has a fixed 0.6-em character advance. Never exceed the page margins.
+    max_chars = min(max_chars, int((_PAGE_WIDTH - 2 * _MARGIN) / (_FONT_SIZE * 0.6)))
     raw_lines = _lines_for_run(run, max_chars)
     # Wrap every logical line to the page width.
     wrapped: list[str] = []
@@ -132,8 +133,9 @@ def to_pdf(run: CorpusRun, *, max_chars: int = 95) -> bytes:
     kids = b" ".join(f"{pid} 0 R".encode() for pid in page_obj_ids)
     objects.append(f"<< /Type /Pages /Kids [{kids.decode()}] /Count {len(pages)} >>".encode())
 
+    font_obj_id = 3 + 2 * len(pages)
     # Object 3..: page + content stream pairs.
-    for page_lines in pages:
+    for page_number, page_lines in enumerate(pages, start=1):
         page_obj_id = len(objects) + 1
         content_obj_id = page_obj_id + 1
         # Build the content stream: BT / font / leading / Td per line.
@@ -148,17 +150,22 @@ def to_pdf(run: CorpusRun, *, max_chars: int = 95) -> bytes:
                 stream_parts.append("T*")
             stream_parts.append(f"({_escape_pdf_text(ln)}) Tj")
         stream_parts.append("ET")
+        stream_parts.append(
+            f"BT /F1 {_FONT_SIZE} Tf 1 0 0 1 {_MARGIN} {_MARGIN / 2} Tm "
+            f"(Page {page_number} of {len(pages)}) Tj ET"
+        )
         stream = "\n".join(stream_parts).encode("latin-1", errors="replace")
-        objects.append(f"<< /Length {len(stream)} >>\nstream\n".encode() + stream + b"\nendstream")
         objects.append(
             f"<< /Type /Page /Parent 2 0 R "
             f"/MediaBox [0 0 {_PAGE_WIDTH} {_PAGE_HEIGHT}] "
-            f"/Resources << /Font << /F1 4 0 R >> >> "
+            f"/Resources << /Font << /F1 {font_obj_id} 0 R >> >> "
             f"/Contents {content_obj_id} 0 R >>".encode()
         )
 
-    # Font object (Helvetica is one of the standard 14 — no embedding).
-    objects.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
+        objects.append(f"<< /Length {len(stream)} >>\nstream\n".encode() + stream + b"\nendstream")
+
+    # Courier is a standard 14 font; fixed-width text needs no embedded font.
+    objects.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>")
 
     # Assemble the file with a byte-offset xref table.
     out = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")

@@ -29,6 +29,11 @@ class LLMManager:
         self._client: ollama.AsyncClient | None = None
 
     @property
+    def base_url(self) -> str:
+        """Configured local endpoint identity, without instantiating a client."""
+        return self._base_url
+
+    @property
     def ollama_client(self) -> ollama.AsyncClient:
         """Lazily-instantiated async Ollama client (created on first use)."""
         if self._client is None:

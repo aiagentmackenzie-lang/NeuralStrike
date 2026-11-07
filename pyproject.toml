@@ -47,6 +47,7 @@ dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",
     "pytest-cov>=5",
+    "pypdf>=6",  # independent PDF structure/text verification (development only)
     "ruff>=0.6",
     "mypy>=1.11",
     "types-PyYAML>=6",

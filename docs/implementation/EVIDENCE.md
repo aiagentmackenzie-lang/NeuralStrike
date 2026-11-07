@@ -28,3 +28,9 @@ target configuration. Remote application builds are not authenticated by these
 digests. Different configuration or missing modern identity is non-comparable;
 regenerate old scan baselines with the current command before using them to gate.
 Programmatic legacy baselines remain readable but lack those assurances.
+
+Schema 2 reports separate canonical trial outcomes from oracle annotations and
+label their content private/raw. Zero-conclusive exported measurements are null;
+human summaries say unavailable. See REPORT_CONTRACT.md for the migration and
+JUnit semantics. Seed derivation is now versioned and bounded to signed-64-bit
+provider compatibility; old modern baseline identities require a trusted rerun.

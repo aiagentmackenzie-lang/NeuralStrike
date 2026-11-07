@@ -7,6 +7,8 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 
+SEED_DERIVATION = "blake2b-63bit-v2"
+
 
 @dataclass(frozen=True)
 class TrialControls:

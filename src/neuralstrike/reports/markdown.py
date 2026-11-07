@@ -60,6 +60,17 @@ def _scenario_section(sr: ScenarioResult) -> str:
             f"| {t.fidelity.value} | {escape_md(ev or reason)} |"
         )
     lines.append("")
+    for t in sr.trials:
+        if t.error:
+            lines.append(f"Execution error for trial {t.trial_index}: {escape_md(t.error)}")
+        if t.findings:
+            lines.append(f"Oracle annotations for trial {t.trial_index} (do not count as trials):")
+            for finding in t.findings:
+                lines.append(
+                    f"- `{finding.oracle_id}`: {finding.verdict.value} "
+                    f"{'(advisory) ' if finding.advisory else ''}{escape_md(finding.reason)}"
+                )
+            lines.append("")
     if s.mitigations:
         lines.append("**Mitigations:**")
         for m in s.mitigations:
@@ -77,6 +88,7 @@ def to_markdown(run: CorpusRun) -> str:
     header = [
         "# NeuralStrike Corpus Run Report",
         "",
+        "- **Handling:** Private raw evidence; not sanitized for sharing.",
         f"- **Assessment health:** {run.health.status if run.health else 'unavailable'}",
         f"- **Started:** {run.started_at}",
         f"- **Adapter:** `{run.adapter}` — target: `{run.target}`",
@@ -84,7 +96,7 @@ def to_markdown(run: CorpusRun) -> str:
         f"- **Overall:** {run.overall_total} trials — "
         f"{run.overall_succeeded} succeeded · {run.overall_resisted} resisted · "
         f"{run.overall_inconclusive} inconclusive",
-        f"- **ASR (conclusive-only):** {run.asr:.2%} · **Coverage:** {run.coverage:.2%}",
+        f"- **ASR (conclusive-only):** {run.asr_display} · **Coverage:** {run.coverage:.2%}",
         "",
         "Verdict legend: ❌ Succeeded (exploitable) · ✅ Resisted · "
         "⚠️ Inconclusive (coverage gap, surfaced not dropped).",

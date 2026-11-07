@@ -21,14 +21,16 @@ Design notes:
 
 from __future__ import annotations
 
-import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, replace
+from datetime import datetime, timezone
 from typing import Any
 
+from neuralstrike import __version__
 from neuralstrike.corpus.loader import Scenario
 from neuralstrike.evaluation.health import AssessmentHealth, assessment_health
 from neuralstrike.evaluation.runner import RunReport
-from neuralstrike.evaluation.verdict import EvidenceFidelity, Verdict
+from neuralstrike.evaluation.scoring import score_trials
+from neuralstrike.evaluation.verdict import EvidenceFidelity, Finding, Verdict, normalize_trial
 from neuralstrike.reports.compliance import ControlRef, crosswalk
 
 __all__ = [
@@ -57,6 +59,7 @@ class TrialOutcome:
     delivery_channels: tuple[str, ...]
     response_text: str
     error: str | None
+    findings: tuple[Finding, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -97,22 +100,40 @@ class CorpusRun:
     coverage: float
     health: AssessmentHealth | None = None
 
+    @property
+    def artifact_policy(self) -> dict[str, Any]:
+        return {"classification": "private-raw", "sanitized": False}
+
+    @property
+    def measured_asr(self) -> float | None:
+        return self.asr if self.overall_succeeded + self.overall_resisted else None
+
+    @property
+    def asr_display(self) -> str:
+        return f"{self.asr:.2%}" if self.measured_asr is not None else "unavailable"
+
+    def overall(self) -> dict[str, Any]:
+        return {
+            "total": self.overall_total,
+            "succeeded": self.overall_succeeded,
+            "resisted": self.overall_resisted,
+            "inconclusive": self.overall_inconclusive,
+            "asr": self.measured_asr,
+            "coverage": self.coverage,
+        }
+
     def to_dict(self) -> dict[str, Any]:
         return {
+            "artifact_policy": self.artifact_policy,
             "health": self.health.to_dict() if self.health else None,
             "started_at": self.started_at,
             "base_seed": self.base_seed,
             "trials_per_scenario": self.trials_per_scenario,
             "adapter": self.adapter,
             "target": self.target,
-            "overall": {
-                "total": self.overall_total,
-                "succeeded": self.overall_succeeded,
-                "resisted": self.overall_resisted,
-                "inconclusive": self.overall_inconclusive,
-                "asr": self.asr,
-                "coverage": self.coverage,
-            },
+            "schema_version": 2,
+            "tool_version": __version__,
+            "overall": self.overall(),
             "scenario_results": [_scenario_to_dict(s) for s in self.scenario_results],
         }
 
@@ -155,6 +176,7 @@ def _trial_to_dict(t: TrialOutcome) -> dict[str, Any]:
         "delivery_channels": list(t.delivery_channels),
         "response_text": t.response_text,
         "error": t.error,
+        "findings": [asdict(finding) for finding in t.findings],
     }
 
 
@@ -168,48 +190,29 @@ def worst_verdict(verdicts: tuple[Verdict, ...]) -> Verdict:
 
 def _trial_outcomes(report: RunReport) -> tuple[TrialOutcome, ...]:
     out: list[TrialOutcome] = []
-    for t in report.trials:
-        # A trial may carry multiple findings; surface each as its own outcome
-        # line so the report cites per-oracle evidence. When there are no
-        # findings (e.g. a victim-error Inconclusive), surface one outcome
-        # with the trial's verdict.
-        if not t.findings:
-            out.append(
-                TrialOutcome(
-                    scenario_id=t.scenario_id,
-                    trial_index=t.trial_index,
-                    seed=t.seed,
-                    verdict=t.verdict,
-                    fidelity=t.fidelity,
-                    evidence_quote=None,
-                    reason=t.error or "no oracle findings",
-                    severity="info",
-                    oracle_id="(none)",
-                    advisory=False,
-                    delivery_channels=_delivery_channels_from_trial(t),
-                    response_text=t.response.text if t.response else "",
-                    error=t.error,
-                )
+    for original in report.trials:
+        t = normalize_trial(original)
+        matching = [f for f in t.findings if not f.advisory and f.verdict is t.verdict]
+        primary = matching[0] if matching else None
+        error = t.error or (t.response.error if t.response else None)
+        out.append(
+            TrialOutcome(
+                scenario_id=t.scenario_id,
+                trial_index=t.trial_index,
+                seed=t.seed,
+                verdict=t.verdict,
+                fidelity=t.fidelity,
+                evidence_quote=primary.evidence_quote if primary else None,
+                reason=primary.reason if primary else error or "aggregate trial outcome; see oracle findings",
+                severity=primary.severity if primary else "info",
+                oracle_id=primary.oracle_id if primary else "(aggregate)",
+                advisory=False,
+                delivery_channels=_delivery_channels_from_trial(t),
+                response_text=t.response.text if t.response else "",
+                error=error,
+                findings=t.findings,
             )
-            continue
-        for f in t.findings:
-            out.append(
-                TrialOutcome(
-                    scenario_id=t.scenario_id,
-                    trial_index=t.trial_index,
-                    seed=t.seed,
-                    verdict=f.verdict,
-                    fidelity=f.fidelity,
-                    evidence_quote=f.evidence_quote,
-                    reason=f.reason,
-                    severity=f.severity,
-                    oracle_id=f.oracle_id,
-                    advisory=f.advisory,
-                    delivery_channels=_delivery_channels_from_trial(t),
-                    response_text=t.response.text if t.response else "",
-                    error=t.error,
-                )
-            )
+        )
     return tuple(out)
 
 
@@ -225,6 +228,19 @@ def _delivery_channels_from_trial(t: Any) -> tuple[str, ...]:
                 if isinstance(ch, str) and ch not in channels:
                     channels.append(ch)
     return tuple(channels)
+
+
+def _recorded_start(reports: list[RunReport], override: str | None) -> str:
+    values = [override] if override is not None else [report.meta.started_at for report in reports]
+    if not values:
+        return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    try:
+        timestamps = [datetime.fromisoformat(value.replace("Z", "+00:00")) for value in values]
+        if any(timestamp.utcoffset() is None for timestamp in timestamps):
+            raise ValueError("timezone missing")
+    except ValueError as exc:
+        raise ValueError("invalid run start timestamp; an explicit timezone is required") from exc
+    return min(timestamps).astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def build_corpus_run(
@@ -246,9 +262,23 @@ def build_corpus_run(
     if len(scenarios) != len(reports):
         raise ValueError(f"scenarios ({len(scenarios)}) and reports ({len(reports)}) must align by index")
 
+    if len({scenario.id for scenario in scenarios}) != len(scenarios):
+        raise ValueError("duplicate scenario identities in assessment plan")
+    for scenario, report in zip(scenarios, reports, strict=True):
+        if report.meta.scenario_id != scenario.id or any(t.scenario_id != scenario.id for t in report.trials):
+            raise ValueError(f"scenario/report identity mismatch for {scenario.id}")
+        if report.meta.trials != trials_per_scenario:
+            raise ValueError(f"scenario trial plan mismatch for {scenario.id}")
+
     overall_s = overall_r = overall_i = 0
     scenario_results: list[ScenarioResult] = []
-    for scenario, report in zip(scenarios, reports, strict=True):
+    for scenario, source_report in zip(scenarios, reports, strict=True):
+        normalized = tuple(normalize_trial(t) for t in source_report.trials)
+        report = replace(
+            source_report,
+            trials=normalized,
+            score=score_trials(normalized, category_of={scenario.id: scenario.owasp_category}),
+        )
         verdicts = tuple(t.verdict for t in report.trials)
         verdict = worst_verdict(verdicts)
         s = sum(1 for v in verdicts if v is Verdict.SUCCEEDED)
@@ -278,7 +308,7 @@ def build_corpus_run(
     coverage = (conclusive / total) if total else 0.0
 
     return CorpusRun(
-        started_at=started_at or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        started_at=_recorded_start(reports, started_at),
         base_seed=base_seed,
         trials_per_scenario=trials_per_scenario,
         adapter=adapter,
