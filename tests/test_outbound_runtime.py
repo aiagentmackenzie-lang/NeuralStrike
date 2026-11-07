@@ -187,7 +187,10 @@ def test_cli_request_budget_is_not_silently_ignored_for_graphs(tmp_path):
 
     result = CliRunner().invoke(app, ["corpus", "--max-requests", "1", "--run-dir", str(tmp_path / "runs")])
     assert result.exit_code != 0
-    assert "outbound limits currently require --adapter openai" in result.output
+    assert "outbound limits currently require" in result.output
+    from click import unstyle
+
+    assert "--adapter openai" in unstyle(result.output)
     assert not (tmp_path / "runs").exists()
 
 

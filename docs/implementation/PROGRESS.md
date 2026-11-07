@@ -914,3 +914,13 @@ commit can be verified without manufacturing a source change, read-only workflow
 permissions, and dashboard dependency installation with scripts disabled plus a
 plain-crypto-js lock check (workspace supply-chain instructions). Release workflow
 unchanged; no release dispatch. Hosted results will be recorded after completion.
+
+## 2026-11-07 — Hosted CI exposed unsupported Python floor
+
+First newly enabled hosted run: https://github.com/aiagentmackenzie-lang/NeuralStrike/actions/runs/42404554479
+failed on two demonstrated issues: Python 3.10 cannot install the existing
+`filelock>=4.2.1` security floor, and the CLI rejection assertion depended on
+Rich terminal wrapping/ANSI output. Raised declared minimum to Python 3.11,
+updated the matrix/documented support, and made the assertion independent of
+wrapping and ANSI styling. No security dependency downgrade. This intentionally
+ends the previously advertised but non-installable Python 3.10 support.

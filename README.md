@@ -10,7 +10,7 @@ and compliance controls so defenders can fix what actually breaks.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/aiagentmackenzie-lang/NeuralStrike/ci.yml?branch=main&label=CI)](https://github.com/aiagentmackenzie-lang/NeuralStrike/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.10%20%E2%80%93%203.14-3776AB?logo=python&logoColor=white)](pyproject.toml)
+[![Python](https://img.shields.io/badge/Python-3.11%20%E2%80%93%203.14-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-dashboard-3178C6?logo=typescript&logoColor=white)](dashboard/)
 [![Code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Type checked: mypy](https://img.shields.io/badge/type%20checked-mypy-1E4C74)](https://mypy-lang.org)
@@ -191,7 +191,7 @@ _Each scenario's `success_criteria` reference deterministic oracles (canary / fo
 
 ### Prerequisites
 
-- **Python 3.10 – 3.14**
+- **Python 3.11 – 3.14**
 - **Ollama** running locally for the Attacker/Judge brains:
   ```bash
   ollama pull deepseek-r1        # attacker
@@ -543,7 +543,7 @@ CI (`.github/workflows/ci.yml`) runs three jobs on every push and PR:
 
 | Job | What it does |
 |---|---|
-| **quality** | ruff + strict mypy + pytest with ≥85% coverage gate on Python 3.10, 3.12, 3.14 |
+| **quality** | ruff + strict mypy + pytest with ≥85% coverage gate on Python 3.11, 3.12, 3.14 |
 | **supply-chain** | Installs from hash-pinned lockfiles, runs `pip-audit`, generates a CycloneDX SBOM, and runs the fresh-clone smoke test |
 | **dashboard** | `npm ci`, report-parsing tests, production build |
 

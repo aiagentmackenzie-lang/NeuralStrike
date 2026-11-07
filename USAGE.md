@@ -670,7 +670,7 @@ All via environment with the `NEURALSTRIKE_` prefix or `.env`:
 
 ## 10. Quality gate & testing
 
-The same gate CI runs (`.github/workflows/ci.yml`) on Python 3.10 / 3.12 / 3.14:
+The same gate CI runs (`.github/workflows/ci.yml`) on Python 3.11 / 3.12 / 3.14:
 
 ```bash
 ruff check src tests
