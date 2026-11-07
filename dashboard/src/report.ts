@@ -225,8 +225,13 @@ export function parseReport(text: string): Report {
   } catch (err) {
     throw new Error(`Invalid JSON: ${err}`);
   }
-  if (data?.$schema && data.version === "2.1.0" && Array.isArray(data.runs)) return parseSarif(data);
-  if (data?.overall && Array.isArray(data.scenario_results)) return parseNeuralStrikeJson(data);
+  const nonAssessment = data?.security_assessment === false || [
+    "neuralstrike-mcp-inspection", "neuralstrike-target-preflight", "neuralstrike-share-summary",
+  ].includes(data?.kind);
+  if (!nonAssessment) {
+    if (data?.$schema && data.version === "2.1.0" && Array.isArray(data.runs)) return parseSarif(data);
+    if (data?.overall && Array.isArray(data.scenario_results)) return parseNeuralStrikeJson(data);
+  }
   return { ...provenance({}), format: "unknown", tool: "Unknown", version: "", health: "unavailable",
     countBasis: "legacy rows", selectedTrials: null, summary: emptySummary(), findings: [] };
 }

@@ -41,7 +41,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-mcp = ["uvicorn>=0.29", "fastapi>=0.110"]
+mcp = ["mcp==2.3.0", "uvicorn>=0.29", "fastapi>=0.110"]
 langgraph = ["langgraph>=0.2", "typing_extensions>=4.10"]
 dev = [
     "pytest>=8",

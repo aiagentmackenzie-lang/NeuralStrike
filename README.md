@@ -365,6 +365,11 @@ This is the part that makes results defensible:
   `--max-concurrent-requests`, `--max-total-tokens`). Token estimates may overshoot;
   unavailable provider cost is not reported as zero.
   See [Phase 2 scope and limits](docs/implementation/PHASE2_INTEROPERABILITY.md).
+- Modern MCP capability checks: `neuralstrike mcp-inspect --url URL` uses the
+  explicit 2026-07-28 profile; stdio is available through `--stdio-command`.
+  Discovery is read-only. `mcp-receipt DIRECTORY` verifies private evidence
+  offline. Completion is not a security verdict. See
+  [supported MCP profiles](docs/implementation/MCP_PROFILES.md).
 - **Baseline gating.** Save a baseline, then fail CI on regression:
   exit `0` pass · `1` vulnerability · `3` runtime error · `4` regression
   (regression outranks absolute vulnerabilities). Probe-profile (intensity)

@@ -200,15 +200,33 @@ lock after semaphore acquisition. Tests cover shared caps, tool continuations,
 unknown usage, post-response tool nonexecution, waiting-task cancellation,
 malformed usage, invalid configuration and actual CLI cross-scenario wiring.
 
+## Pinned modern MCP profile
+
+The optional maintained Python MCP SDK is pinned at 2.3.0. Modern
+`mcp-inspect` supports explicit 2026-07-28 stateless discovery over real stdio
+and Streamable HTTP; `mcp-receipt` validates its immutable capability receipts
+offline without the SDK. Independent stdlib and official SDK fixture checks cover
+JSON/SSE, synthetic auth, version/inventory failures, no automatic tool retries,
+request/rate controls and cancellation/cleanup failures. Execution is opt-in with
+a whole-plan validation boundary, not inferred from advertised tools.
+
+The existing `mcp-scan`/MCPHTTPAdapter API remains experimental legacy compatibility,
+now explicitly labeled as descriptor observations. Modern receipt completion is
+never a security verdict, and the dashboard does not score such receipts. See
+[MCP_PROFILES.md](MCP_PROFILES.md) for runnable commands, precise limits, unsupported
+features, evidence and lifecycle semantics. These tests establish a narrow local
+protocol profile, not complete MCP/OAuth conformance or customer-agent efficacy.
+
 ## Remaining Phase 2 gates
 
 The controlled LangGraph app gate now has runnable evidence. The master plan
-still requires pinned MCP stdio and declared HTTP revision profiles using
-appropriate maintained libraries; broader explicit hook/capability checks;
-outbound controls for remaining supported transports and complete in-flight
-partial-evidence preservation; reset/thread lifecycle and cleanup-failure verification; idempotency decisions
-for consequential actions; and versioned interoperability receipts across valid,
-invalid, timeout and authentication paths. Secret-store references are not yet
-implemented. A2A identity and other framework/protocol profiles remain
+now has a pinned, locally verified MCP stdio/HTTP profile. Phase 2 still requires
+remaining application reset/thread lifecycle and cleanup-failure cases, preservation
+of earlier observations when an OpenAI/graph trial times out in flight, and broader
+explicit hook/capability interoperability checks. Arbitrary application-owned
+resources and detached processes are not guaranteed cancellable. Credential/build/
+principal identity remains unverified beyond declared configuration and captured
+self-reports; the protocol receipts do not establish live remediation. Environment
+references are supported; secret-store adapters are optional and unimplemented. A2A identity and other framework/protocol profiles remain
 experimental. Provider usage/cost unavailable means unknown/estimated, not zero
 and not an absolute spend ceiling.

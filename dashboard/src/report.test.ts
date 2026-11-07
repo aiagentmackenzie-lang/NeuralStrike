@@ -183,3 +183,27 @@ it("shows selected SARIF scenarios without evidence while counting only recorded
   expect(missing?.reason).toContain("no committed trial evidence");
   expect(report.health).toBe("incomplete");
 });
+
+it("does not treat a completed MCP capability receipt as an assessment pass", () => {
+  const report = parseReport(JSON.stringify({
+    kind: "neuralstrike-mcp-inspection", schema_version: 1, status: "complete",
+    security_assessment: false, protocol_version: "2026-07-28", tool_names: ["read_account"],
+    tool_calls: [], cleanup: { clean: true },
+  }));
+  expect(report.format).toBe("unknown");
+  expect(report.health).toBe("unavailable");
+  expect(report.summary.asr).toBeNull();
+  expect(report.findings).toHaveLength(0);
+});
+
+it.each(["report.json", "report.sarif"])("rejects non-assessment provenance even with %s-shaped fields", (name) => {
+  const document = JSON.parse(fixture(name));
+  document.kind = "neuralstrike-mcp-inspection";
+  document.security_assessment = false;
+  document.status = "complete";
+  const report = parseReport(JSON.stringify(document));
+  expect(report.format).toBe("unknown");
+  expect(report.health).toBe("unavailable");
+  expect(report.summary.asr).toBeNull();
+  expect(report.findings).toHaveLength(0);
+});

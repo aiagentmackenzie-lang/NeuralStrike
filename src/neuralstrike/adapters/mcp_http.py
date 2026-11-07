@@ -1,20 +1,9 @@
-"""MCP-over-HTTP adapter — real JSON-RPC 2.0 introspection (Phase 1).
+"""Legacy JSON-RPC HTTP adapter — experimental compatibility profile.
 
-Replaces the :mod:`modules.recon.tool_enum` prompt-leak path: instead of
-asking the model to list its tools (a social-engineering prompt), this
-adapter speaks real MCP JSON-RPC 2.0 over HTTP and parses the actual
-``tools/list`` response. It also observes ``tools/call`` arguments and
-supports capability-injection into the ``tools/list`` response (the
-MCP-ITP / MCPoison descriptor-channel-injection class).
-
-Per Decision D3, the **stdio** transport lands in Phase 5; HTTP catches the
-dominant 2025-2026 MCP attack class (tool poisoning / shadow tools / rug
-pulls live in the ``tools/list`` descriptor text, which is transport-agnostic).
-
-This is an introspection + tool-call client, not a victim-model driver.
-The victim agent itself is driven by an endpoint adapter
-(:class:`~neuralstrike.adapters.openai_endpoint.OpenAIEndpointAdapter`); this
-adapter supplies the real tool inventory the agent is offered.
+This retains the existing 2025-06-18 handshake/fixture API. It is not a
+2026 transport, full Streamable HTTP conformance implementation or behavioral
+security pass. The separately pinned SDK-backed profile in mcp_protocol handles
+modern stdio/HTTP inspection; its discovery also remains read-only by default.
 """
 
 from __future__ import annotations

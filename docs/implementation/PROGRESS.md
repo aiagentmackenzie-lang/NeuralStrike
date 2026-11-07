@@ -780,3 +780,119 @@ Final runtime gates:
   and absence of the synthetic header credential in JSON artifacts. Scratch root:
   `/var/folders/zv/n4210phd6_d5lqqfx462c9gw0000gn/T/neuralstrike-phase2-runtime-wheel-8yxp36u_`.
 - No hosted CI result, external provider compatibility or security efficacy claim.
+
+## 2026-11-07 — Phase 2: pinned modern MCP stdio/HTTP and honest capability receipts
+
+Started from clean main fa8b895. Reconciled the master-plan MCP requirements with
+the legacy hard-coded 2025 handshake and current official SDK/specification. The
+new profile is explicitly **2026-07-28**, backed by optional MCP SDK **2.3.0**.
+The legacy HTTP adapter/API remains experimental compatibility, not a modern
+protocol implementation. No application rewrite or unrelated work was included.
+
+Implemented:
+- `mcp-inspect`: explicit modern discovery over bounded real stdio or exact HTTP
+  endpoints, JSON and finite SSE. Performs actual server/discover even though a
+  pinned SDK mode has adopted placeholder state. Requires advertised version/tools
+  support; never auto-negotiates down to a 2025 initialization/session lifecycle.
+- Read-only default. An exact JSON execution plan is required for selected tool
+  calls; unique advertised names, all arguments and supported input/output schemas
+  are checked before any call. Explicit execution_order survives sorted JSON.
+  The low-level SDK dispatch bypasses its high-level input-required retry driver.
+  No sampling, elicitation, MRTR continuation or automatic retry is performed.
+- Reuse shared admission/rate/concurrency controls across discovery/pages/calls.
+  Bound accepted bytes, pages, tools, records and artifact sizes. Refused/partial
+  inventory or calls remain incomplete; unknown target-internal cost/tokens are
+  null/unavailable, never measured zero or a promised spend ceiling.
+- Exact HTTP URL/method authorization at transport dispatch; no userinfo/query/
+  fragment credentials, proxy inheritance or redirects (including self-redirects).
+  Header values are excluded. Explicit environment references supply credentials.
+- POSIX stdio executes trusted local argv directly, without a shell or default
+  credential environment. Bounds lines before parsing, omits stderr, owns its
+  private process group and records graceful/forced/failed/unreaped cleanup.
+  Cancellation commits available evidence, cleans up and propagates.
+- Track actual resource-close success separately from a client's CLOSED state.
+  Failed stdin close still proceeds to reaping. Failed/unreapable resource close,
+  ordinary surviving descendants and forced shutdown cannot appear clean/complete.
+- Unique private mcp-UUID directories, atomic 0600 files, running→committed hash
+  manifests, frozen plan/target description, exact bounded observations, usable
+  and raw inventory, version/self-report metadata, attempted calls and safe error
+  types/RPC codes. No server build, principal or remote effect attestation claim.
+- `mcp-receipt` performs data-only offline validation, including exact inventories,
+  hashes, schema/state, plan order and contradictory complete-status checks.
+  It imports neither the target nor the protocol SDK. This is capability evidence,
+  not a canonical security replay/rescore bundle or a confirmed security fix.
+- Dashboard provenance guard rejects non-assessment/capability documents even
+  when JSON/SARIF-shaped report fields are present. Legacy scan JSON is labeled
+  descriptor-only/experimental; its existing command/title contract is preserved.
+- Independent stdlib-only protocol fixture plus a separately runnable official-SDK
+  server example. No NeuralStrike imports in either target implementation.
+
+Failing-first evidence / bounded-support decisions:
+- New profile/CLI tests first failed because the implementations were absent;
+  `/tmp/neuralstrike-phase2-mcp-red.log` and `...-cli-red.log`.
+- Candidate regressions demonstrated repeated self-redirect dispatch, loss of
+  execution order through sorted JSON, descriptor omission after the SDK's
+  required filtering, and rehashed contradictory 'complete' receipts. Logs:
+  `...-redirect-red.log`, `...-plan-red.log`, `...-filter-red.log`,
+  `...-receipt-red.log` (prefix `/tmp/neuralstrike-phase2-mcp`).
+- Controlled lifecycle failures demonstrated an unbounded close after failed
+  reaping, ordinary child survival after parent exit, exit-vs-signal race,
+  pipe-close failure skipping reaping and CLOSED-state false cleanup success.
+  Logs: `...-cleanup-red.log`, `...-descendant-red.log`, `...-exit-race-red.log`,
+  `...-pipe-close-red.log`, `...-http-close-red.log`. These are controlled local
+  reproductions, not claims about historical customer incidents.
+- SDK logging printed a private synthetic value echoed in an invalid descriptor
+  (`...-sdk-logging-red.log`). SDK diagnostics are now opaque in the task context,
+  including its generic 'client' logger; private raw evidence remains unchanged
+  and SDK logging outside the profile remains normal. No real-key exposure claim.
+- Regex/reference/composition/header-annotation schema execution is deliberately
+  outside this bounded profile, not asserted to be a validated exploit in every
+  excluded construct. Discovery preserves the originals. The SDK first rejected
+  missing modern cache/result fields in the independent fixture; the fixture was
+  corrected rather than weakening protocol validation.
+- Two dashboard tests failed when a capability document carried full assessment-
+  shaped fields (`...-dashboard-red.log`); provenance now outranks shape inference.
+  The first full Python run caught a legacy title-contract change; retained
+  'MCP poison scan' with an experimental qualifier and reran the full gate.
+
+Final local gates:
+- Python: **1393 passed, 2 skipped, 91.66% coverage**, 44.06s;
+  `/tmp/neuralstrike-phase2-mcp-frozen-tests.log`. Optional base58/real NeuralGuard
+  skips remain unverified integrations. Focused MCP/compatibility: 37 passed.
+- `ruff check src tests examples/mcp_profile`: pass. `mypy src`: pass, 142 files.
+- Dashboard: **22 tests pass**, TypeScript/production build pass.
+- Both hash-lock pip-audit gates pass with no known vulnerabilities/ignores:
+  runtime 80 distributions, dev 140. Five additions only; no existing version
+  changes/removals. CycloneDX SBOM generated and additions verified. See
+  DEPENDENCY_REVIEW.md; advisory cleanliness is not code security or efficacy.
+- Wheel/sdist rebuilt in `/tmp/neuralstrike-phase2-mcp-final-dist`. Installed
+  existing/new dev locks with hashes into the isolated wheel runtime and
+  reinstalled the wheel without dependency resolution. Compared **147 packaged
+  source/data files** against the checkout: zero mismatches.
+- Installed CLI from `/tmp`: real official-SDK stdio discovery, immutable rerun,
+  explicit one-call execution, authenticated HTTP discovery all exit 0; wrong
+  synthetic credential, stdio timeout and exhausted request budget exit 3.
+  Portable copied receipt verifies offline; corruption exits 3. Original bytes
+  unchanged. Actual 0600 permissions, protocol/server version, unknown/null cost,
+  cleanup/reaping and non-assessment flags checked. Fresh offline smoke exits 0.
+- Fresh installed-wheel receipt verification also passed with SDK imports and
+  socket connections prohibited. Script/log:
+  `/tmp/neuralstrike-phase2-mcp-wheel-verify.py` and `...-wheel-verification.log`.
+  Scratch root:
+  `/var/folders/zv/n4210phd6_d5lqqfx462c9gw0000gn/T/neuralstrike-phase2-mcp-accepted-wheel-048xvy5i`.
+  Source manifest SHA-256:
+  `c8ca4277fb3674c0eaae5a396b9104ffd3c9663e215918c7a05d815dbe68b821`.
+
+No cloud inference, external-target exercise, release, optional fleet-service
+activation or new public listener was performed. Servers were controlled loopback
+fixtures/subprocesses, using synthetic credentials only. No hosted CI, other OS/
+Python version matrix or independent efficacy conclusion is inferred.
+
+Phase 2 remains open for application reset/thread lifecycle cases and preservation
+of earlier observations when OpenAI/graph trial cancellation occurs in flight.
+MCP OAuth/extensions/legacy sessions and detached/uninterruptible native workloads
+remain outside the verified profile. Environment references are supported;
+secret-store adapters are optional/unimplemented. Credential/build/principal
+identity is declared/self-reported, not authenticated by these receipts. Detailed
+commands/limits: MCP_PROFILES.md and PHASE2_INTEROPERABILITY.md. Coverage is not
+security efficacy. Raw MCP sharing is not implemented; retain private originals.

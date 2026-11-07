@@ -3080,6 +3080,121 @@ def exec_context(
 # --- Phase 5 protocol + identity coverage ----------------------------------
 
 
+@app.command("mcp-inspect")
+def mcp_inspect(
+    url: str | None = typer.Option(None, help="Exact authorized HTTP MCP endpoint (no redirects)."),
+    stdio_command: str | None = typer.Option(
+        None, help="Trusted local executable; never run through a shell."
+    ),
+    stdio_arg: list[str] | None = typer.Option(None, help="Executable argument (repeatable)."),
+    stdio_env: list[str] | None = typer.Option(
+        None, help="Explicit child NAME=SOURCE_ENV reference (repeatable)."
+    ),
+    cwd: str | None = typer.Option(None, help="Trusted local stdio working directory."),
+    target_api_key_env: str | None = typer.Option(
+        None, help="Environment variable containing HTTP bearer token."
+    ),
+    protocol_version: str = typer.Option(
+        "2026-07-28", help="Explicit supported protocol revision; no downgrade."
+    ),
+    execution_plan: str | None = typer.Option(
+        None, help="Explicit JSON map of authorized tool names to arguments."
+    ),
+    timeout: float = typer.Option(
+        10.0, min=0.01, help="Overall operation deadline; cleanup may add bounded time."
+    ),
+    max_response_bytes: int = typer.Option(1024 * 1024, min=1, max=16 * 1024 * 1024),
+    max_requests: int = typer.Option(64, min=1, help="Shared RPC admission cap across discovery/list/calls."),
+    requests_per_minute: float | None = typer.Option(None, min=0.001, help="Shared RPC rate limit."),
+    run_dir: str = typer.Option("runs", help="Private immutable MCP inspection receipt root."),
+    scope_file: str | None = typer.Option(None, help="Rules-of-engagement target scope file."),
+) -> None:
+    """Read-only pinned MCP discovery over HTTP or stdio; no security verdict.
+
+    Tool execution requires an exact --execution-plan. Each selected tool is
+    dispatched once, without retries or input-required continuation. Starting a
+    stdio server executes trusted local code; this is not a process sandbox.
+    """
+    from importlib.metadata import PackageNotFoundError, version
+    from pathlib import Path
+
+    from neuralstrike.adapters.preflight import environment_credential
+    from neuralstrike.evaluation.mcp_receipt import MCPReceiptError, load_mcp_inspection
+    from neuralstrike.utils.json import strict_json
+
+    try:
+        if version("mcp") != "2.3.0":
+            raise typer.BadParameter("this MCP profile requires neuralstrike[mcp] with mcp==2.3.0")
+    except PackageNotFoundError:
+        raise typer.BadParameter("install neuralstrike[mcp] to use this optional profile") from None
+    from neuralstrike.adapters.mcp_protocol import MCPTarget, inspect_mcp
+
+    environment: dict[str, str] = {}
+    try:
+        for reference in stdio_env or []:
+            name, separator, source = reference.partition("=")
+            if not separator or not name or not source or name in environment:
+                raise ValueError("stdio environment references require unique NAME=SOURCE_ENV")
+            environment[name] = environment_credential(source) or ""
+        target = MCPTarget(
+            url=url,
+            command=stdio_command,
+            args=tuple(stdio_arg or []),
+            env=environment,
+            cwd=cwd,
+            bearer_token=environment_credential(target_api_key_env),
+            protocol_version=protocol_version,
+        )
+        plan = None
+        if execution_plan:
+            with Path(execution_plan).open("rb") as stream:
+                data = stream.read(65537)
+            if len(data) > 65536:
+                raise ValueError("execution plan exceeds 64 KiB")
+            plan = strict_json(data)
+            if not isinstance(plan, dict):
+                raise ValueError("execution plan must be a JSON object")
+    except (ValueError, OSError) as exc:
+        # Local configuration errors only; don't print raw JSON or credentials.
+        raise typer.BadParameter(f"invalid MCP configuration ({type(exc).__name__})") from None
+    _apply_scope(scope_file, url or stdio_command or "", "MCP capability inspection")
+    root = _run_value(
+        inspect_mcp(
+            target,
+            run_dir=run_dir,
+            timeout=timeout,
+            max_response_bytes=max_response_bytes,
+            execution_plan=plan, max_requests=max_requests, requests_per_minute=requests_per_minute,
+        )
+    )
+    try:
+        receipt = load_mcp_inspection(root)
+    except MCPReceiptError:
+        console.print("[red]MCP evidence incomplete or invalid.[/red]")
+        raise typer.Exit(3) from None
+    console.print(f"MCP capability receipt: {root}")
+    console.print(
+        f"Status: {receipt['status']}; tools observed: {len(receipt['tool_names'])}; "
+        f"calls attempted: {len(receipt['tool_calls'])}. No security verdict."
+    )
+    raise typer.Exit(0 if receipt["status"] == "complete" else 3)
+
+
+@app.command("mcp-receipt")
+def mcp_receipt(
+    directory: str = typer.Argument(..., help="Committed MCP capability receipt directory."),
+) -> None:
+    """Verify a capability receipt offline; never contacts a target or loads its SDK."""
+    from neuralstrike.evaluation.mcp_receipt import MCPReceiptError, load_mcp_inspection
+
+    try:
+        receipt = load_mcp_inspection(directory)
+    except MCPReceiptError:
+        console.print("[red]MCP receipt invalid or corrupt.[/red]")
+        raise typer.Exit(3) from None
+    console.print(f"Verified MCP capability receipt: {receipt['status']}. No security verdict.")
+    raise typer.Exit(0 if receipt["status"] == "complete" else 3)
+
 @app.command()
 def mcp_scan(
     url: str = typer.Option(..., help="MCP server URL (http/https)."),
@@ -3336,6 +3451,10 @@ def _print_mcp_report(report: Any, *, json_output: bool) -> None:
         import json as _json
 
         obj = {
+            "profile": "legacy-jsonrpc-2025-06-18-experimental",
+            "security_assessment": False,
+            "evidence_semantics": "descriptor heuristics; no observed unauthorized tool execution",
+            "verdict": report.verdict.value,
             "manifest_hash": report.manifest_hash,
             "previous_hash": report.previous_hash,
             "drift_detected": report.drift_detected,
@@ -3345,16 +3464,16 @@ def _print_mcp_report(report: Any, *, json_output: bool) -> None:
                 for f in report.findings
             ],
         }
-        console.print(_json.dumps(obj, indent=2))
+        console.print(_json.dumps(obj, indent=2), markup=False, soft_wrap=True)
         return
-    color = "red" if report.verdict.value == "succeeded" else "green"
+    color = "red" if report.verdict.value == "succeeded" else "blue"
     console.print(
         Panel(
             f"manifest_hash={report.manifest_hash}\n"
             f"shadow_tools={sorted(report.shadow_tools)}\n"
             f"drift={report.drift_detected}\n"
             f"findings={len(report.findings)}",
-            title="MCP poison scan",
+            title="MCP poison scan (experimental legacy descriptors)",
             style=color,
         )
     )

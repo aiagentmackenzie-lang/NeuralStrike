@@ -38,3 +38,41 @@ resolved to 7.0.0 with hashes. Independent parsing exposed an actual blank-PDF
 bug missed by prefix/xref string checks. Runtime dependencies are unchanged.
 A complete refreshed dev-lock audit returned exit 0, no known vulnerabilities;
 no advisory ignores were added. See the progress ledger for final test gates.
+
+## MCP profile addition — 2026-11-07
+
+Added the maintained official Python MCP SDK to the optional `mcp` extra, pinned
+at **2.3.0** for the explicit 2026-07-28 profile. Reviewed the official migration/
+protocol documentation and actual installed APIs before implementation. The
+profile rejects automatic legacy negotiation; this does not claim complete SDK,
+OAuth or extension conformance.
+
+Regenerated both hashed locks with their existing compile commands, without
+`--upgrade`. A programmatic before/after comparison confirmed **zero existing
+version changes and zero removals**. Only these five distributions were added:
+
+| Distribution | Version | Reachability in this increment |
+|---|---|---|
+| mcp | 2.3.0 | Optional modern typed client/protocol engine; explicit local example server |
+| mcp-types | 2.3.0 | Revision-specific schemas and message validation; required exactly by SDK |
+| PyJWT | 2.15.1 | SDK OAuth/auth dependency; NeuralStrike's static bearer-reference path does not enable an OAuth flow |
+| python-multipart | 0.0.33 | SDK server-side dependency; no new public listener is launched by importing NeuralStrike |
+| sse-starlette | 3.7.0 | SDK HTTP server dependency; finite JSON/SSE interoperability tested locally |
+
+Actual HTTP transport remains httpx2 2.16.0 from the existing lock; no transport or
+OpenAI major upgrade was introduced. Existing fastapi/uvicorn extras remain.
+The server examples bind loopback and require explicit startup; telemetry/fleet
+integrations remain optional and were not activated.
+
+Both `pip-audit --desc --require-hashes ... --format json` gates returned exit 0:
+runtime **80 audited distributions / 0 vulnerability entries**, development
+**140 / 0**. No ignores were added. This is a current advisory-database result,
+not proof of code security or absence of undisclosed vulnerabilities.
+
+A CycloneDX environment SBOM was generated at
+`/tmp/neuralstrike-phase2-mcp-sbom.json`; all five additions were verified using
+normalized distribution names (the SBOM spells PyJWT with capitals). Reinstalled
+the new dev lock with hashes into the isolated wheel environment, then installed
+the rebuilt wheel with `--no-deps --reinstall`. Installed-wheel local stdio/HTTP,
+credential failure, timeout/budget, immutable rerun, offline/corrupt receipt and
+fresh smoke checks passed. See PROGRESS.md and MCP_PROFILES.md for scope/results.
