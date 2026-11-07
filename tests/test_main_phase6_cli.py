@@ -899,27 +899,18 @@ class TestMissingBranchCoverage:
     def test_pack_empty_report_is_incomplete(self, runner: CliRunner, tmp_path: Path) -> None:
         probe_file = tmp_path / "probes.json"
         probe_file.write_text('[{"id":"p1","goal":"g","payload":"p","category":"c"}]')
-        fake_report = type("R", (), {})()
-        fake_report.score = type(
-            "S",
-            (),
-            {
-                "headline": "ok",
-                "resisted": 1,
-                "succeeded": 0,
-                "inconclusive": 0,
-                "coverage": 1.0,
-                "total": 1,
-                "asr": 0.0,
-            },
-        )()
-        fake_report.meta = type(
-            "M", (), {"run_id": "r1", "intensity": "standard", "scenario_id": "p1", "trials": 1}
-        )()
-        fake_report.trials = []
+        from neuralstrike.evaluation.runner import Probe, RunMeta, RunReport
+        from neuralstrike.evaluation.scoring import score_trials
+        from neuralstrike.packs import PackProbe
+
+        fake_report = RunReport(
+            RunMeta("r1", "p1", 0, 1, 0, 0.7, "2026-11-06T00:00:00Z"),
+            trials=(),
+            score=score_trials([]),
+        )
         with (
-            patch("neuralstrike.packs.local.LocalPack.probes", return_value=[object()]),
-            patch("neuralstrike.packs.pack_probe_factory"),
+            patch("neuralstrike.packs.local.LocalPack.probes", return_value=[PackProbe("p1", "p", "g")]),
+            patch("neuralstrike.packs.pack_probe_factory", return_value=Probe("p1", "g", AsyncMock())),
             patch("neuralstrike.evaluation.runner.TrialRunner.run", AsyncMock(return_value=fake_report)),
         ):
             result = runner.invoke(

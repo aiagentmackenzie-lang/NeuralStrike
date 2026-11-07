@@ -151,3 +151,82 @@ def test_redaction_preserves_ordinary_formatting_and_disabled_mode():
     )
     assert RedactingFilter(enabled=False).filter(secret_record)
     assert "SYNTHETIC" in secret_record.getMessage()
+
+
+@pytest.mark.asyncio
+async def test_a2a_redirect_is_not_followed_before_destination_authorization():
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(302, headers={"Location": "https://elsewhere.invalid/agent-card.json"})
+
+    adapter = A2AAdapter(
+        "https://authorized.invalid",
+        bearer_token="SYNTHETIC_ORIGIN_TOKEN",
+        transport=httpx.MockTransport(handler),
+    )
+    try:
+        with pytest.raises(A2AError):
+            await adapter.send_message("fixture")
+        assert len(requests) == 1
+        assert requests[0].url.host == "authorized.invalid"
+    finally:
+        await adapter.close()
+
+
+@pytest.mark.asyncio
+async def test_a2a_cached_card_is_reauthorized_for_every_rpc():
+    from dataclasses import replace
+
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        if request.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "url": "https://authorized.invalid/rpc",
+                    "security": [["bearer"]],
+                    "securitySchemes": {"bearer": {"type": "http"}},
+                },
+            )
+        return httpx.Response(200, json={"result": {"ok": True}})
+
+    adapter = A2AAdapter(
+        "https://authorized.invalid",
+        bearer_token="SYNTHETIC_ORIGIN_TOKEN",
+        transport=httpx.MockTransport(handler),
+    )
+    try:
+        assert await adapter.send_message("fixture") == {"ok": True}
+        assert requests[-1].headers["Authorization"] == "Bearer SYNTHETIC_ORIGIN_TOKEN"
+        assert adapter.card is not None
+        adapter._card = replace(adapter.card, url="https://elsewhere.invalid/rpc")
+        with pytest.raises(A2AError, match="not authorized"):
+            await adapter.send_message("fixture")
+        assert len(requests) == 2
+    finally:
+        await adapter.close()
+
+
+@pytest.mark.asyncio
+async def test_a2a_client_cert_remains_origin_bound_even_when_destination_allowed():
+    from neuralstrike.adapters.a2a import AgentCard
+
+    requests = []
+    adapter = A2AAdapter(
+        "https://authorized.invalid",
+        client_cert=("synthetic-cert.pem", "synthetic-key.pem"),
+        allowed_origins=("https://elsewhere.invalid",),
+        transport=httpx.MockTransport(lambda request: requests.append(request) or httpx.Response(200)),
+    )
+    adapter._card = AgentCard(url="https://elsewhere.invalid/rpc")
+    try:
+        with pytest.raises(A2AError, match="client certificate"):
+            await adapter.send_message("fixture")
+        assert not requests
+        assert adapter._client is None  # rejected before TLS/client construction
+    finally:
+        await adapter.close()

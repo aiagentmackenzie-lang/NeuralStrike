@@ -110,6 +110,8 @@ def test_wrong_trial_indices_do_not_count_as_completed_coverage(tmp_path):
 
     path = save_baseline(tmp_path, report(Verdict.RESISTED))
     baseline = json.loads(path.read_text())
+    baseline.pop("schema_version")
+    baseline.pop("run_id")
     baseline.pop("trial_indices")  # legacy baseline cannot mask a malformed current plan
     path.write_text(json.dumps(baseline))
     current = report(Verdict.RESISTED)

@@ -34,3 +34,19 @@ label their content private/raw. Zero-conclusive exported measurements are null;
 human summaries say unavailable. See REPORT_CONTRACT.md for the migration and
 JUnit semantics. Seed derivation is now versioned and bounded to signed-64-bit
 provider compatibility; old modern baseline identities require a trusted rerun.
+
+Imported pack comparisons additionally bind the ordered selected probe plan,
+complete probe fields, model/local endpoint, iteration budget and judge identity.
+Changing `--limit` cannot reuse the comparison scope of the full plan. Duplicate
+probe IDs and portable baseline filename collisions are rejected before model
+setup. Pack judge decisions remain advisory benchmark evidence; recorded planned
+inputs do not establish provider delivery or an application boundary violation.
+
+New baseline snapshots declare schema 1, reference their source execution ID and
+use atomic mode-0600 writes. Declared schemas require their comparison metadata;
+unsupported versions are rejected. Unversioned legacy snapshots remain readable
+with their documented weaker guarantees. Replacing a baseline is an explicit
+reference update, not an immutable run-evidence write; retain trusted references.
+Smoke, NeuralGuard benchmark and purple-report JSON exports also use private
+atomic writes. This does not make optional integration state or raw bodies safe
+to publish.

@@ -335,3 +335,50 @@ Resumed frozen-source gates (Python 3.12.14 refreshed hash-pinned environment):
 Next acceptance work: imported benchmark pack comparisons still need explicit
 full-plan/target binding; audit private artifact destinations and complete the
 remaining negative-path checks. These are not Phase 0 signoff or efficacy claims.
+
+
+### Pack comparison and artifact acceptance checkpoint — 2026-11-06
+
+Demonstrated failures, fixed with regressions written first:
+
+- Pack comparisons accepted changed models, prompts and judge configuration;
+  a CLI baseline for two probes also accepted a one-probe selected plan. Full
+  selected-plan/configuration identities now reject those comparisons, with a
+  positive same-plan control. Duplicate IDs and portable filename collisions
+  are rejected before constructing the model manager.
+- Baseline writes were public and non-atomic, lacked source execution IDs, and
+  accepted unknown declared schemas. Snapshots now use private atomic writes and
+  schema 1, reject incomplete declared metadata, and preserve the reference on
+  simulated replacement failure. Genuine unversioned legacy compatibility stays.
+- Smoke, NeuralGuard benchmark and purple-report exports created mode-0644
+  files. Three failing synthetic CLI tests now pass with private atomic exports.
+  Optional integration calls were mocked; no service was activated.
+- Duplicate MCP inventories (server-provided or injected) caused an explicitly
+  selected tool to execute repeatedly. Two regressions failed first; ambiguous
+  inventories now fail before tools/call. An exact-name/arguments control proves
+  the authorized fixture executes once without similarly named or other tools.
+
+Additional existing A2A policy checks pass: redirects are not followed, cached
+card mutation is rejected before an additional authenticated request, and client
+certificates remain bound to their original origin. These are MockTransport /
+pre-request checks, not full mTLS interoperability claims.
+
+Frozen-source verification:
+- `/tmp/neuralstrike-phase0-venv/bin/python -m pytest --cov=neuralstrike
+  --cov-fail-under=85`: **1128 passed, 2 skipped, 91.82% coverage**;
+  log `/tmp/neuralstrike-resume-final-gates.log`.
+- Ruff passed; mypy passed (131 source files); `git diff --check` passed.
+- `uv build --out-dir /tmp/neuralstrike-phase0-final-dist`: wheel and sdist pass.
+  Existing setuptools license-metadata deprecation warnings remain.
+- Reinstalled rebuilt wheel into the isolated runtime-lock environment; from
+  `/tmp`, `neuralstrike smoke --out /tmp/neuralstrike-final-wheel-smoke
+  --format json` passed with three synthetic scenarios/trials, including the
+  deliberately vulnerable fixture. This verifies packaging, not efficacy.
+- Dashboard source unchanged since checkpoint fe683e0 (12 tests/build passed).
+  No dependency changes since the recorded clean hash-locked advisory audit.
+
+Phase 0 acceptance signoff remains open pending a consolidated requirements-to-
+evidence review. Later-phase offline integrity/replay, sanitized sharing,
+authenticated remote build identity and broad protocol conformance remain open.
+Next: reconcile every Phase 0 acceptance row with supplied reproductions and
+current checks, record any concrete gaps, then proceed to canonical evidence.

@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from neuralstrike.integrations.neuralguard import NeuralGuardScreen
     from neuralstrike.integrations.scarletai import ExerciseTelemetry
 from neuralstrike.scope import load_scope
+from neuralstrike.utils.artifacts import write_private_artifact
 from neuralstrike.utils.logging import configure_logging, get_logger
 from neuralstrike.utils.validation import (
     validate_iteration_bounds,
@@ -1108,7 +1109,7 @@ def smoke(
         ext = ".sarif" if format == "sarif" else ".json"
         path = Path(out + ext)
         content = to_sarif(corpus_run) if format == "sarif" else to_json(corpus_run)
-        path.write_text(content, encoding="utf-8")
+        write_private_artifact(path, content)
         overall = corpus_run.to_dict()["overall"]
         required = {"total", "succeeded", "resisted", "inconclusive", "asr", "coverage"}
         missing = required - set(overall.keys())
@@ -1539,7 +1540,7 @@ def _print_attack_chain_delta(
         }
         if run_info is not None:
             summary["run"] = run_info
-        Path(json_out).write_text(_json.dumps(summary, indent=2), encoding="utf-8")
+        write_private_artifact(Path(json_out), _json.dumps(summary, indent=2))
         console.print(f"  [blue]JSON results -> {json_out}[/blue]")
 
 
@@ -1701,7 +1702,7 @@ def purple_report(
 
     _print_purple_report(report)
     if json_out:
-        Path(json_out).write_text(_json.dumps(report, indent=2), encoding="utf-8")
+        write_private_artifact(Path(json_out), _json.dumps(report, indent=2))
         console.print(f"  [blue]purple report JSON -> {json_out}[/blue]")
 
 
@@ -1975,8 +1976,6 @@ def corpus(
         from pathlib import Path
 
         out_path = Path(path)
-        from neuralstrike.utils.artifacts import write_private_artifact
-
         write_private_artifact(out_path, content)
         console.print(Panel(corpus_run_summary(corpus_run), title=f"Corpus run → {path}"))
         console.print(
@@ -2072,10 +2071,14 @@ def pack(
     _apply_scope(scope_file, target, intent)
     _apply_safety(intent, require_approval)
 
+    import unicodedata
+    from dataclasses import asdict, replace
+
     from neuralstrike.core.config import settings
     from neuralstrike.core.llm_manager import LLMManager
     from neuralstrike.core.runtime import resolve_models
-    from neuralstrike.evaluation.baseline import compare_baseline, save_baseline
+    from neuralstrike.evaluation.baseline import BaselineError, baseline_path, compare_baseline, save_baseline
+    from neuralstrike.evaluation.identity import configuration_digest
     from neuralstrike.evaluation.runner import TrialRunner
     from neuralstrike.evaluation.statistics import k_trial_summary
     from neuralstrike.packs import LocalPack, Pack, get_pack, list_packs, pack_probe_factory
@@ -2106,6 +2109,16 @@ def pack(
             console.print(f"[red]Pack {name!r} produced no probes.[/red]")
             raise typer.Exit(3)
 
+        if len({probe.id for probe in probes}) != len(probes):
+            raise ValidationError("pack contains duplicate probe ids; assessment plan is ambiguous")
+        if baseline_dir or save_baseline_dir:
+            filenames = [
+                unicodedata.normalize("NFC", baseline_path(".", probe.id).name).casefold() for probe in probes
+            ]
+            if len(set(filenames)) != len(filenames):
+                raise BaselineError("selected probe ids collide in portable baseline filenames")
+        plan_digest = configuration_digest([asdict(probe) for probe in probes])
+
         # Judge resolution (DECIDE). Without --judge -> judge_model=None ->
         # every probe is Inconclusive (no oracle, no judge).
         mgr = LLMManager()
@@ -2128,6 +2141,13 @@ def pack(
             if i > 0 and delay > 0:
                 await asyncio.sleep(delay)
             probe_obj = pack_probe_factory(p, target, target_type, llm=mgr, judge_model=judge_model)
+            probe_obj = replace(
+                probe_obj,
+                comparison_identity={
+                    **probe_obj.comparison_identity,
+                    "selected_plan_digest": plan_digest,
+                },
+            )
             r = await runner.run(
                 probe_obj,
                 trials=trials,

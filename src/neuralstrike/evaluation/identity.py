@@ -11,6 +11,7 @@ import inspect
 import json
 import re
 from dataclasses import asdict, is_dataclass
+from types import SimpleNamespace
 from typing import Any
 
 from neuralstrike import __version__
@@ -63,3 +64,23 @@ def comparison_identity(adapter: Any, scenario: Any, tools: Any, oracles: Any) -
         "comparable": oracle_digest is not None,
         "target_build": "unverified; configured URL/model identity only",
     }
+
+
+def model_comparison_identity(
+    model: str,
+    target_type: str,
+    endpoint: str | None,
+    scenario: Any,
+    oracles: Any,
+) -> dict[str, Any]:
+    """Bind a model-name workflow without asserting provider-resolved endpoint identity."""
+    identity = comparison_identity(
+        SimpleNamespace(name=f"model-name-{target_type}", model=model, tier="text", base_url=endpoint),
+        scenario,
+        [],
+        oracles,
+    )
+    if endpoint is None:
+        identity["comparable"] = False
+        identity["target_build"] = "unverified; provider-resolved endpoint unavailable"
+    return identity

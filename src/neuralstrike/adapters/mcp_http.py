@@ -213,6 +213,9 @@ class MCPHTTPAdapter:
         await self.initialize()
         tools = await self.list_tools(injected=injected)
         if call_canaries and authorized_tool_calls:
+            names = [tool.name for tool in tools]
+            if len(names) != len(set(names)):
+                raise MCPError("duplicate tool names make the execution inventory ambiguous")
             unknown = set(authorized_tool_calls) - {tool.name for tool in tools}
             if unknown:
                 raise MCPError(f"authorized tools not advertised: {sorted(unknown)}")

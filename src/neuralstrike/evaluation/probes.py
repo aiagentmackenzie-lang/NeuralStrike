@@ -16,13 +16,12 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict, replace
-from types import SimpleNamespace
 
 from neuralstrike.adapters.base import Message, TargetAdapter, ToolSchema
 from neuralstrike.core.adversarial_loop import AdversarialLoop, LoopResult
 from neuralstrike.core.llm_manager import LLMManager, llm_manager
 from neuralstrike.core.trajectory import fingerprint, trajectory_from_loop_history
-from neuralstrike.evaluation.identity import comparison_identity
+from neuralstrike.evaluation.identity import comparison_identity, model_comparison_identity
 from neuralstrike.evaluation.runner import Probe
 from neuralstrike.evaluation.verdict import (
     EvidenceFidelity,
@@ -179,8 +178,10 @@ def canary_extraction_probe(
         )
 
     endpoint = getattr(llm or llm_manager, "base_url", None) if victim_type == "local" else None
-    identity = comparison_identity(
-        SimpleNamespace(name=f"model-name-{victim_type}", model=victim_model, tier="text", base_url=endpoint),
+    identity = model_comparison_identity(
+        victim_model,
+        victim_type,
+        endpoint,
         {
             "scenario_id": scenario_id,
             "goal": goal,
@@ -189,12 +190,8 @@ def canary_extraction_probe(
             "judge_model": judge_model,
             "judge_prompt_mode": judge_prompt_mode,
         },
-        [],
         [CanaryOracle("CANARY-0000000000000000", severity="high")],
     )
-    if endpoint is None:
-        identity["comparable"] = False
-        identity["target_build"] = "unverified; provider-resolved endpoint unavailable"
     return Probe(
         scenario_id=scenario_id,
         goal=goal,

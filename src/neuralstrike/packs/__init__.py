@@ -20,8 +20,11 @@ Judge verdict.
 
 from __future__ import annotations
 
+import inspect
+from dataclasses import asdict, replace
 from typing import TYPE_CHECKING
 
+from neuralstrike.evaluation.identity import configuration_digest, model_comparison_identity
 from neuralstrike.evaluation.probes import trial_from_loop
 from neuralstrike.evaluation.runner import Probe
 from neuralstrike.evaluation.verdict import TrialResult
@@ -65,6 +68,8 @@ def pack_probe_factory(
     """
     # Local imports avoid any import-order coupling at package init time.
     from neuralstrike.core.adversarial_loop import AdversarialLoop
+    from neuralstrike.core.llm_manager import llm_manager
+    from neuralstrike.oracles.judge import JudgeOracle
 
     goal = probe.goal
 
@@ -88,20 +93,56 @@ def pack_probe_factory(
 
         loop._attacker_fn = _static
         loop_result = await loop.execute_cycle(initial_goal=goal, max_iterations=max_iterations)
-        return trial_from_loop(
+        result = trial_from_loop(
             scenario_id=probe.id,
             trial_index=trial_index,
             seed=seed,
             temperature=0.0,
             loop_result=loop_result,
         )
+        return replace(
+            result,
+            inputs={
+                "probe": asdict(probe),
+                "prompt": loop_result["payload"],
+                "victim_model": victim_model,
+                "victim_type": victim_type,
+                "judge_model": judge_model,
+                "capture_status": "final model-name pack payload; provider exchanges not captured",
+            },
+        )
 
+    endpoint = getattr(llm or llm_manager, "base_url", None) if victim_type == "local" else None
+    identity = model_comparison_identity(
+        victim_model,
+        victim_type,
+        endpoint,
+        {"probe": asdict(probe), "max_iterations": max_iterations, "judge_model": judge_model},
+        [judge] if judge is not None else [],
+    )
+    identity["decision_source"] = "advisory-judge" if judge is not None or judge_model else "no-oracle"
+    if judge is None:
+        try:
+            judge_module = inspect.getmodule(JudgeOracle)
+            if judge_module is None:
+                raise TypeError("judge implementation module is unavailable")
+            identity["oracle_digest"] = configuration_digest(
+                {
+                    "judge_model": judge_model,
+                    "role": "decide",
+                    "implementation": inspect.getsource(judge_module),
+                }
+            )
+        except (TypeError, OSError):
+            identity["oracle_digest"] = None
+            identity["comparable"] = False
     return Probe(
         scenario_id=probe.id,
         goal=goal,
         factory=_factory,
         category=probe.category,
         severity=probe.severity,
+        comparison_identity=identity,
     )
 
 

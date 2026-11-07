@@ -36,6 +36,7 @@ from typing import Any
 
 from neuralstrike.evaluation.runner import RunReport
 from neuralstrike.evaluation.verdict import Verdict
+from neuralstrike.utils.artifacts import write_private_artifact
 
 __all__ = [
     "BaselineError",
@@ -132,7 +133,7 @@ def save_baseline(directory: str | Path, report: RunReport) -> Path:
     that ``compare_baseline`` diffs against.
     """
     directory = Path(directory)
-    directory.mkdir(parents=True, exist_ok=True)
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     sigs = _scenario_signatures(report)
     severities: dict[str, list[str]] = {}
     for t in report.trials:
@@ -144,6 +145,8 @@ def save_baseline(directory: str | Path, report: RunReport) -> Path:
                 severities[t.scenario_id].append(f.severity)
 
     payload = {
+        "schema_version": 1,
+        "run_id": report.meta.run_id,
         "scenario_id": report.meta.scenario_id,
         "base_seed": report.meta.base_seed,
         "trials": report.meta.trials,
@@ -161,7 +164,7 @@ def save_baseline(directory: str | Path, report: RunReport) -> Path:
         },
     }
     path = baseline_path(directory, report.meta.scenario_id)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    write_private_artifact(path, json.dumps(payload, indent=2, sort_keys=True))
     return path
 
 
@@ -188,9 +191,29 @@ def _load_baseline(path: Path) -> Mapping[str, Any]:
         raise BaselineError(f"baseline {path} is not valid JSON: {exc.msg}") from exc
     if not isinstance(data, dict) or "verdicts" not in data:
         raise BaselineError(f"baseline {path} missing 'verdicts' map")
+    if "schema_version" in data:
+        if type(data["schema_version"]) is not int or data["schema_version"] != 1:
+            raise BaselineError(f"baseline {path} has unsupported schema version")
+        required = {
+            "run_id",
+            "scenario_id",
+            "base_seed",
+            "trials",
+            "intensity",
+            "comparison_identity",
+            "trial_indices",
+        }
+        if not required.issubset(data):
+            raise BaselineError(f"baseline {path} missing schema-1 comparison metadata")
     if "trials" in data and (type(data["trials"]) is not int or data["trials"] < 1):
         raise BaselineError(f"baseline {path} has invalid trial count")
-    context_types = {"scenario_id": str, "base_seed": int, "intensity": str, "comparison_identity": dict}
+    context_types = {
+        "run_id": str,
+        "scenario_id": str,
+        "base_seed": int,
+        "intensity": str,
+        "comparison_identity": dict,
+    }
     if any(key in data and type(data[key]) is not expected for key, expected in context_types.items()):
         raise BaselineError(f"baseline {path} has invalid comparison metadata types")
     verdicts = data["verdicts"]
