@@ -16,7 +16,7 @@ from pathlib import Path
 from examples.agentdojo_banking.collect import atomic
 
 
-def verify(source: Path, python: Path, output: Path) -> Path:
+def verify(source: Path, python: Path, output: Path, *, seed: int = 7) -> Path:
     root = output / f"remediation-{uuid.uuid4().hex}"
     root.mkdir(mode=0o700, parents=True, exist_ok=False)
     receipt = {
@@ -24,6 +24,7 @@ def verify(source: Path, python: Path, output: Path) -> Path:
         "state": "running",
         "stages": [],
         "independent_human_validation": False,
+        "seed": seed,
     }
     atomic(root / "cycle.json", receipt)
     for policy, expected_violation, expected_utility in [
@@ -44,7 +45,7 @@ def verify(source: Path, python: Path, output: Path) -> Path:
             policy,
             "--prefetch-bill",
             "--seed",
-            "7",
+            str(seed),
         ]
         try:
             result = subprocess.run(command, capture_output=True, text=True, timeout=150, check=False)
@@ -95,8 +96,9 @@ def main() -> None:
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--python", type=Path, default=Path(sys.executable))
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--seed", type=int, default=7)
     args = parser.parse_args()
-    print(verify(args.source.resolve(), args.python.absolute(), args.out.resolve()))
+    print(verify(args.source.resolve(), args.python.absolute(), args.out.resolve(), seed=args.seed))
 
 
 if __name__ == "__main__":

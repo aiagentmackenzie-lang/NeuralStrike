@@ -11,7 +11,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from neuralstrike.evaluation.assessment import load_assessment
 from neuralstrike.evaluation.bundle import MAX_TRIALS, BundleError, _Document, _json, _read
@@ -43,6 +43,7 @@ class GroundTruthCase(_Document):
     preconditions: Text
     benign_task: Literal["passed", "failed", "inconclusive", "not_measured"]
     benign_evidence_sha256: Digest | None
+    ground_truth_boundary: Literal["emitted_intent", "completed_effect"] | None = None
 
     @model_validator(mode="after")
     def evidence_required(self) -> GroundTruthCase:
@@ -52,7 +53,15 @@ class GroundTruthCase(_Document):
 
 
 class EfficacyLabels(_Document):
-    schema_version: Literal[1]
+    schema_version: Literal[1, 2]
+
+    @field_validator("schema_version", mode="before")
+    @classmethod
+    def exact_version(cls, value: Any) -> Any:
+        if type(value) is not int:
+            raise ValueError("schema version must be an integer")
+        return value
+
     cohort_id: Text
     assessment_manifest_sha256: Digest
     application: ApplicationProvenance
@@ -72,7 +81,7 @@ def _counts(rows: list[dict[str, Any]]) -> dict[str, Any]:
     counts = Counter(row["classification"] for row in rows)
     benign = Counter(row["benign_task"] for row in rows if row["trial_index"] == 0)
     return {
-        **{key: counts[key] for key in ("tp", "fp", "tn", "fn", "inconclusive")},
+        **{key: counts[key] for key in ("tp", "fp", "tn", "fn", "inconclusive", "not_comparable")},
         "planned": len(rows),
         "missing": sum(not row["recorded"] for row in rows),
         "errors": sum(row["execution_error"] for row in rows),
@@ -88,6 +97,26 @@ def _counts(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _measurement_contract(scope: dict[str, Any], labels: EfficacyLabels) -> dict[str, Any] | None:
+    contract = scope.get("measurement_contract")
+    if labels.schema_version == 2:
+        if (
+            not isinstance(contract, dict)
+            or set(contract) != {"boundary", "origin"}
+            or type(contract.get("boundary")) is not str
+            or contract.get("boundary") not in {"emitted_intent", "completed_effect"}
+            or type(contract.get("origin")) is not str
+            or not str(contract["origin"]).strip()
+            or any(case.ground_truth_boundary is None for case in labels.cases)
+        ):
+            raise BundleError("version 2 requires a recorded prediction contract and per-case truth boundary")
+    else:
+        if any(case.ground_truth_boundary is not None for case in labels.cases):
+            raise BundleError("explicit truth boundaries require version 2 labels")
+        contract = None
+    return contract
+
+
 def evaluate_efficacy(bundle: str | Path, labels_path: str | Path) -> dict[str, Any]:
     """Compare all planned trials, including missing ones, against external labels.
 
@@ -101,6 +130,7 @@ def evaluate_efficacy(bundle: str | Path, labels_path: str | Path) -> dict[str, 
     labels = EfficacyLabels.model_validate(_json(raw))
     if labels.assessment_manifest_sha256 != assessment.manifest_sha256:
         raise BundleError("ground truth references a different assessment manifest")
+    contract = _measurement_contract(assessment.plan.declared_scope, labels)
     by_id = {case.scenario_id: case for case in labels.cases}
     selected = {scenario.id for scenario in assessment.plan.scenarios}
     if len(by_id) != len(labels.cases) or set(by_id) != selected:
@@ -126,6 +156,9 @@ def evaluate_efficacy(bundle: str | Path, labels_path: str | Path) -> dict[str, 
                 classification = "tp" if case.expected_violation else "fp"
             elif verdict is Verdict.RESISTED:
                 classification = "fn" if case.expected_violation else "tn"
+            comparable = contract is None or contract["boundary"] == case.ground_truth_boundary
+            if not comparable:
+                classification = "not_comparable"
             origins = (
                 sorted(
                     {
@@ -147,6 +180,16 @@ def evaluate_efficacy(bundle: str | Path, labels_path: str | Path) -> dict[str, 
                     "expected_violation": case.expected_violation,
                     "prediction": verdict.value,
                     "classification": classification,
+                    "comparison_status": (
+                        "legacy_unspecified_boundary"
+                        if contract is None
+                        else "aligned"
+                        if comparable
+                        else "boundary_mismatch"
+                    ),
+                    "prediction_boundary": contract["boundary"] if contract else None,
+                    "ground_truth_boundary": case.ground_truth_boundary,
+                    "prediction_origin": contract["origin"] if contract else "unspecified",
                     "boundary_class": case.boundary_class,
                     "evidence_origin": origins or ["unattributed"],
                     "execution_error": error,
@@ -156,11 +199,13 @@ def evaluate_efficacy(bundle: str | Path, labels_path: str | Path) -> dict[str, 
                     "benign_task": case.benign_task if index == 0 else "not_measured",
                 }
             )
-    groups: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    groups: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
-        groups[(row["boundary_class"], "+".join(row["evidence_origin"]))].append(row)
+        groups[(row["boundary_class"], "+".join(row["evidence_origin"]), row["prediction_origin"])].append(
+            row
+        )
     return {
-        "schema_version": 1,
+        "schema_version": labels.schema_version,
         "kind": "neuralstrike-efficacy",
         "cohort_id": labels.cohort_id,
         "assessment_id": assessment.assessment_id,
@@ -168,18 +213,26 @@ def evaluate_efficacy(bundle: str | Path, labels_path: str | Path) -> dict[str, 
         "labels_sha256": hashlib.sha256(raw).hexdigest(),
         "labels": labels.model_dump(),
         "assessment_health": assessment.report.health.to_dict() if assessment.report.health else None,
+        "measurement_comparable": labels.schema_version == 2
+        and all(row["comparison_status"] == "aligned" for row in rows),
         "independent_validation": "not_established",
         "limitations": [
             "Label origins and application provenance are supplied assertions, not authenticated review.",
             "No target/model/oracle calls; findings are recorded predictions, not independent ground truth.",
+            "Version 1 retains legacy unspecified-boundary counts; version 2 withholds mismatched scores.",
             "Conclusive-only ratios; missing and incomplete negatives remain inconclusive.",
             "Repeated trials may be dependent; Wilson intervals do not establish population efficacy.",
             "Benign task evidence is case-level and counted once; no remediation gate is inferred.",
         ],
         "overall": _counts(rows),
         "by_boundary_and_origin": [
-            {"boundary_class": boundary, "evidence_origin": origin, **_counts(group)}
-            for (boundary, origin), group in sorted(groups.items())
+            {
+                "boundary_class": boundary,
+                "evidence_origin": origin,
+                "prediction_origin": prediction_origin,
+                **_counts(group),
+            }
+            for (boundary, origin, prediction_origin), group in sorted(groups.items())
         ],
         "trials": rows,
     }

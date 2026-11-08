@@ -1370,3 +1370,85 @@ customer/revenue evidence, cloud spend, release dispatch or Phase 4 acceptance.
   selection plan, canonical bundles/labels/metrics, successful and incomplete
   cycle receipts, harness/optional lock, MIT license, audit and a checked SHA-256
   file inventory. It is private raw evidence, not a sanitized or signed export.
+
+## 2026-11-08 — typed measurement boundaries and durable repeated evidence
+
+Started clean at `b9f8e0d`; its hosted CI passed all Python quality, hash-lock
+supply-chain and dashboard lanes:
+https://github.com/aiagentmackenzie-lang/NeuralStrike/actions/runs/42438409186.
+No dependency/version changes, subagents or unrelated edits.
+
+Evidence availability correction: the previous `/tmp/neuralstrike-*` environments,
+native observations and review zip are absent. The committed 2026-11-07 index is a
+historical summary, not equivalent to the missing raw bytes. Added an explicit
+availability note to AGENTDOJO_LOCAL_PROFILE.md. Recreated isolated environments
+from the existing hashed locks and pinned source; fresh native evidence now lives
+outside `/tmp` under
+`/Users/agentmackenzie/Documents/Codex/2026-11-08/neuralstrike-phase3`.
+No old observations or reviewer opinions were fabricated/reconstructed as originals.
+
+Implemented:
+- Efficacy schema 2 requires per-case truth boundary plus a recording-plan-bound
+  prediction boundary/origin. Missing/unbound/malformed contracts reject export.
+  Intent/effect mismatches produce `not_comparable`, not FP/TN/TP/FN or rates.
+  Predictions and source health remain visible; unavailable denominators are null.
+  Declared prediction origin is distinct from original finding evidence origin.
+- Schema 1 retains compatible legacy counts with explicit unspecified-boundary
+  status and measurement_comparable=false. Explicit truth boundaries require
+  schema 2; schema version booleans are rejected. No security/fix gate inferred.
+- Separate native completed-dispatch selector uses effective arguments and receipt
+  status, never upstream verdict fields. Existing PredicateOracle scores the frozen
+  selection with conservative fidelity; original raw model emissions remain in
+  the observation. Native pre/post-state checks supply the separate labels.
+  Selector code digest is recorded; original-oracle replay does not execute that
+  selector or target code. Native receipts are not canary/production attestations.
+- Receipt parser preserves positives across malformed/failed later entries and
+  marks incomplete negatives. No local action is retried or remapped by replay.
+- Native verifier accepts explicit seeds. Fresh local qwen3.5:2b cycles at seeds
+  **7, 17, 29** all reproduced complete native violation/utility
+  **true/false → false/true → true/false**. Repetition plan saved before seeds
+  17/29. Nine actual observations, one target case, correlated configurations.
+- Two canonical recordings from the same nine observations: emitted intent has
+  **9 not-comparable rows**, all comparison-rate denominators unavailable;
+  completed effects have **TP 6 / TN 3 / FP 0 / FN 0**, complete execution.
+  Both retain utility **3/9** (all three fixed stages pass; diverted payments fail
+  the task). This is narrow upstream-asserted local evidence, not independent human
+  validation, generalized efficacy or a fair comparator result.
+- PHASE3_MEASUREMENT_BOUNDARIES.md defines the contract, selector limitations,
+  historical artifact loss, fresh results and rerun commands. Durable machine-readable
+  summary: docs/implementation/evidence/phase3-boundaries-2026-11-08.json.
+
+Verification:
+- New typed-boundary tests initially failed twice (unsupported schema/contract);
+  `/tmp/neuralstrike-boundary-contract-red.log`. Receipt-selector regressions
+  exposed loss of an earlier positive on a later malformed amount/goal receipt;
+  corrected after red tests, logs `/tmp/neuralstrike-effect-prefix-red.log` and
+  `/tmp/neuralstrike-effect-malformed-red.log`.
+- Final Python 3.12.14 console pytest: **1482 passed, 2 skipped, 91.88% coverage**,
+  46.31s; `/tmp/neuralstrike-boundaries-final-full.log`. Ruff including both example
+  directories passes; strict mypy passes, 144 source files. Optional integration
+  skips and existing pytest warning remain. Coverage does not establish efficacy.
+- Rebuilt wheel/sdist, installed with --no-deps in a separate environment built
+  from the hashed dev lock. Outside checkout, copied-example checks, original-
+  oracle replay and efficacy CLI exports for both fresh recordings pass. Final
+  selector hardening was checked with targeted tests and external replay after
+  the new full source gate. Further final artifact details are recorded below.
+
+Phase 3 remains in progress. Still required: diverse independently developed
+applications/cases including actual memory/destructive capabilities, independent
+human labels/review, broader repeated trials and uncertainty, aligned common
+PyRIT/garak comparisons, consenting pilots and Phase 4 gates. No external target,
+cloud inference, model download, contact with others or release workflow dispatch.
+- Final installed-wheel checks outside checkout: **21 pass**. Both fresh nine-row
+  recordings pass installed CLI original-oracle replay and regenerate matching
+  efficacy counts, without importing AgentDojo or executing the selector/target.
+  All **148 packaged Python/JSON/YAML source files** match checkout bytes.
+- Durable private review packet:
+  `/Users/agentmackenzie/Documents/Codex/2026-11-08/neuralstrike-phase3/phase3-boundaries-review.zip`.
+  **122 files**, ZIP CRC and every SHA-256 inventory entry checked; mode 0600.
+  Includes original fresh observations/cycles, selected canonical bundles,
+  separate labels/metrics, exact selector/harness, hashed environment locks,
+  native MIT license, plans and verification logs. Selector hashes in the effect
+  trials match the archived code. Packet SHA-256:
+  `0a571f0ecc234f9a0e0d045b821f19f8a077a6d15ba631e7e2cb987fe376f912`.
+  Hashes are integrity checks, not independent reviewer signatures.

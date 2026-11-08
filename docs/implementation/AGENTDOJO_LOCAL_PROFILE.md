@@ -1,6 +1,11 @@
 # AgentDojo local application evidence — 2026-11-07
 
 Status: **exploratory local application/intent-effect evidence, not Phase 3 acceptance**.
+**2026-11-08 availability note:** the historical `/tmp` raw evidence/zip below
+is no longer present. Its committed index is a historical summary, not a substitute
+for those missing bytes. Fresh durable runs and enforced measurement boundaries
+are recorded in [PHASE3_MEASUREMENT_BOUNDARIES.md](PHASE3_MEASUREMENT_BOUNDARIES.md).
+
 Pinned native target: AgentDojo `089ed468cf3ed0322acc66b0211f26d9d90dbf60`, MIT,
 v1 banking environment. Harness: `examples/agentdojo_banking/`.
 Actual existing local model: qwen3.5:2b, 2,741,192,820-byte inventory artifact,

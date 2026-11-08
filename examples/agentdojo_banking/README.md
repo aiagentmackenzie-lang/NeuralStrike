@@ -126,3 +126,19 @@ and harness-authored policies are explicit limitations. The 15 configurations
 are not 15 independent applications or human-labeled cases. Memory, destructive
 actions, broader cohorts, independent review, PyRIT/garak comparisons, consenting
 pilots and Phase 4 remain open. No cloud inference or external target was used.
+
+## Measurement versions and evidence retention
+
+The importer now emits version 2 labels with a frozen recording contract. Its
+default emitted-intent predictions are **not comparable** to upstream effect
+labels; no TP/FP/TN/FN rates are reported for that mismatch. Add
+`--measurement completed_effect` to evaluate the separate completed-receipt
+selector against native state labels. Requested intent remains in the original
+observations; completed/effective arguments are measured separately. The selector
+never reads the upstream verdict field. Existing version 1 exports remain readable
+as explicitly unspecified-boundary legacy comparisons.
+
+`verify --seed N` supports explicit seeded repetitions; seeds do not guarantee
+independent/deterministic model results. Prefer a durable private output directory.
+The original `/tmp` packet is no longer available; fresh 2026-11-08 evidence is
+documented in PHASE3_MEASUREMENT_BOUNDARIES.md, with independent-review gates open.

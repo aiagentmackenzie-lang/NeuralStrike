@@ -1,0 +1,119 @@
+{
+  "date": "2026-11-08",
+  "independent_human_validation": false,
+  "kind": "phase3-typed-boundary-evidence-index",
+  "measurements": {
+    "completed_effect": {
+      "assessment_manifest_sha256": "50ed487a432c0902725b021b33f31d9bc562e2c06f00ea41afbddb1ecd275ffd",
+      "assessment_path": "/Users/agentmackenzie/Documents/Codex/2026-11-08/neuralstrike-phase3/final/completed_effect/assessment-071485e2e01c4ea88f3a66c36e69ff19",
+      "measurement_comparable": true,
+      "overall": {
+        "benign_completion": {
+          "denominator": 9,
+          "numerator": 3,
+          "value": 0.3333333333333333,
+          "wilson_95": [
+            0.12058159868274292,
+            0.6458026525009103
+          ]
+        },
+        "benign_inconclusive": 0,
+        "benign_measured": 9,
+        "benign_not_measured": 0,
+        "benign_passed": 3,
+        "conclusive": 9,
+        "errors": 0,
+        "fn": 0,
+        "fp": 0,
+        "inconclusive": 0,
+        "missing": 0,
+        "not_comparable": 0,
+        "planned": 9,
+        "precision": {
+          "denominator": 6,
+          "numerator": 6,
+          "value": 1.0,
+          "wilson_95": [
+            0.6096569663469354,
+            1.0
+          ]
+        },
+        "recall": {
+          "denominator": 6,
+          "numerator": 6,
+          "value": 1.0,
+          "wilson_95": [
+            0.6096569663469354,
+            1.0
+          ]
+        },
+        "specificity": {
+          "denominator": 3,
+          "numerator": 3,
+          "value": 1.0,
+          "wilson_95": [
+            0.4384939195509822,
+            1.0
+          ]
+        },
+        "tn": 3,
+        "tp": 6
+      },
+      "prediction_origins": [
+        "agentdojo-native-local-completed-dispatch"
+      ]
+    },
+    "emitted_intent": {
+      "assessment_manifest_sha256": "61d7711c6575e2117348484e87176a3fb4f8c22f69a843259b8292bfa6918655",
+      "assessment_path": "/Users/agentmackenzie/Documents/Codex/2026-11-08/neuralstrike-phase3/final/emitted_intent/assessment-50c294d948954cc69f0bdbf2e1c016fe",
+      "measurement_comparable": false,
+      "overall": {
+        "benign_completion": {
+          "denominator": 9,
+          "numerator": 3,
+          "value": 0.3333333333333333,
+          "wilson_95": [
+            0.12058159868274292,
+            0.6458026525009103
+          ]
+        },
+        "benign_inconclusive": 0,
+        "benign_measured": 9,
+        "benign_not_measured": 0,
+        "benign_passed": 3,
+        "conclusive": 0,
+        "errors": 0,
+        "fn": 0,
+        "fp": 0,
+        "inconclusive": 0,
+        "missing": 0,
+        "not_comparable": 9,
+        "planned": 9,
+        "precision": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null,
+          "wilson_95": null
+        },
+        "recall": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null,
+          "wilson_95": null
+        },
+        "specificity": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null,
+          "wilson_95": null
+        },
+        "tn": 0,
+        "tp": 0
+      },
+      "prediction_origins": [
+        "agentdojo-local-model-emissions"
+      ]
+    }
+  },
+  "recorded_trials": 9
+}

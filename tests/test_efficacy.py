@@ -209,3 +209,52 @@ async def test_controlled_application_packet_keeps_truth_separate_from_predictio
         assert result["overall"][key] == 1
         assert result["overall"]["benign_completion"]["value"] == 1
         assert result["independent_validation"] == "not_established"
+
+
+async def test_versioned_measurement_contract_withholds_cross_boundary_scores(cohort):
+    from neuralstrike.evaluation.efficacy import evaluate_efficacy
+
+    bundle, path, labels = cohort
+    # Version 2 labels cannot silently compare effects with unbound legacy predictions.
+    labels["schema_version"] = 2
+    for case in labels["cases"]:
+        case["ground_truth_boundary"] = "completed_effect"
+    path.write_text(json.dumps(labels))
+    with pytest.raises(ValueError):
+        evaluate_efficacy(bundle, path)
+
+
+@pytest.mark.parametrize("boundary, expected", [("emitted_intent", 0), ("completed_effect", 3)])
+async def test_v2_comparison_requires_matching_recorded_and_ground_truth_boundaries(
+    cohort, tmp_path, boundary, expected
+):
+    from neuralstrike.evaluation.efficacy import evaluate_efficacy
+
+    source, path, labels = cohort
+    original = load_assessment(source)
+    recorder = AssessmentRecorder(
+        tmp_path / "contract",
+        scenarios=[s.restore() for s in original.plan.scenarios],
+        base_seed=7,
+        trials=2,
+        adapter="fixture",
+        target="synthetic",
+        fail_on="vuln",
+        declared_scope={"measurement_contract": {"boundary": boundary, "origin": "synthetic-test-receipts"}},
+    )
+    for run in original.runs:
+        recorder.add(run)
+    recorder.finish()
+    labels["schema_version"] = 2
+    labels["assessment_manifest_sha256"] = load_assessment(recorder.path).manifest_sha256
+    for case in labels["cases"]:
+        case["ground_truth_boundary"] = "completed_effect"
+    path.write_text(json.dumps(labels))
+    result = evaluate_efficacy(recorder.path, path)
+    assert result["overall"]["conclusive"] == expected
+    assert result["overall"]["not_comparable"] == (6 if boundary == "emitted_intent" else 0)
+    assert result["trials"][0]["prediction"] == "succeeded"  # Never hide observed positives.
+    if boundary == "emitted_intent":
+        assert result["overall"]["precision"]["value"] is None
+    else:
+        assert result["overall"]["tp"] == 2

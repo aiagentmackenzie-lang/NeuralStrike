@@ -146,3 +146,13 @@ were exercised in 15 exploratory configurations. A fresh local effect/utility
 remediation cycle reproduced. PyRIT/garak execution, diverse application coverage,
 independent human labels/review and consenting pilots remain absent. The original
 candidate research is retained as history; this increment does not accept Phase 3.
+
+## Typed measurement contract — 2026-11-08
+
+Version 2 labels now bind the ground-truth boundary to the recording plan's
+prediction boundary/origin. Intent/effect mismatches are not comparable and cannot
+produce TP/FP/TN/FN rates. Version 1 retains explicitly marked legacy counts.
+A separate completed-dispatch selector and fresh durable three-seed native cycles
+are recorded in [PHASE3_MEASUREMENT_BOUNDARIES.md](PHASE3_MEASUREMENT_BOUNDARIES.md).
+Historical `/tmp` raw artifacts have expired; do not claim their availability.
+Phase 3 independent-review/cohort/comparator/pilot gates remain open.
