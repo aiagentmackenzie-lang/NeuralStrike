@@ -1246,3 +1246,21 @@ external target exercise, reviewer outreach or release workflow dispatched.
   `/tmp/neuralstrike-phase3-final-full.log`. Rebuilt/reinstalled final wheel;
   external contract tests again pass and installed CLI exports for all three
   stages agree with generated metrics. No source changes followed this gate.
+
+## 2026-11-07 — hosted collection portability follow-up
+
+Hosted CI for `cecd465` failed in all Python quality lanes before test execution:
+repository-local `tests`/`examples` namespace imports were unavailable to the pytest
+console entry point. The prior local `python -m pytest` results remain valid, but
+did not establish runner portability. Reproduced two collection errors using the
+installed-wheel environment's isolated Python from `/tmp`, explicitly selecting
+`test_execution_context.py` and `test_langgraph_application_cycle.py`; red log:
+`/tmp/neuralstrike-collection-isolated-red.log`.
+
+Declared pytest `pythonpath = ["."]` relative to its configuration root, so the
+existing cross-test and example imports no longer depend on the caller's working
+directory or accidental runner path setup. Runtime imports/dependencies unchanged.
+- Green reproduction: same isolated installed-wheel collection now finds all 24
+  selected tests; `/tmp/neuralstrike-collection-isolated-green.log`. Full console
+  `pytest` gate: **1458 passed, 2 skipped, 91.86%**, 46.96s;
+  `/tmp/neuralstrike-phase3-collection-full.log`. No dependency changes.

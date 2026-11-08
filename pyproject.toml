@@ -112,6 +112,7 @@ module = ["litellm", "ollama", "jsonschema", "neuralguard", "neuralguard.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
+pythonpath = ["."]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "-q"
