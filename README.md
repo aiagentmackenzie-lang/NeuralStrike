@@ -44,6 +44,16 @@ and compliance controls so defenders can fix what actually breaks.
 
 ---
 
+## Evidence status
+
+Phase 2 engineering acceptance covers only the controlled profiles in
+[the acceptance record](docs/implementation/PHASE2_ACCEPTANCE.md).
+Independent application efficacy, third-party review and customer pilots remain
+uncompleted. Benchmark importers, oracle-honesty tests, local application cycles
+and code coverage do not establish those results. The first Phase 3 offline
+label/prediction comparison is documented in
+[PHASE3_EFFICACY.md](docs/implementation/PHASE3_EFFICACY.md).
+
 ## Overview
 
 Modern AI systems fail in ways traditional pentesting tools don't cover:

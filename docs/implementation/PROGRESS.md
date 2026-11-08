@@ -1178,3 +1178,71 @@ not more attack-count expansion. No independent third-party efficacy, customer
 pilot, universal protocol compatibility, independent reset/build attestation or
 production-readiness conclusion has been established. No Phase 3 work, external
 security exercise or paid inference was performed in this increment.
+
+## 2026-11-07 — Phase 3 offline ground-truth measurement vertical slice
+
+Reconciled clean HEAD `fc28469` with the supplied assessment/master plan, Phase 1
+and Phase 2 acceptance/interoperability/dependency records, inherited memory and
+supply-chain guidance. No unrelated changes, dependencies or subagents.
+
+Implemented:
+- Separate strict provenance-bound ground-truth sidecars; exact assessment
+  manifest/scenario-content binding, full selected-plan label coverage and
+  explicit label origins/preconditions/application configuration/exclusions.
+- `neuralstrike efficacy`: read-only canonical assessment replay → label join →
+  private JSON metrics. No target/model/oracle execution. Export exit 0 is
+  explicitly not a security gate. Source bundle and label output-overwrite guards.
+- Planned TP/FP/TN/FN/inconclusive rows, missing/error counts, source health,
+  boundary/evidence-origin groups, conclusive-only precision/recall/specificity
+  with denominators/null unavailable rates/Wilson intervals. Positive evidence
+  survives later failures; partial and assessment-error negatives cannot become
+  TN/FN/fixes. Missing trials do not acquire fabricated execution identities.
+- Separate case-level benign task evidence and completion denominator, counted
+  once rather than multiplied by k. No independent validation inferred from
+  supplied origin strings, evidence hashes or self-authored application events.
+- Runnable controlled application packet with mode-defined expectations checked
+  against direct role state, original replay, benign utility, fix/regression gates
+  and three efficacy reports. Finding/preconditions/fix/rerun/reviewer and pilot
+  inputs documented in PHASE3_EFFICACY.md. README now exposes the evidence limits.
+- Read-only primary-source candidate review: exact AgentDojo/PyRIT/garak revisions,
+  licenses, metadata and local execution/comparison limitations recorded. No
+  candidate imported, installed or run; no scores fabricated.
+
+Verification:
+- Initial contract tests, after correcting test-harness trial configuration:
+  **10 failed** for absent efficacy module/command, log
+  `/tmp/neuralstrike-phase3-red.log`. These are new feature contracts, not ten
+  demonstrated historical product vulnerabilities.
+- Expanded contracts: **13 passed**, covering FN/TN/FP/TP, missing scenarios,
+  error-bearing positives/negatives, assessment-wide error, label mismatch,
+  malformed labels, private CLI export and actual controlled application packet.
+- Python 3.12.14 full suite: **1458 passed, 2 skipped, 91.86% coverage**,
+  46.56s; `/tmp/neuralstrike-phase3-full.log`. Existing optional integration skips
+  and pytest scope deprecation warning remain; coverage is not efficacy.
+- Ruff `src tests examples/langgraph_account_support`: pass. Strict mypy:
+  **144 source files** pass. `git diff --check`: pass.
+- Wheel/sdist built at `/tmp/neuralstrike-phase3-dist`; **148 packaged source
+  Python/JSON/YAML files** match checkout bytes. Installed with `--no-deps` into
+  the existing separate hashed-lock wheel environment. Outside checkout,
+  `/tmp/neuralstrike-phase3-wheel-check`: **13 contract checks pass** using
+  `--asyncio-mode=auto` (repository pytest setting). An initial invocation without
+  that setting failed at async test setup; this was not a product defect.
+- Installed-wheel packet generated at
+  `/tmp/neuralstrike-phase3-packet/validation-38482c0bda5b4cd69f3569c191e90bd8`.
+  Vulnerable/hardened/regressed direct roles remain admin/reader/admin, benign
+  support task passes in each mode, expected predictions TP/TN/TP. These are
+  same-author controlled engineering results, not independent efficacy metrics.
+
+Phase 3 remains **in progress**. Still absent: independently authored application
+cohort with approximately 10–15 meaningful boundary cases and corroborated human
+ground truth, real persistent-memory target cases, independent reviewers, fair
+common-workflow comparator executions and consenting pilots. Prepared artifacts
+can be reviewed without contacting anyone. Candidate integration/task-policy
+review can continue independently; actual human review/consent/pilot evidence
+requires real participants. Phase 4 and release gates remain open. No cloud spend,
+external target exercise, reviewer outreach or release workflow dispatched.
+- Final source suite after command-registration ordering review: **1458 passed,
+  2 skipped, 91.86% coverage**, 46.62s;
+  `/tmp/neuralstrike-phase3-final-full.log`. Rebuilt/reinstalled final wheel;
+  external contract tests again pass and installed CLI exports for all three
+  stages agree with generated metrics. No source changes followed this gate.

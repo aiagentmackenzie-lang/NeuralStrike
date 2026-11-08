@@ -3938,5 +3938,31 @@ def export_summary_command(
     )
 
 
+@app.command()
+def efficacy(
+    bundle: str = typer.Argument(..., help="Committed assessment bundle; offline only."),
+    labels: str = typer.Option(..., help="Separate provenance-bound ground-truth JSON."),
+    out: str = typer.Option(..., help="Private efficacy JSON outside the source bundle."),
+) -> None:
+    """Compare recorded predictions with supplied ground truth; not a security gate."""
+    import json
+    from pathlib import Path
+
+    from neuralstrike.evaluation.efficacy import evaluate_efficacy
+
+    try:
+        source, label_path, output = Path(bundle).resolve(), Path(labels).resolve(), Path(out).resolve()
+        if output in (label_path, source) or source in output.parents:
+            raise ValueError("efficacy export must preserve source bundle and labels")
+        result = evaluate_efficacy(source, label_path)
+        write_private_artifact(output, json.dumps(result, indent=2, sort_keys=True))
+    except (ValueError, OSError) as exc:
+        console.print(f"[red]Efficacy evidence error:[/red] {type(exc).__name__}")
+        raise typer.Exit(3) from exc
+    console.print(
+        "Offline efficacy report exported; not a security gate. Independent validation not established."
+    )
+
+
 if __name__ == "__main__":
     app()
