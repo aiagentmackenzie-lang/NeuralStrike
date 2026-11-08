@@ -136,3 +136,13 @@ release/provenance/platform/pilot gates remain open. Further independent enginee
 can proceed with candidate task review and controlled local integrations; human
 review and pilots require actual participants and consent, without unauthorized
 outreach. Verification for this increment is recorded in PROGRESS.md.
+
+## Subsequent local application increment
+
+The candidate-only status above is superseded for the exact AgentDojo banking
+profile in [AGENTDOJO_LOCAL_PROFILE.md](AGENTDOJO_LOCAL_PROFILE.md): actual local
+model inference, native simulated tool effects and upstream state/utility predicates
+were exercised in 15 exploratory configurations. A fresh local effect/utility
+remediation cycle reproduced. PyRIT/garak execution, diverse application coverage,
+independent human labels/review and consenting pilots remain absent. The original
+candidate research is retained as history; this increment does not accept Phase 3.

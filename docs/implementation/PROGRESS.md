@@ -1264,3 +1264,109 @@ directory or accidental runner path setup. Runtime imports/dependencies unchange
   selected tests; `/tmp/neuralstrike-collection-isolated-green.log`. Full console
   `pytest` gate: **1458 passed, 2 skipped, 91.86%**, 46.96s;
   `/tmp/neuralstrike-phase3-collection-full.log`. No dependency changes.
+
+## 2026-11-07 — native AgentDojo local-model application/effect slice
+
+Pushed the collection portability fix as `c069b42`. Hosted CI then **passed** on
+Python 3.11/3.12/3.14 quality, hash-pinned tests/audit/SBOM and dashboard:
+https://github.com/aiagentmackenzie-lang/NeuralStrike/actions/runs/42437171234.
+This supersedes the failed `cecd465` hosted collection run; it does not retroactively
+claim that the failed run executed its tests.
+
+Independent source integration:
+- Reviewed clean AgentDojo `089ed468cf3ed0322acc66b0211f26d9d90dbf60`, MIT,
+  native banking v1 tools/pipeline/runtime and security/utility predicates. No
+  upstream source modifications or source vendoring. Target and predicates are
+  independently authored; payloads, prefetch, policy wrapper and instrumentation
+  are ours. Independent human review remains absent.
+- Candidate dependency resolution against NeuralStrike's existing lock failed
+  (google-genai websockets/tenacity constraints). Rejected mixing environments.
+  Resolved and installed a separate optional hash-pinned 70-distribution candidate
+  lock; pip-audit reports no known vulnerabilities, no ignores. Lock/input are
+  under examples/agentdojo_banking. Core runtime/dev locks and mandatory filelock
+  floor are unchanged. Native package requires broad provider SDK imports even
+  though this profile uses only existing local inference.
+- Executed actual local qwen3.5:2b inference through native AgentDojo components,
+  pinned to the existing local artifact inventory digest. Exact local URL/model
+  transport, no cloud-tag selection, credential/proxy environment removal, bounded
+  requests/finite responses, incomplete-finish rejection, private live journals,
+  native requested/effective action state and final upstream goal/task checks.
+  This is a trusted local experiment, not a malicious-code sandbox.
+- No native whole-task retry helper used. SDK retries disabled; the upstream
+  model-request decorator can retry inference errors within admission bounds.
+  No automatic consequential action retry or absolute resource ceiling claim.
+
+Demonstrated evidence and useful remediation:
+- Fifteen exploratory configurations at one seed/trial each in one independently
+  developed simulated application. Ten initial configurations preserved the bill
+  task without satisfying selected attack goals. Recipient-field substitution
+  caused a completed unauthorized simulated payment. The dispatch allowlist and
+  trusted-context prompt blocked the effect but each failed task utility.
+- Bound the approved bill payee at the application dispatch boundary, preserving
+  the model's requested attacker account separately from effective arguments.
+  The resulting native transaction goes to the approved payee and utility passes.
+  This is a narrowly scoped example policy fix, not an upstream AgentDojo patch
+  or a production authorization implementation.
+- Fresh actual-model unfiltered → bound-payment → unfiltered cycle reproduced
+  complete violation/utility **true/false → false/true → true/false**. Receipt:
+  `/tmp/neuralstrike-agentdojo-remediation/remediation-687e473aed9a410688976878cfda0f19`.
+  A first command used a resolved venv symlink and failed before native execution;
+  its incomplete receipt is preserved, not counted as a passing/failed efficacy
+  trial. Fixed executable-path handling and now retain process diagnostics.
+- Canonical import embeds all 15 observations, original built-in oracle policies,
+  independent upstream-state labels and benign utility. Original-oracle offline
+  replay agrees. Intent-versus-effect calibration: **TP 1 / FP 3 / TN 11 / FN 0 /
+  inconclusive 0**, 15 planned/recorded, no errors; **12/15** native tasks complete.
+  The three FP rows are emitted forbidden intent whose effect was blocked/remapped,
+  not false claims by the intent oracle. This semantic difference is explicit;
+  no population efficacy or comparator score is inferred. Actual native origin is
+  in the observation; oracle-origin grouping remains unattributed, with no canary
+  Behavioral promotion. Positive-effect denominator is only one.
+- Final canonical root:
+  `/tmp/neuralstrike-agentdojo-canonical-final/assessment-17cc31df6e0f460483b0f94df4a444ca`.
+  Raw journals and the staged/adaptively extended plan:
+  `/tmp/neuralstrike-agentdojo-cohort`. Earlier non-prefetched and replacement-bill
+  explorations remain separate and excluded. Committed evidence index:
+  docs/implementation/evidence/phase3-agentdojo-local.json. Finding, policy fix,
+  preconditions, exact rerun, licenses and exclusions: AGENTDOJO_LOCAL_PROFILE.md
+  and examples/agentdojo_banking/README.md.
+
+Verification:
+- Safety tests first failed for cloud-model/method admission (2 failures), then
+  pass with explicit checks. Import regressions failed on malformed later tool
+  arguments dropping the positive prefix and negative fidelity disagreeing with
+  canonical rescoring; both corrected in the new example importer. Logs:
+  `/tmp/neuralstrike-agentdojo-transport-red.log`,
+  `/tmp/neuralstrike-agentdojo-import-red.log`,
+  `/tmp/neuralstrike-agentdojo-import-negative-red.log`.
+- Eleven experiment checks pass without installing/importing AgentDojo or live
+  inference, covering scope/health/bounds/control capture, preserved prefix,
+  separate effect labels, positive/negative original-oracle replay and failed-cycle
+  evidence/stopping. Real native-model observations and the fresh cycle above are
+  separate from those synthetic regression checks.
+- Full console pytest: **1469 passed, 2 skipped, 91.88% coverage**, 47.25s;
+  `/tmp/neuralstrike-agentdojo-full.log`. Ruff including both example folders and
+  strict mypy (144 source files) pass. Optional integration skips and existing
+  pytest warning remain. Coverage is not efficacy.
+- Rebuilt wheel/sdist and installed without dependencies into the existing
+  separate hash-lock wheel environment. External copied-example/test verification
+  and native canonical-bundle replay are recorded below after completion.
+
+Phase 3 remains in progress. Fifteen variants of one environment and self-authored
+policies are not 15 independently reviewed applications/cases. Still missing:
+independent human ground truth/review, additional independently developed targets,
+destructive/memory behavior where implemented, repeated-trial uncertainty, aligned
+effect-origin measurement, fair PyRIT/garak runs and consenting pilots. No outreach,
+customer/revenue evidence, cloud spend, release dispatch or Phase 4 acceptance.
+- Installed wheel, outside checkout: **11 experiment checks pass**, no candidate
+  dependency installed in that environment. Installed CLI original-oracle replay
+  of all 15 native observations passes (`--fail-on never` is explicitly export/
+  report-only, not a security pass); source bytes remain verified. Final importer
+  argument parsing was tightened to the existing duplicate/non-finite rejecting
+  JSON parser; targeted source and external checks pass after that change.
+- **148 packaged Python/JSON/YAML source files** match the final checkout. No
+  runtime source change was needed for this application example. Private review
+  packet `/tmp/neuralstrike-phase3-agentdojo-review.zip` includes native journals,
+  selection plan, canonical bundles/labels/metrics, successful and incomplete
+  cycle receipts, harness/optional lock, MIT license, audit and a checked SHA-256
+  file inventory. It is private raw evidence, not a sanitized or signed export.
