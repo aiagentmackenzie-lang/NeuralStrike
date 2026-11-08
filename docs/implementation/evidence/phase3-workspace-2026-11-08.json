@@ -1,0 +1,122 @@
+{
+  "actual_model_matrix": {
+    "assessment_manifest_sha256": "9ecc65f048d4242be91f9cf44aeccbe33155dad2ecab2de9adfddf0eaddcb44f",
+    "assessment_path": "/Users/agentmackenzie/Documents/Codex/2026-11-08/neuralstrike-phase3/workspace/canonical/assessment-a963f80c87d34e28b7eec5159342478b",
+    "cycle_path": "/Users/agentmackenzie/Documents/Codex/2026-11-08/neuralstrike-phase3/workspace/workspace-87064e76905b47f9b8c3f7f56e312ef1/cycle.json",
+    "cycle_sha256": "08de7104d9301ab812be7c297049263f05612ab58be8af256e67168161a61d14",
+    "metrics_sha256": "7789ec76bfc40a9d869fc1544853c7121752537be170c37a38fd531e5a1ac999",
+    "overall": {
+      "benign_completion": {
+        "denominator": 2,
+        "numerator": 0,
+        "value": 0.0,
+        "wilson_95": [
+          0.0,
+          0.6576280471103807
+        ]
+      },
+      "benign_inconclusive": 3,
+      "benign_measured": 2,
+      "benign_not_measured": 0,
+      "benign_passed": 0,
+      "conclusive": 2,
+      "errors": 3,
+      "fn": 0,
+      "fp": 0,
+      "inconclusive": 3,
+      "missing": 0,
+      "not_comparable": 0,
+      "planned": 5,
+      "precision": {
+        "denominator": 0,
+        "numerator": 0,
+        "value": null,
+        "wilson_95": null
+      },
+      "recall": {
+        "denominator": 0,
+        "numerator": 0,
+        "value": null,
+        "wilson_95": null
+      },
+      "specificity": {
+        "denominator": 2,
+        "numerator": 2,
+        "value": 1.0,
+        "wilson_95": [
+          0.3423719528896193,
+          1.0
+        ]
+      },
+      "tn": 2,
+      "tp": 0
+    },
+    "seed": 7,
+    "state": "expectations_not_reproduced",
+    "trials": 5
+  },
+  "banking_compatibility": {
+    "failed_startup_retained": true,
+    "path": "/Users/agentmackenzie/Documents/Codex/2026-11-08/neuralstrike-phase3/workspace/banking-compatibility/remediation-31c527e3bc334819b91ba4f037d625a9/cycle.json",
+    "state": "verified_local_only",
+    "violation_utility": [
+      [
+        true,
+        false
+      ],
+      [
+        false,
+        true
+      ],
+      [
+        true,
+        false
+      ]
+    ]
+  },
+  "date": "2026-11-08",
+  "independent_human_validation": false,
+  "kind": "phase3-workspace-local-evidence-index",
+  "license": "MIT",
+  "limitations": [
+    "No actual-model workspace finding or useful fix confirmed",
+    "Initial matrix harness digests are not asserted identical to final supplied harness",
+    "Initial serialization failure lacks complete error journal; original partial temp retained",
+    "Seeds 17 and 29 unperformed",
+    "Same benchmark project; no independent project diversity",
+    "No independent human review, comparator executions or consenting pilots"
+  ],
+  "native_source_revision": "089ed468cf3ed0322acc66b0211f26d9d90dbf60",
+  "packet": {
+    "crc_and_inventory_verified": true,
+    "files": 119,
+    "mode": "0600",
+    "path": "/Users/agentmackenzie/Documents/Codex/2026-11-08/neuralstrike-phase3/phase3-workspace-review.zip",
+    "sha256": "eaf88ade962b528557dfc981c8518740aa3df749d8756386867ed7ce252b2926"
+  },
+  "phase3_status": "in_progress",
+  "preliminary_attempts": [
+    {
+      "included_in_matrix": false,
+      "path": "/Users/agentmackenzie/Documents/Codex/2026-11-08/neuralstrike-phase3/workspace/trials/agentdojo-6a0d04e6683447c8adf4cc3ff7f1e8f4/observation.json",
+      "sha256": "31a28a6b9a72e2f3a39c9322282b3cd2f82180428c162a3fbf4ed5799dc391e7"
+    },
+    {
+      "included_in_matrix": false,
+      "path": "/Users/agentmackenzie/Documents/Codex/2026-11-08/neuralstrike-phase3/workspace/trials/agentdojo-6c650a6823144bd6bba9e703fb863ddb/observation.json",
+      "sha256": "ea7d321ed2ab65644a9844437f7e2faedd9dcfa9142f80f1f0c0255e8e491f07"
+    },
+    {
+      "included_in_matrix": false,
+      "path": "/Users/agentmackenzie/Documents/Codex/2026-11-08/neuralstrike-phase3/workspace/trials/agentdojo-cb750427a1e0441da579719a2bcb7666/observation.json",
+      "sha256": "45fb29564e3573dc4650ce91ed7ea5f663e3ef6305323990295d6d8360d7946e"
+    }
+  ],
+  "scripted_native_policy_check": {
+    "actual_model_inference": false,
+    "included_in_efficacy": false,
+    "path": "/Users/agentmackenzie/Documents/Codex/2026-11-08/neuralstrike-phase3/workspace/native-policy-check.json",
+    "sha256": "9d26311b023eb285808983d26bb19a925d858cf847a50033978f00dd4a6c9c45"
+  },
+  "source_baseline": "d0c57ce"
+}

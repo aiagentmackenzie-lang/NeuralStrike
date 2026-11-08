@@ -306,3 +306,68 @@ def test_malformed_later_data_receipt_cannot_erase_confirmed_transfer():
     response, oracle = effect_prediction(document)
     assert response.error
     assert oracle.check(response).verdict is Verdict.SUCCEEDED
+
+
+def test_native_retry_cannot_redispatch_after_incomplete_generation():
+    """The native LLM helper retries exceptions; failed transport must latch closed."""
+    journal = {"exchanges": []}
+    transport = CapturingTransport(journal, lambda: None, seed=7)
+    transport.inner.close()
+    seen = []
+
+    def reply(request):
+        seen.append(request)
+        return httpx.Response(200, json={"choices": [{"finish_reason": "length"}]})
+
+    transport.inner = httpx.MockTransport(reply)
+    request = httpx.Request(
+        "POST", "http://127.0.0.1:11434/v1/chat/completions", json={"model": "qwen3.5:2b"}
+    )
+    for _ in range(2):
+        with pytest.raises(RuntimeError):
+            transport.handle_request(request)
+    assert len(seen) == 1
+    assert len(journal["exchanges"]) == 1
+    transport.close()
+
+
+def test_direct_banking_collector_reaches_source_validation_without_repo_pythonpath(tmp_path):
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    from examples.agentdojo_banking import collect
+
+    script = Path(collect.__file__)
+    repo = tmp_path / "wrong-source"
+    subprocess.run(["git", "init", str(repo)], capture_output=True, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "fixture",
+        ],
+        capture_output=True,
+        check=True,
+    )
+    # Read-only wrong-revision source; source validation must fail before native imports/inference.
+    result = subprocess.run(
+        [sys.executable, str(script), "--source", str(repo), "--out", str(tmp_path), "--case", "benign_bill"],
+        cwd=tmp_path,
+        env={k: v for k, v in os.environ.items() if k != "PYTHONPATH"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "AgentDojo checkout must be clean at the reviewed revision" in result.stderr
+    assert "ModuleNotFoundError" not in result.stderr

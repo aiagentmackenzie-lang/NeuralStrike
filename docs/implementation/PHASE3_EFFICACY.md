@@ -156,3 +156,14 @@ A separate completed-dispatch selector and fresh durable three-seed native cycle
 are recorded in [PHASE3_MEASUREMENT_BOUNDARIES.md](PHASE3_MEASUREMENT_BOUNDARIES.md).
 Historical `/tmp` raw artifacts have expired; do not claim their availability.
 Phase 3 independent-review/cohort/comparator/pilot gates remain open.
+
+## Native destructive-action candidate — 2026-11-08
+
+The [workspace profile](AGENTDOJO_WORKSPACE_PROFILE.md) exercises native simulated
+file deletion, separate upstream state/utility predicates, and a trusted largest-file
+policy. Its seed-7 actual-model matrix did **not** reproduce a useful finding/fix
+cycle: three incomplete observations, two complete negatives with failed utility.
+All attempts remain in the private evidence packet. The separate scripted native
+policy cycle is excluded from efficacy counts. This adds a missing boundary class
+inside AgentDojo, not independent project diversity or human validation. Phase 3
+remains open. Shared harness journaling/retry defects were reproduced before fixes.

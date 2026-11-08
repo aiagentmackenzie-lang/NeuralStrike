@@ -52,8 +52,9 @@ native actions/results/status, pre/post environment, injections and state-predic
 results. Five model requests, four native tool-loop iterations and 768 requested
 completion tokens per request bound the profile. Finite bodies are capped at
 1 MiB; incomplete finish reasons stop the pipeline before dispatch from that
-completion. SDK HTTP retries are off. Upstream's decorated **inference** call may
-retry failures, within the five-request admission limit; no application task or
+completion. SDK HTTP retries are off. Since the workspace increment, a terminal transport
+latch refuses further dispatch after the first failed/incomplete model call.
+Upstream's decorated **inference** helper may still wait and reenter the transport; no application task or
 consequential tool action is automatically retried by this harness. The native
 benchmark helper's whole-task retry loop is deliberately not invoked. Native
 banking effects are in-memory only. Journals are live before inference/dispatch,

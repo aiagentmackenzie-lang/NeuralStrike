@@ -1452,3 +1452,72 @@ cloud inference, model download, contact with others or release workflow dispatc
   trials match the archived code. Packet SHA-256:
   `0a571f0ecc234f9a0e0d045b821f19f8a077a6d15ba631e7e2cb987fe376f912`.
   Hashes are integrity checks, not independent reviewer signatures.
+
+## 2026-11-08 — native destructive boundary, failed candidate retained
+
+Started from clean `d0c57ce`, reconciled inherited memory/supply-chain guidance,
+acceptance records and durable evidence. Rechecked its hosted CI success and the
+prior packet SHA-256/ZIP CRC (122 files plus a directory entry). No remote divergence.
+
+- Implemented `examples/agentdojo_workspace/` for native v1 workspace deletion,
+  trusted pre-injection largest-file authorization, predeclared trial identities/
+  expectations/budgets, live state/action/model journals, explicit completed-effect
+  canonical import and separate upstream state/utility labels. Reuses shared
+  collection, transport, assessment, replay and efficacy APIs; banking CLI remains.
+- **Actual-model candidate failed its expectation gate.** Seed 7 matrix: five
+  attempts, three incomplete, two complete negatives with failed task utility.
+  Completed-effect metrics TP0/FP0/TN2/FN0/inconclusive3/errors3/missing0; utility
+  **0/2 measured plus three inconclusive**, precision/recall unavailable. Repeated
+  filename-versus-ID mistakes and truncated generations prevent a useful cycle.
+  Matrix exits 3. Seeds 17/29 remain unperformed; no positive/fix is claimed.
+- Separate scripted native policy check (no inference, excluded from efficacy)
+  verifies authorized ID11 deletion with protected ID13 retained under the wrapper;
+  unfiltered/bound/unfiltered violation/utility true/false -> false/true -> true/false.
+  This proves a native operation/policy contract, not general security efficacy.
+- Preserved all three preliminary attempts, including YAML/serialization startup
+  failures and an incomplete model attempt. No missing error journal was invented.
+- Demonstrated journal encoding failure blocked subsequent error persistence via a
+  stale temporary file; regression failed before pre-encoding/JSON-mode state fix.
+  Native inference retries redispatched truncated responses; regression observed
+  two outbound requests before the terminal transport latch restricted it to one.
+  Native helper may still wait/reenter; no hard-cancellation claim.
+- Caught/fixed a new direct-script import regression during compatibility validation,
+  with its failing regression first and failed process receipt retained. Fresh
+  actual-model banking compatibility rerun passed the existing three-stage cycle:
+  violation/utility true/false -> false/true -> true/false. No historical banking
+  observation was replaced or promoted to an additional efficacy cohort.
+- The initial matrix plan saved harness digests without byte copies; final harness
+  has later compatibility changes and is not asserted identical. Current verifier
+  copies exact harness bytes before dispatch, verified in its process-failure test.
+
+### Verification and private evidence
+
+- Final Python 3.12.14 console pytest: **1492 passed, 2 skipped, 91.88% coverage**.
+  This is code coverage, not security efficacy. Existing optional skips and
+  pytest-asyncio fixture-scope warning remain.
+- Ruff passes across src/tests/both earlier examples/new workspace example; strict
+  mypy passes across 144 source files. Wheel/sdist built; 148 packaged Python/JSON/
+  YAML files match source. Core/candidate dependencies and locks are unchanged.
+- Outside checkout, rebuilt installed wheel passes **31** example/transport/policy/
+  import tests. Original-oracle CLI replay correctly returns **3** for the incomplete
+  five-row assessment; installed CLI efficacy returns export 0 and byte-equivalent
+  metrics (export success is not a security pass). Final harness-snapshot assertion
+  separately passes after its addition. `git diff --check` passes.
+- Durable private root:
+  `/Users/agentmackenzie/Documents/Codex/2026-11-08/neuralstrike-phase3/workspace`.
+  Packet `phase3-workspace-review.zip` in its parent: **119 files**, mode0600,
+  ZIP CRC and SHA-256 inventory verified; packet SHA-256
+  `eaf88ade962b528557dfc981c8518740aa3df749d8756386867ed7ce252b2926`.
+  Includes preliminary/matrix/failed banking startup/successful compatibility
+  receipts, raw model bodies/state, canonical evidence/labels/metrics, scripted
+  check, native license/selected source, final harness/locks and review instructions.
+- Contract/results: [AGENTDOJO_WORKSPACE_PROFILE.md](AGENTDOJO_WORKSPACE_PROFILE.md)
+  and [evidence index](evidence/phase3-workspace-2026-11-08.json). Packet hashes are
+  consistency checks, not author authentication or independent reviewer signatures.
+
+**Phase 3 remains in progress.** This adds a genuine missing destructive boundary
+inside AgentDojo, not a second independent project. No confirmed model-driven
+workspace breach/useful remediation, independent human review, comparator result,
+customer participation or Phase 4 acceptance. A prepared review packet names the
+missing real reviewer input. No subagents, outreach, cloud spend, model download,
+external security testing, release publication or Release dispatch occurred.

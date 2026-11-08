@@ -17,6 +17,9 @@ from typing import Any
 
 from examples.agentdojo_banking.collect import ATTACKER, CASES, MODEL, MODEL_DIGEST, REVISION
 from examples.agentdojo_banking.effects import effect_prediction
+from examples.agentdojo_workspace.effects import effect_prediction as workspace_prediction
+from examples.agentdojo_workspace.profile import CASES as WORKSPACE_CASES
+from examples.agentdojo_workspace.profile import POLICIES
 
 from neuralstrike.corpus.loader import Scenario, SuccessCriterion
 from neuralstrike.evaluation.assessment import AssessmentRecorder, load_assessment
@@ -32,10 +35,14 @@ from neuralstrike.oracles.recipes import oracle_policy
 from neuralstrike.utils.artifacts import write_private_artifact
 
 
-def read_observation(path: Path) -> tuple[dict[str, Any], str]:
+def read_observation(path: Path, *, profile: str = "banking") -> tuple[dict[str, Any], str]:
+    if profile not in {"banking", "workspace"}:
+        raise ValueError("unsupported native profile")
+    workspace = profile == "workspace"
+    kind = "agentdojo-workspace-local-observation" if workspace else "agentdojo-local-observation"
     raw = _read(path)
     document = _json(raw)
-    if not isinstance(document, dict) or document.get("kind") != "agentdojo-local-observation":
+    if not isinstance(document, dict) or document.get("kind") != kind:
         raise ValueError("not an AgentDojo observation")
     if type(document.get("schema_version")) is not int or document["schema_version"] != 1:
         raise ValueError("unsupported observation schema")
@@ -45,12 +52,18 @@ def read_observation(path: Path) -> tuple[dict[str, Any], str]:
         or document.get("model_digest") != MODEL_DIGEST
     ):
         raise ValueError("unreviewed source revision or local model")
-    if document.get("case") not in CASES or document.get("policy") not in {
-        "unfiltered",
-        "authorized_bill_only",
-        "trusted_bill_context",
-        "bound_bill_payment",
-    }:
+    if document.get("case") not in (WORKSPACE_CASES if workspace else CASES) or document.get(
+        "policy"
+    ) not in (
+        POLICIES
+        if workspace
+        else {
+            "unfiltered",
+            "authorized_bill_only",
+            "trusted_bill_context",
+            "bound_bill_payment",
+        }
+    ):
         raise ValueError("unsupported selected case or policy")
     if document.get("state") not in {"running", "complete"}:
         raise ValueError("unsupported execution state")
@@ -106,11 +119,14 @@ def prediction(document: dict[str, Any]) -> tuple[SutResponse, ForbiddenToolOrac
 
 
 async def import_observations(
-    paths: list[Path], output: Path, *, measurement: str = "emitted_intent"
+    paths: list[Path], output: Path, *, measurement: str = "emitted_intent", profile: str = "banking"
 ) -> Path:
     if measurement not in {"emitted_intent", "completed_effect"}:
         raise ValueError("unsupported measurement boundary")
-    observations = [read_observation(path) for path in paths]
+    workspace = profile == "workspace"
+    if workspace and measurement != "completed_effect":
+        raise ValueError("workspace profile currently supports completed-effect measurement only")
+    observations = [read_observation(path, profile=profile) for path in paths]
     if len({digest for _, digest in observations}) != len(observations):
         raise ValueError("duplicate observation bytes")
     scenarios = [
@@ -133,7 +149,11 @@ async def import_observations(
                 if measurement == "completed_effect"
                 else SuccessCriterion(oracle="forbidden_tool"),
             ),
-            mitigations=("Enforce authorization on tool effects; preserve authorized bill payment.",),
+            mitigations=(
+                "Bind deletion to trusted task authorization; preserve the legitimate task."
+                if workspace
+                else "Enforce authorization on tool effects; preserve authorized bill payment.",
+            ),
         )
         for document, digest in observations
     ]
@@ -143,7 +163,7 @@ async def import_observations(
         base_seed=7,
         trials=1,
         adapter="agentdojo-native-local-model",
-        target="local simulated banking",
+        target="local simulated " + profile,
         fail_on="vuln",
         declared_scope={
             "profile": "exploratory " + measurement + " evaluation",
@@ -152,7 +172,9 @@ async def import_observations(
             "measurement_contract": {
                 "boundary": measurement,
                 "origin": (
-                    "agentdojo-native-local-completed-dispatch"
+                    "agentdojo-native-local-" + profile + "-completed-dispatch"
+                    if workspace
+                    else "agentdojo-native-local-completed-dispatch"
                     if measurement == "completed_effect"
                     else "agentdojo-local-model-emissions"
                 ),
@@ -162,7 +184,11 @@ async def import_observations(
     cases = []
     for scenario, (document, digest) in zip(scenarios, observations, strict=True):
         response, oracle = (
-            effect_prediction(document) if measurement == "completed_effect" else prediction(document)
+            workspace_prediction(document)
+            if workspace
+            else effect_prediction(document)
+            if measurement == "completed_effect"
+            else prediction(document)
         )
 
         async def factory(
@@ -192,7 +218,9 @@ async def import_observations(
                         "scenario": asdict(scenario),
                         "source_observation": observation,
                         "observation_selector_sha256": hashlib.sha256(
-                            Path(__file__).with_name("effects.py").read_bytes()
+                            (Path(__file__).parent.parent / "agentdojo_workspace/effects.py").read_bytes()
+                            if workspace
+                            else Path(__file__).with_name("effects.py").read_bytes()
                             if measurement == "completed_effect"
                             else Path(__file__).read_bytes()
                         ).hexdigest(),
@@ -206,12 +234,14 @@ async def import_observations(
                 Probe(scenario.id, "imported observation", factory)
             )
         )
-        entry = CASES[document["case"]]
+        entry = (WORKSPACE_CASES if workspace else CASES)[document["case"]]
         cases.append(
             {
                 "scenario_id": scenario.id,
                 "scenario_sha256": configuration_digest(asdict(scenario)),
-                "boundary_class": {
+                "boundary_class": "destructive_action"
+                if workspace
+                else {
                     4: "tool_argument_redirection",
                     5: "unauthorized_transfer",
                     7: "unauthorized_password_change",
@@ -222,7 +252,7 @@ async def import_observations(
                 "ground_truth_source": "source_observation: native v1 security predicate on pre/post state",
                 "ground_truth_sha256": digest,
                 "label_origin": "upstream_assertion",
-                "preconditions": "Native banking tools; harness payload/configuration; no production effects",
+                "preconditions": f"Native {profile} tools; harness configuration; no production effects",
                 "benign_task": ("passed" if document["upstream_utility"] else "failed")
                 if document["state"] == "complete" and not document.get("error")
                 else "inconclusive",
@@ -233,7 +263,10 @@ async def import_observations(
     verified = load_assessment(recorder.path, verify_oracles=True)
     labels = {
         "schema_version": 2,
-        "cohort_id": "agentdojo-local-exploratory-" + measurement,
+        "cohort_id": (
+            "agentdojo-workspace-local-exploratory-" if workspace else "agentdojo-local-exploratory-"
+        )
+        + measurement,
         "assessment_manifest_sha256": verified.manifest_sha256,
         "application": {
             "source": "https://github.com/ethz-spylab/agentdojo",
@@ -241,14 +274,14 @@ async def import_observations(
             "license": "MIT",
             "configuration_sha256": configuration_digest([digest for _, digest in observations]),
             "capabilities": [
-                "native in-memory banking",
+                "native in-memory " + profile,
                 "actual local model inference",
                 "upstream state predicates",
             ],
             "exclusions": [
                 "no independent human validation",
                 "typed measurement contract; no production effects",
-                "no real transfers",
+                "no production effects",
                 "no persistent memory",
                 "exploratory selected observations",
             ],
