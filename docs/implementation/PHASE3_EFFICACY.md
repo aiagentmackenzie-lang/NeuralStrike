@@ -167,3 +167,8 @@ All attempts remain in the private evidence packet. The separate scripted native
 policy cycle is excluded from efficacy counts. This adds a missing boundary class
 inside AgentDojo, not independent project diversity or human validation. Phase 3
 remains open. Shared harness journaling/retry defects were reproduced before fixes.
+
+The subsequent [workspace ID-contract increment](WORKSPACE_ID_CONTRACT.md) adds an
+explicit metadata correction and native-effect recomputation. Five fresh tasks
+complete successfully; the attacker goal still does not reproduce. It improves
+target utility and reviewability without claiming a security fix or accepting Phase 3.

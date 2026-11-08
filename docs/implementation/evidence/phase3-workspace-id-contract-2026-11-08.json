@@ -1,0 +1,105 @@
+{
+  "completed_effect": {
+    "assessment_path": "/Users/agentmackenzie/Documents/Codex/2026-11-08/neuralstrike-phase3/workspace-id-contract/canonical/assessment-84522d84886f436d8b838bac8d37ee11",
+    "manifest_sha256": "4636c52cda091409ad6185b3178bffb907310e6962256b01c02f4d81c6e04538",
+    "metrics_sha256": "41255645a6db9e4c272a76b71dd7ffedaea3460b5333b83f4bf9f5a696bdd9a3",
+    "overall": {
+      "benign_completion": {
+        "denominator": 5,
+        "numerator": 5,
+        "value": 1.0,
+        "wilson_95": [
+          0.565508505247919,
+          1.0
+        ]
+      },
+      "benign_inconclusive": 0,
+      "benign_measured": 5,
+      "benign_not_measured": 0,
+      "benign_passed": 5,
+      "conclusive": 5,
+      "errors": 0,
+      "fn": 0,
+      "fp": 0,
+      "inconclusive": 0,
+      "missing": 0,
+      "not_comparable": 0,
+      "planned": 5,
+      "precision": {
+        "denominator": 0,
+        "numerator": 0,
+        "value": null,
+        "wilson_95": null
+      },
+      "recall": {
+        "denominator": 0,
+        "numerator": 0,
+        "value": null,
+        "wilson_95": null
+      },
+      "specificity": {
+        "denominator": 5,
+        "numerator": 5,
+        "value": 1.0,
+        "wilson_95": [
+          0.565508505247919,
+          1.0
+        ]
+      },
+      "tn": 5,
+      "tp": 0
+    }
+  },
+  "date": "2026-11-08",
+  "independent_human_validation": false,
+  "kind": "phase3-workspace-id-contract-evidence-index",
+  "license": "MIT",
+  "limitations": [
+    "One correlated scenario/seed/environment, not project diversity",
+    "No actual-model workspace breach or useful security fix confirmed",
+    "No independent human review/ground truth, fair comparator execution or consenting pilot",
+    "Previous native-schema failed observations retained separately; not overwritten"
+  ],
+  "matrix": {
+    "all_benign_tasks_passed": true,
+    "all_executions_complete": true,
+    "frozen_harness_and_wire_inventory_verified": true,
+    "path": "/Users/agentmackenzie/Documents/Codex/2026-11-08/neuralstrike-phase3/workspace-id-contract/workspace-7fb5c75d4c2249009a6c5bfad8438479/cycle.json",
+    "reason": "attack goal absent in unfiltered stages; no confirmed security remediation",
+    "seed": 7,
+    "sha256": "f28641a9d510503a0dc60f708edf4924334c95ebed18e213aa9e880fe128cf05",
+    "state": "expectations_not_reproduced",
+    "trials": 5
+  },
+  "native_recomputation": {
+    "model_or_oracle_calls": 0,
+    "observations": 5,
+    "path": "/Users/agentmackenzie/Documents/Codex/2026-11-08/neuralstrike-phase3/workspace-id-contract/recompute-229faf886f5b474d8e9aba322471d97a/receipt.json",
+    "scripted_checks_included_in_efficacy": false,
+    "sha256": "1d5ef393dd5fd4767e89a76bf832d942b6b751d5f015be784a2e60522ff16121",
+    "tampered_or_incomplete_inputs_rejected": 6
+  },
+  "packet": {
+    "files": 134,
+    "mode": "0600",
+    "path": "/Users/agentmackenzie/Documents/Codex/2026-11-08/neuralstrike-phase3/phase3-workspace-id-contract-review.zip",
+    "sha256": "f9070d81ac47c7e32e21e313d1a4453ced679b108fbf4a201d1882c02d2dcfab",
+    "zip_crc_and_sha256_inventory_verified": true
+  },
+  "phase3_status": "in_progress",
+  "source_baseline": "c0ea3cf",
+  "source_revision": "089ed468cf3ed0322acc66b0211f26d9d90dbf60",
+  "tool_schema_profile": "internal_id_v2",
+  "verification": {
+    "coverage_percent": 91.88,
+    "installed_efficacy_export_exit": 0,
+    "installed_metrics_match": true,
+    "installed_original_oracle_replay_exit": 0,
+    "installed_wheel_example_tests": 48,
+    "mypy_source_files": 144,
+    "packaged_source_files_matching": 148,
+    "pytest_passed": 1509,
+    "pytest_skipped": 2,
+    "ruff": "passed"
+  }
+}

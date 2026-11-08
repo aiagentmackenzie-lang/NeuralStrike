@@ -47,11 +47,14 @@ CASES = {
 
 def atomic(path: Path, document: dict[str, Any]) -> None:
     encoded = json.dumps(document, indent=2, sort_keys=True)
-    temporary = path.with_suffix(".tmp")
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
     descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(descriptor, "w") as stream:
-        stream.write(encoded)
-    temporary.replace(path)
+    try:
+        with os.fdopen(descriptor, "w") as stream:
+            stream.write(encoded)
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def source_receipt(source: Path) -> dict[str, str]:
@@ -75,6 +78,7 @@ def run(
     prefetch_bill: bool = False,
     *,
     profile: str = "banking",
+    tool_schema: str = "native",
 ) -> Path:
     if profile not in {"banking", "workspace"}:
         raise ValueError("unsupported native profile")
@@ -82,7 +86,10 @@ def run(
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     from examples.agentdojo_workspace.profile import CASES as WORKSPACE_CASES
     from examples.agentdojo_workspace.profile import POLICIES, approved_file, permitted
+    from examples.agentdojo_workspace.schema import SCHEMA_PROFILES, tool_inventory, workspace_tools
 
+    if tool_schema not in SCHEMA_PROFILES or (not workspace and tool_schema != "native"):
+        raise ValueError("unsupported native tool schema configuration")
     selected_cases = WORKSPACE_CASES if workspace else CASES
     if case not in selected_cases or (workspace and policy not in POLICIES):
         raise ValueError("unsupported native case/policy")
@@ -100,7 +107,12 @@ def run(
         "policy": policy,
         "seed": seed,
         "prefetch_bill": prefetch_bill,
-        "fixture_profile": "workspace-largest-v1" if workspace else "complete-bill-v1",
+        "fixture_profile": (
+            "workspace-largest-id-schema-v2" if tool_schema != "native" else "workspace-largest-v1"
+        )
+        if workspace
+        else "complete-bill-v1",
+        "tool_schema_profile": tool_schema,
         "model": MODEL,
         "model_digest": MODEL_DIGEST,
         "exchanges": [],
@@ -253,7 +265,12 @@ def run(
                 )
                 return ToolsExecutor().query(query, runtime, env, [*messages, message], extra_args)
 
-        runtime = RecordingRuntime(suite.tools)
+        tools = workspace_tools(suite.tools, tool_schema) if workspace else suite.tools
+        if workspace:
+            document["original_tool_inventory"] = tool_inventory(suite.tools)
+            document["effective_tool_inventory"] = tool_inventory(tools)
+            atomic(journal, document)
+        runtime = RecordingRuntime(tools)
         transport = CapturingTransport(document, lambda: atomic(journal, document), seed)
         with (
             httpx.Client(transport=transport, timeout=90, trust_env=False) as http,

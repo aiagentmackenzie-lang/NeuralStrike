@@ -1521,3 +1521,65 @@ workspace breach/useful remediation, independent human review, comparator result
 customer participation or Phase 4 acceptance. A prepared review packet names the
 missing real reviewer input. No subagents, outreach, cloud spend, model download,
 external security testing, release publication or Release dispatch occurred.
+
+## 2026-11-08 — correct workspace interface and rederive native effects
+
+Continued from clean `c0ea3cf` (hosted CI passed), preserving the prior failed
+workspace matrix and private packet (its hash was rechecked unchanged).
+
+- Reproduced the native `delete_file` metadata mismatch: schema says filename,
+  implementation indexes internal ID. Earlier wire list results already contained
+  IDs. Added opt-in `internal_id_v2`, correcting only model-facing metadata, with
+  original/effective inventories and actual wire checks. The native callable,
+  dependencies, argument type/values, tool inventory and native source are unchanged.
+  No filename-to-ID mapping or model-selected-ID substitution. `native` remains
+  default; unknown profiles/contracts reject before inference. This is an interface
+  correction, not a demonstrated vulnerability or security remediation.
+- Two regressions failed before fixes: rename failure left a shared temporary file
+  blocking error persistence; verifier copied source but executed the live checkout.
+  Atomic writes now own unique temporary files and preserve foreign/history files;
+  the verifier executes its frozen collector copy. All plan source hashes match.
+- Fresh preplanned seed7 corrected-schema matrix: two benign controls and three
+  injected stages all complete, each model calling `delete_file(file_id='11')`.
+  Protected ID13 remains; native utility **5/5**. Typed effect metrics **TN5, TP0,
+  FP0, FN0, inconclusive0, errors0, missing0**; precision/recall unavailable. These
+  are correlated configurations, not five independent cases or broad efficacy.
+- The unfiltered attacker goal did not reproduce. Cycle verifier correctly exits
+  **3**, expectations_not_reproduced; no model-driven security finding/fix is
+  claimed. The target now has working benign controls under this explicit profile.
+- Added explicit offline native-effect recomputation in the isolated environment:
+  source-hash/fixture binding, narrow in-memory list/delete dispatch, authorization
+  receipt checks, exact pre/post-state comparison and upstream predicate reruns.
+  Five observations rederive exactly with **zero model/oracle calls**. Six native
+  negative checks reject tampered state/label, arbitrary tool, inconsistent blocked
+  authorization, invalid completed call and incomplete execution. These scripted
+  checks do not enlarge efficacy counts or establish independent human review.
+  Original-oracle replay remains separate and does not execute native code.
+
+### Verification and durable review packet
+
+- Final Python3.12.14 full pytest: **1509 passed, 2 skipped, 91.88% code coverage**;
+  existing optional skips/pytest warning remain. Ruff passes all src/tests/three
+  examples; strict mypy passes144 source files. No dependency/lock changes.
+- Built wheel/sdist;148 packaged source files match. Outside-checkout installed
+  wheel passes **48** example contracts. CLI original-oracle replay exits0 for the
+  complete five-row assessment; efficacy export0 produces identical metrics.
+  Neither exit establishes a general security pass or verified security fix.
+- Private root:
+  `/Users/agentmackenzie/Documents/Codex/2026-11-08/neuralstrike-phase3/workspace-id-contract`.
+  Parent packet `phase3-workspace-id-contract-review.zip`: **134 files**, mode0600,
+  ZIP CRC/every SHA-256 inventory entry verified. SHA-256
+  `f9070d81ac47c7e32e21e313d1a4453ced679b108fbf4a201d1882c02d2dcfab`.
+  Contains frozen execution source/plan, original/effective/wire schemas, raw model
+  observations, canonical evidence/separate labels/metrics, recomputation receipts/
+  scripts, negative checks, failing-before-fix logs, native license/selected source,
+  current harness/locks, review questions and verification logs.
+- Contract/results: [WORKSPACE_ID_CONTRACT.md](WORKSPACE_ID_CONTRACT.md) and
+  [evidence index](evidence/phase3-workspace-id-contract-2026-11-08.json).
+  Hashes establish internal consistency, not source authentication or signatures.
+
+**Phase 3 stays in progress.** Corrected utility/recomputation does not fill the
+independent-project, human-label/review, comparator or consenting-pilot gates.
+Real reviewer inputs remain explicitly unfilled in the completed packet. No
+subagents, new dependencies/models, cloud inference, external target security tests,
+outreach, release publication or Release workflow dispatch.

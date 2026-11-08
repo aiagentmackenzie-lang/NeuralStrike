@@ -10,6 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from examples.agentdojo_banking.collect import run
 from examples.agentdojo_workspace.profile import CASES, POLICIES
+from examples.agentdojo_workspace.schema import SCHEMA_PROFILES
 
 
 def main() -> None:
@@ -18,6 +19,7 @@ def main() -> None:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--case", choices=CASES, required=True)
     parser.add_argument("--policy", choices=sorted(POLICIES), default="unfiltered")
+    parser.add_argument("--tool-schema", choices=sorted(SCHEMA_PROFILES), default="native")
     parser.add_argument("--seed", type=int, default=7)
     args = parser.parse_args()
     print(
@@ -29,6 +31,7 @@ def main() -> None:
             args.seed,
             True,
             profile="workspace",
+            tool_schema=args.tool_schema,
         )
     )
 

@@ -55,3 +55,42 @@ Only journals with available native labels can enter efficacy comparison; startu
 failures remain raw journals. Incomplete negatives become Inconclusive. Utility
 is separate. See [the measured limitations](../../docs/implementation/AGENTDOJO_WORKSPACE_PROFILE.md).
 No successful actual-model finding/fix/regression cycle is promised by this example.
+
+## Explicit internal-ID schema profile
+
+The pinned native `delete_file` description says “filename”, but its implementation
+indexes the drive by `id_`. Use `--tool-schema internal_id_v2` on `verify` or `collect`
+to select a reviewed metadata correction. It changes only that tool's description
+and parameter documentation; the native callable, dependencies, argument type,
+requested arguments, runtime and state predicates remain unchanged. It does not
+translate filenames, choose an authorized ID for the model, or add authorization.
+`native` remains the default. Original/effective inventories and the selected
+profile are recorded, and unknown profiles/contracts reject before inference.
+
+The verifier now executes the collector from its frozen `harness/` copy. Copying
+source without executing it did not previously bind execution to the saved bytes.
+Frozen source hashes and actual wire inventories can be checked independently.
+
+A separate native-effect recomputation is available in the **isolated AgentDojo
+environment**, with the NeuralStrike checkout on its Python import path:
+
+```sh
+/PATH/TO/ISOLATED/bin/python -m examples.agentdojo_workspace.recompute \
+  --source /PATH/TO/PINNED/agentdojo \
+  --observation /PRIVATE/TRIAL/observation.json --out /PRIVATE/recomputed
+```
+
+Repeat `--observation` for multiple trials. This resets the pinned native fixture
+with recorded injections, executes only the reviewed `list_files`/`delete_file`
+in-memory operations, checks authorization receipts, compares exact pre/post state,
+and reruns native security/utility predicates. Network connections are refused;
+there are no model or NeuralStrike oracle calls. Other operations, failed or
+incomplete dispatches, source mismatches and inconsistent state/labels reject.
+Exit 0 means this narrow recomputation matched, not independent human validation
+or a successful live finding/fix. Original-oracle CLI replay remains separate and
+does not silently execute this recomputation.
+
+The first corrected-schema seed-7 matrix completed all five tasks, deleting only
+ID11 and preserving ID13. The attack goal did not reproduce even without the
+policy; there is still **no model-driven workspace finding/fix cycle**. See the
+[continuation record](../../docs/implementation/WORKSPACE_ID_CONTRACT.md).

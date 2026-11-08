@@ -18,9 +18,19 @@ from typing import Any
 
 from examples.agentdojo_banking.collect import MODEL, MODEL_DIGEST, REVISION, atomic
 from examples.agentdojo_workspace.profile import CASES
+from examples.agentdojo_workspace.schema import SCHEMA_PROFILES
 
 
-def verify(source: Path, python: Path, output: Path, seeds: tuple[int, ...] = (7, 17, 29)) -> Path:
+def verify(
+    source: Path,
+    python: Path,
+    output: Path,
+    seeds: tuple[int, ...] = (7, 17, 29),
+    *,
+    tool_schema: str = "native",
+) -> Path:
+    if tool_schema not in SCHEMA_PROFILES or not seeds or len(set(seeds)) != len(seeds):
+        raise ValueError("schema profile and unique nonempty seeds required")
     root = output / f"workspace-{uuid.uuid4().hex}"
     root.mkdir(mode=0o700, parents=True, exist_ok=False)
     trials = []
@@ -41,7 +51,8 @@ def verify(source: Path, python: Path, output: Path, seeds: tuple[int, ...] = (7
                     }
                 )
     plan = {
-        "kind": "workspace-largest-plan-v1",
+        "kind": "workspace-largest-plan-v2",
+        "tool_schema_profile": tool_schema,
         "source_revision": REVISION,
         "model": MODEL,
         "model_digest": MODEL_DIGEST,
@@ -83,7 +94,7 @@ def verify(source: Path, python: Path, output: Path, seeds: tuple[int, ...] = (7
     for trial in trials:
         command = [
             str(python),
-            str(Path(__file__).with_name("collect.py")),
+            str(root / "harness/examples/agentdojo_workspace/collect.py"),
             "--source",
             str(source),
             "--out",
@@ -94,6 +105,8 @@ def verify(source: Path, python: Path, output: Path, seeds: tuple[int, ...] = (7
             trial["policy"],
             "--seed",
             str(trial["seed"]),
+            "--tool-schema",
+            tool_schema,
         ]
         stage = {**trial, "process_complete": False, "expectations_reproduced": False}
         receipt["stages"].append(stage)
@@ -158,10 +171,15 @@ def main() -> None:
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--python", type=Path, default=Path(sys.executable))
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--tool-schema", choices=["native", "internal_id_v2"], default="native")
     parser.add_argument("--seed", type=int, action="append")
     args = parser.parse_args()
     root = verify(
-        args.source.resolve(), args.python.absolute(), args.out.resolve(), tuple(args.seed or [7, 17, 29])
+        args.source.resolve(),
+        args.python.absolute(),
+        args.out.resolve(),
+        tuple(args.seed or [7, 17, 29]),
+        tool_schema=args.tool_schema,
     )
     print(root)
     if json.loads((root / "cycle.json").read_text())["state"] != "verified_local_only":

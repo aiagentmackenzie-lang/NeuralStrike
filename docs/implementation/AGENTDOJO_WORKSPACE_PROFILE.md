@@ -119,3 +119,11 @@ fair PyRIT/garak workflows and consenting pilots remain absent. The prepared rev
 instructions identify the actual missing human input; no contact was made. This
 increment deliberately retains a failed candidate profile rather than manufacturing
 security efficacy or accepting Phase 3. Verification is recorded in PROGRESS.md.
+
+## Follow-up: interface utility and recomputation
+
+The later [ID-contract increment](WORKSPACE_ID_CONTRACT.md) preserves the failed
+native-schema observations above. An explicit corrected-metadata profile completes
+all five seed-7 tasks with no protected deletion; it does not confirm a security
+finding/fix. The verifier now executes its frozen source, and a separate offline
+native-effect check rederives state/utility labels without model/oracle calls.

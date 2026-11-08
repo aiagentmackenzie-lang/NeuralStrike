@@ -20,6 +20,7 @@ from examples.agentdojo_banking.effects import effect_prediction
 from examples.agentdojo_workspace.effects import effect_prediction as workspace_prediction
 from examples.agentdojo_workspace.profile import CASES as WORKSPACE_CASES
 from examples.agentdojo_workspace.profile import POLICIES
+from examples.agentdojo_workspace.schema import SCHEMA_PROFILES
 
 from neuralstrike.corpus.loader import Scenario, SuccessCriterion
 from neuralstrike.evaluation.assessment import AssessmentRecorder, load_assessment
@@ -65,6 +66,8 @@ def read_observation(path: Path, *, profile: str = "banking") -> tuple[dict[str,
         }
     ):
         raise ValueError("unsupported selected case or policy")
+    if workspace and document.get("tool_schema_profile", "native") not in SCHEMA_PROFILES:
+        raise ValueError("unsupported workspace tool schema configuration")
     if document.get("state") not in {"running", "complete"}:
         raise ValueError("unsupported execution state")
     if (
@@ -167,6 +170,15 @@ async def import_observations(
         fail_on="vuln",
         declared_scope={
             "profile": "exploratory " + measurement + " evaluation",
+            **(
+                {
+                    "tool_schema_profiles": sorted(
+                        {document.get("tool_schema_profile", "native") for document, _ in observations}
+                    )
+                }
+                if workspace
+                else {}
+            ),
             "source_revision": REVISION,
             "independent_human_validation": False,
             "measurement_contract": {

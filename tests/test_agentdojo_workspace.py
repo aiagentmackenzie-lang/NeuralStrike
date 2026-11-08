@@ -114,6 +114,9 @@ def test_workspace_matrix_retains_every_failed_process(tmp_path, monkeypatch):
     assert receipt["state"] == "expectations_not_reproduced"
     assert len(receipt["stages"]) == len(calls) == 5
     assert all(not s["process_complete"] and not s["expectations_reproduced"] for s in receipt["stages"])
+    from pathlib import Path
+
+    assert all(Path(command[1]).is_relative_to(root / "harness") for command in calls)
     assert len(list(root.glob("*-process.json"))) == 5
     plan = json.loads((root / "plan.json").read_text())
     import hashlib
