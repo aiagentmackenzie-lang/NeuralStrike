@@ -19,7 +19,10 @@ Every policy exercises exactly one control:
 * ``provenance`` — read-side filter over a **declared** origin label. Demonstrated and
   superseded: the label is what the recording store says, not what a principal proved.
 * ``authenticated`` — read-side filter over a **verified write attestation** from
-  :mod:`examples.memory_agent.provenance`. Supersedes ``provenance``.
+  :mod:`examples.memory_agent.provenance`. Supersedes ``provenance``. The store requests
+  the receipt from the runtime, which is the compromise v6 recorded.
+* ``dispatch_authenticated`` — same control, enforced where the tool is invoked: the store
+  holds no issuer channel at all and only ever verifies a receipt bound at dispatch.
 """
 
 from __future__ import annotations
@@ -36,7 +39,16 @@ UNTRUSTED = "00000000-0000-0000-0000-000000000099"
 APPROVED = "14 Cedar Lane"
 ATTACKER = "99 Harbor Road"
 ADDRESSES = (APPROVED, ATTACKER)
-POLICIES = {"unfiltered", "trusted_only", "write_bound", "provenance", "authenticated"}
+POLICIES = {
+    "unfiltered",
+    "trusted_only",
+    "write_bound",
+    "provenance",
+    "authenticated",
+    "dispatch_authenticated",
+}
+# Policies that enforce the authenticated write path. Same control, different boundary.
+AUTHENTICATED_POLICIES = frozenset({"authenticated", "dispatch_authenticated"})
 # Declared write authority, independent of the ephemeral per-observation keys.
 PRINCIPAL_AUTHORITY = {
     "session_user": (("memories", USER),),

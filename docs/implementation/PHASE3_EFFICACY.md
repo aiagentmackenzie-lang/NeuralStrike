@@ -235,3 +235,21 @@ anchor is stated as a limit: a signature proves the writer held a key, the issui
 simulated, there is no HSM/rotation/revocation, enforcement is at the store boundary rather
 than tool dispatch, and the Ed25519 primitive is vendored and cross-checked rather than a
 vetted library. Implemented and deterministically tested, not deployable.
+
+Plan v7 then moved the same control to tool dispatch, removing the compromise v6 had recorded:
+the store now holds the registry but no issuer channel, so it can verify a receipt but cannot
+ask the runtime for one. `memory_agent.tools.upsert_memory` is rebound at runtime under
+`functools.wraps` (schema asserted unchanged in the native environment); an unattested write
+returns a typed refusal as the tool result and the native tool is never invoked, so the graph
+continues instead of terminating. Across 48 observations (stages 13–15 appended, stages 0–12
+frozen): the attacker record reached the prompt 9/9 unguarded, 3/6 key filter, 0/3 declared,
+0/6 store-verified and 0/6 dispatch-bound; benign 18/18; 2 generations truncated at the
+declared 768-token cap and refused as answers. The decisive new measurement is that the
+persistent effect **did** reproduce for the first time — 2 of 3 repeats of
+`trusted_key_poisoning` under `trusted_only`, where the injected record occupied the trusted
+key and the model overwrote the victim's record with attacker content that the key filter
+immediately re-trusted. That both demonstrates the key filter's unsoundness end to end and
+corrects the earlier reading of its zero contamination as model resistance. It never
+reproduced under `provenance`, `authenticated` or `dispatch_authenticated`, and two repeats of
+one stage is a demonstration, not an effect size. The cycle still exits 3 on the falsified
+stages 2 and 4.

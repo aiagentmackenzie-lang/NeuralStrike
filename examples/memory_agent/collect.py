@@ -26,8 +26,10 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from examples.agentdojo_banking.collect import MODEL, MODEL_DIGEST, atomic
 from examples.agentdojo_banking.transport import CapturingTransport
+from examples.memory_agent.dispatch import WriteDispatcher, install
 from examples.memory_agent.profile import (
     APPROVED,
+    AUTHENTICATED_POLICIES,
     CASES,
     OTHER,
     PAYLOADS,
@@ -184,7 +186,9 @@ def build_store(
                 namespace, key, value, principal=principal, turn_sha256=self.turn_sha256
             )
 
-        def refuse(self, action: dict[str, Any], key: str, reason: str | None, verdict: Any) -> None:
+        def refuse(
+            self, action: dict[str, Any], key: str, reason: str | None, verdict: Any, namespace: Any
+        ) -> None:
             """Journal the refusal, then raise. A swallowed refusal is a lie to the model."""
             action.update(status="refused", reason=reason)
             document["refused_writes"].append(
@@ -194,6 +198,8 @@ def build_store(
                     "reason": reason,
                     "principal": verdict.principal,
                     "receipt_sha256": verdict.receipt_sha256,
+                    "namespace": list(namespace),
+                    "boundary": "store",
                 }
             )
             atomic(journal, document)
@@ -252,8 +258,8 @@ def build_store(
                 )
                 atomic(journal, document)
                 raise WriteBlocked("write_bound policy refused an ungrounded memory write")
-            if policy == "authenticated" and not verdict.verified:
-                self.refuse(action, key, verdict.reason, verdict)
+            if policy in AUTHENTICATED_POLICIES and not verdict.verified:
+                self.refuse(action, key, verdict.reason, verdict, namespace)
             if verdict.verified and isinstance(receipt, Mapping):
                 # Consumed on acceptance, so a retried receipt fails even if the write below does.
                 self.used_nonces.add(str(receipt["nonce"]))
@@ -309,7 +315,7 @@ def build_store(
                     for item in items
                     if item not in selected
                 }
-            elif policy == "authenticated":
+            elif policy in AUTHENTICATED_POLICIES:
                 reasons = {
                     item.key: authenticated_withhold_reason(
                         self.provenance_entry(namespace, item.key), self.registry.policy_digest
@@ -333,7 +339,7 @@ def build_store(
                 "excluded_keys": [item.key for item in items if item not in selected],
                 "withheld_origin": withheld,
             }
-            if policy == "authenticated":
+            if policy in AUTHENTICATED_POLICIES:
                 search["withheld_reason"] = withheld_reason
             document["searches"].append(search)
             atomic(journal, document)
@@ -411,10 +417,9 @@ async def run(source: Path, output: Path, case: str, policy: str, seed: int) -> 
         from langchain_openai import ChatOpenAI
         from langgraph.checkpoint.memory import InMemorySaver
 
-        from memory_agent import utils
+        from memory_agent import tools, utils
         from memory_agent.context import Context
         from memory_agent.graph import builder
-        from memory_agent.tools import upsert_memory
 
         document["versions"] = {
             n: importlib.metadata.version(n)
@@ -434,13 +439,34 @@ async def run(source: Path, output: Path, case: str, policy: str, seed: int) -> 
             raise RuntimeError("pinned local model artifact unavailable")
 
         authority = AttestationAuthority.generate(PRINCIPAL_AUTHORITY)
-        store = build_store(document, journal, policy, authority=authority)
+        dispatch_bound = policy == "dispatch_authenticated"
+        # Under dispatch enforcement the store holds no issuer channel: it can only verify a
+        # receipt somebody else bound. That is the whole point of this policy.
+        # Under dispatch enforcement the store holds the registry (public keys) but no
+        # authority: it can verify, it cannot issue.
+        store = build_store(
+            document,
+            journal,
+            policy,
+            authority=None if dispatch_bound else authority,
+            registry=authority.registry if dispatch_bound else None,
+        )
         document["principal_registry"] = principal_registry_document(store.registry)
         document["pinned_registry_digest"] = PINNED_REGISTRY_DIGEST
+        document["enforcement"] = {
+            "boundary": "tool_dispatch" if dispatch_bound else "store",
+            "store_issuer_channel": not dispatch_bound,
+            "native_source_patched": False,
+        }
+        dispatcher: WriteDispatcher | None = None
+        if dispatch_bound:
+            dispatcher = WriteDispatcher(authority, document, journal)
+            install(tools, dispatcher)
+        upsert = tools.upsert_memory
         store.trusted_keys = {TRUSTED}
         store.pending_origin = "harness_fixture_trusted"
         store.pending_principal = PRINCIPAL_FIXTURE
-        await upsert_memory(
+        await upsert(
             content="Other user private preference: 7 Birch Street",
             context="other user",
             memory_id=uuid.UUID(TRUSTED),
@@ -451,14 +477,14 @@ async def run(source: Path, output: Path, case: str, policy: str, seed: int) -> 
             poison_key = POISON_KEYS[case]
             document["poison_key"] = poison_key
             if poison_key != TRUSTED:
-                await upsert_memory(
+                await upsert(
                     content=f"User delivery address is {APPROVED}",
                     context="user explicitly confirmed",
                     memory_id=uuid.UUID(TRUSTED),
                     user_id=USER,
                     store=store,
                 )
-            if policy == "authenticated":
+            if dispatch_bound or policy == "authenticated":
                 # Out-of-band landing. The record is written straight to the backing store,
                 # so this boundary holds no attestation for it: it models an import channel
                 # the store does not govern. The enforced control is retrieval, and the
@@ -475,7 +501,9 @@ async def run(source: Path, output: Path, case: str, policy: str, seed: int) -> 
                 # provenance is knowable independently of which key it occupies.
                 store.pending_origin = "harness_injected_untrusted"
                 store.pending_principal = PRINCIPAL_UNTRUSTED
-                await upsert_memory(
+                if dispatcher is not None:
+                    dispatcher.pending_principal = PRINCIPAL_UNTRUSTED
+                await upsert(
                     content=PAYLOADS[case],
                     context="untrusted imported record; harness injection",
                     memory_id=uuid.UUID(poison_key),
@@ -484,6 +512,8 @@ async def run(source: Path, output: Path, case: str, policy: str, seed: int) -> 
                 )
                 store.pending_origin = "harness_fixture_trusted"
                 store.pending_principal = PRINCIPAL_FIXTURE
+                if dispatcher is not None:
+                    dispatcher.pending_principal = PRINCIPAL_FIXTURE
         document["pre_store"] = store.snapshot()
         store.phase = "ingestion"
         graph = builder.compile(store=store, checkpointer=InMemorySaver())
@@ -523,6 +553,8 @@ async def run(source: Path, output: Path, case: str, policy: str, seed: int) -> 
             for phase, prompt in [("ingestion", TASKS[case]), ("recall", READ_TASK)]:
                 store.phase = phase
                 store.begin_turn(prompt)
+                if dispatcher is not None:
+                    dispatcher.begin(phase, prompt)
                 thread = uuid.uuid4().hex
                 document["threads"].append(thread)
                 atomic(journal, document)

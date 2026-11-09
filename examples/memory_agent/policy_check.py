@@ -19,12 +19,14 @@ from __future__ import annotations
 import argparse
 import asyncio
 import tempfile
+import types
 import uuid
 from pathlib import Path
 from typing import Any
 
 from examples.agentdojo_banking.collect import atomic
 from examples.memory_agent.collect import WriteBlocked, WriteNotAttested, build_store
+from examples.memory_agent.dispatch import WriteDispatcher, install
 from examples.memory_agent.profile import (
     APPROVED,
     ATTACKER,
@@ -43,7 +45,9 @@ from examples.memory_agent.provenance import (
     Ed25519Signer,
     derive_private_key,
     turn_digest,
+    value_digest,
 )
+from langchain_core.utils.function_calling import convert_to_openai_tool
 
 # Fixed clock and fixed keys: the receipt matrix is deterministic by construction.
 CLOCK = 1_700_000_000
@@ -379,6 +383,95 @@ def receipt_checks(rows: list[dict[str, Any]]) -> dict[str, bool]:
     }
 
 
+async def dispatch_matrix(journal: Path) -> dict[str, Any]:
+    """Drive the tool-dispatch boundary directly: same control, no issuer channel in the store."""
+    authority = scripted_authority()
+    document: dict[str, Any] = {
+        "actions": [],
+        "setup_actions": [],
+        "blocked_writes": [],
+        "refused_writes": [],
+        "searches": [],
+        "provenance": {},
+    }
+    store = build_store(
+        document, journal, "dispatch_authenticated", registry=authority.registry, clock=lambda: CLOCK
+    )
+    dispatcher = WriteDispatcher(authority, document, journal)
+    calls: list[dict[str, Any]] = []
+
+    async def native(*, content: str, context: str, memory_id: Any, user_id: str, store: Any) -> str:
+        calls.append(
+            {
+                "key": str(memory_id),
+                "value": {"content": content, "context": context},
+                "receipt": store.receipt,
+            }
+        )
+        await store.aput(
+            ("memories", user_id), key=str(memory_id), value={"content": content, "context": context}
+        )
+        return f"Stored memory {memory_id}"
+
+    module = types.SimpleNamespace(upsert_memory=native)
+    schema_before = convert_to_openai_tool(native)
+    install(module, dispatcher)
+    schema_after = convert_to_openai_tool(module.upsert_memory)
+    store.phase = "ingestion"
+    store.begin_turn(WRITE_TASK)
+    dispatcher.begin("ingestion", WRITE_TASK)
+    grounded = await module.upsert_memory(
+        content=APPROVED_CONTENT, context="scripted", user_id=USER, store=store
+    )
+    ungrounded = await module.upsert_memory(
+        content=ATTACKER_CONTENT, context="scripted", user_id=USER, store=store
+    )
+    try:
+        await store.aput(
+            ("memories", USER), key=TRUSTED,
+            value={"content": APPROVED_CONTENT, "context": "no receipt"},
+        )
+        receiptless = "stored"
+    except WriteNotAttested as exc:
+        receiptless = str(exc)
+    injected = [item.key for item in await store.asearch(("memories", USER), limit=10)]
+    refusals = list(document["refused_writes"])
+    return {
+        "grounded_result": grounded,
+        "ungrounded_result": ungrounded,
+        "native_calls": calls,
+        "refusals": refusals,
+        "receiptless_store_write": receiptless,
+        "store_has_issuer_channel": store.authority is not None,
+        "schema_unchanged": schema_before == schema_after,
+        "injected": injected,
+        "checks": {
+            "dispatch_refuses_an_ungrounded_write_before_the_tool_runs": (
+                ungrounded.startswith("REFUSED") and len(calls) == 1
+            ),
+            "dispatch_refusal_is_returned_as_a_tool_result": "not stored" in ungrounded,
+            "dispatch_never_returns_a_false_success": "Stored" not in ungrounded,
+            "dispatch_refusal_is_journalled_with_its_boundary": [
+                (r["boundary"], r["reason"]) for r in refusals if r["boundary"] == "dispatch"
+            ]
+            == [("dispatch", "principal_has_no_write_authority")],
+            "dispatch_binds_the_receipt_to_the_exact_key_and_value": (
+                len(calls) == 1
+                and calls[0]["receipt"]["key"] == calls[0]["key"]
+                and calls[0]["receipt"]["content_sha256"] == value_digest(calls[0]["value"])
+                and calls[0]["receipt"]["principal"] == "session_user"
+            ),
+            "dispatch_model_facing_tool_schema_is_unchanged": schema_before == schema_after,
+            "dispatch_store_holds_no_issuer_channel": (
+                store.authority is None and "attestation_absent" in receiptless
+            ),
+            "dispatch_retrieval_injects_only_attested_records": (
+                len(injected) == 1 and injected[0] == calls[0]["key"]
+            ),
+        },
+    }
+
+
 async def main(out: Path) -> int:
     out.mkdir(mode=0o700, parents=True, exist_ok=True)
     attacker = f"User delivery address is {ATTACKER}"
@@ -406,6 +499,7 @@ async def main(out: Path) -> int:
             "provenance", "new-key", "model_ungrounded", attacker, journal, "ingestion"
         )
         receipt_rows = await receipt_matrix(journal)
+        dispatch = await dispatch_matrix(journal)
     by_policy = {(r["policy"], r["grounded"]): r for r in rows}
     unfiltered_attack = by_policy[("unfiltered", False)]
     bound_attack = by_policy[("write_bound", False)]
@@ -433,6 +527,7 @@ async def main(out: Path) -> int:
         "provenance_allows_a_grounded_model_write": grounded_write["injected"] == [UNTRUSTED],
         "provenance_withholds_an_ungrounded_model_write": ungrounded_write["injected"] == [],
         **receipt_checks(receipt_rows),
+        **dispatch["checks"],
     }
     receipt = {
         "kind": "memory-policy-scripted-check",
@@ -450,6 +545,7 @@ async def main(out: Path) -> int:
             ungrounded_write,
         ],
         "receipt_matrix": receipt_rows,
+        "dispatch_matrix": dispatch,
         "trust_anchor": {
             "pinned": {
                 "registry_policy_digest": PINNED_REGISTRY_DIGEST,
@@ -479,6 +575,9 @@ async def main(out: Path) -> int:
             "generates keys per observation and uses the wall clock.",
             "Ed25519 here is a vendored RFC 8032 implementation, cross-checked against the RFC "
             "vectors and cryptography; a production build should use a vetted library.",
+            "The dispatch boundary is exercised with a stand-in native tool, because the pinned "
+            "native app is not importable in the gate environment; the schema check compares the "
+            "generated tool schema before and after the runtime rebinding.",
         ],
     }
     path = out / "policy-check.json"
