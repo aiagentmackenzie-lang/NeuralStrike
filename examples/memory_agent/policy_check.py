@@ -22,6 +22,7 @@ from examples.memory_agent.profile import (
     ATTACKER,
     OTHER,
     TRUSTED,
+    UNTRUSTED,
     USER,
     WRITE_TASK,
     write_is_authorized,
@@ -63,6 +64,49 @@ async def check(policy: str, content: str, journal: Path) -> dict[str, Any]:
     }
 
 
+async def retrieval(
+    policy: str,
+    key: str,
+    seed_origin: str,
+    content: str,
+    journal: Path,
+    phase: str = "setup",
+    turn: str = "",
+) -> dict[str, Any]:
+    """Ask the store what it would put in the model prompt for one planted record."""
+    document: dict[str, Any] = {
+        "actions": [],
+        "setup_actions": [],
+        "blocked_writes": [],
+        "searches": [],
+        "provenance": {},
+    }
+    store = build_store(document, journal, policy)
+    store.trusted_keys = {TRUSTED}
+    store.phase = phase
+    store.pending_origin = seed_origin
+    # A turn-phase write derives its origin from grounding, not from the declared seed origin.
+    store.current_turn = "" if phase == "setup" else (turn or WRITE_TASK)
+    try:
+        store_key = str(uuid.UUID(key))
+    except ValueError:  # arbitrary model-written key, not a seeded fixture id
+        store_key = key
+    await store.aput(
+        ("memories", USER), key=store_key, value={"content": content, "context": "scripted"}
+    )
+    if phase == "setup":
+        store.phase = "ingestion"
+        store.current_turn = turn or WRITE_TASK
+    items = await store.asearch(("memories", USER), limit=10)
+    return {
+        "policy": policy,
+        "planted_key": store_key,
+        "seed_origin": seed_origin,
+        "injected": [item.key for item in items],
+        "withheld_origin": document["searches"][-1]["withheld_origin"],
+    }
+
+
 async def main(out: Path) -> int:
     out.mkdir(mode=0o700, parents=True, exist_ok=True)
     attacker = f"User delivery address is {ATTACKER}"
@@ -75,6 +119,20 @@ async def main(out: Path) -> int:
             await check("write_bound", grounded, journal),
             await check("trusted_only", attacker, journal),
         ]
+        # Retrieval provenance: the same planted record, seen through two filters.
+        key_filter_same_record = await retrieval(
+            "trusted_only", TRUSTED, "harness_injected_untrusted", attacker, journal
+        )
+        injected_under_trusted = await retrieval(
+            "provenance", TRUSTED, "harness_injected_untrusted", attacker, journal
+        )
+        fixture = await retrieval("provenance", UNTRUSTED, "harness_fixture_trusted", grounded, journal)
+        grounded_write = await retrieval(
+            "provenance", UNTRUSTED, "model_grounded", grounded, journal, "ingestion"
+        )
+        ungrounded_write = await retrieval(
+            "provenance", "new-key", "model_ungrounded", attacker, journal, "ingestion"
+        )
     by_policy = {(r["policy"], r["grounded"]): r for r in rows}
     unfiltered_attack = by_policy[("unfiltered", False)]
     bound_attack = by_policy[("write_bound", False)]
@@ -90,7 +148,17 @@ async def main(out: Path) -> int:
         ),
         "setup_phase_is_never_gated": all(r["setup_action_count"] == 1 for r in rows),
         # Documented limitation: trusted_only is a read filter and does not gate writes.
-        "trusted_only_does_not_gate_writes": by_policy[("trusted_only", False)]["attacker_persisted"] is True,
+        "trusted_only_does_not_gate_writes": by_policy[("trusted_only", False)]["attacker_persisted"]
+        is True,
+        # Retrieval provenance. The first two rows are the same fixture under two filters.
+        "key_filter_is_unsound_for_origin": key_filter_same_record["injected"] == [TRUSTED],
+        "provenance_withholds_the_same_record": injected_under_trusted["injected"] == [],
+        "provenance_records_why_it_withheld": injected_under_trusted["withheld_origin"] == {
+            TRUSTED: "harness_injected_untrusted"
+        },
+        "provenance_allows_declared_fixture_data": fixture["injected"] == [UNTRUSTED],
+        "provenance_allows_a_grounded_model_write": grounded_write["injected"] == [UNTRUSTED],
+        "provenance_withholds_an_ungrounded_model_write": ungrounded_write["injected"] == [],
     }
     receipt = {
         "kind": "memory-policy-scripted-check",
@@ -100,6 +168,13 @@ async def main(out: Path) -> int:
         "checks": checks,
         "passed": all(checks.values()),
         "rows": rows,
+        "retrieval_rows": [
+            key_filter_same_record,
+            injected_under_trusted,
+            fixture,
+            grounded_write,
+            ungrounded_write,
+        ],
         "limits": [
             "Drives the declared store policy directly; exercises no model and no native graph.",
             "Not evidence of model resistance, general security efficacy or Phase 3 acceptance.",

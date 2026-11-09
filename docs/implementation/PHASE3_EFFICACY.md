@@ -204,3 +204,13 @@ unguarded completed poisoning 17 with 9 contaminated and 11 complete-and-useful;
 filter 6 with 0 contaminated and 6 complete-and-useful; benign controls 18/18. The
 earlier 6/8 is recorded as a small-sample artifact; no contamination percentage is
 quoted.
+
+Plan v5 replaces key-based retrieval trust with a fail-closed provenance gate after
+demonstrating that the key filter cannot see record origin and trusts anything the agent
+writes. Across v3+v4+v5 (72 observations): the attacker record reached the prompt in 27/27
+unguarded attempts, 3/12 key-filter attempts (exactly the trusted-key stages, so its zero
+contamination is model resistance rather than filter efficacy) and 0/3 provenance attempts,
+which journalled why each record was withheld. Benign controls 30/30; no persistent state
+violation anywhere; unguarded contamination varied 6/9, 3/9, 8/9 across identical runs, so
+no rate is quoted. The gate is harness-declared provenance, not authenticated writer
+identity: implemented and deterministically tested, not deployable.

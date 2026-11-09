@@ -69,9 +69,13 @@ absent and 9 contaminated**, versus **6 under `trusted_only` with 0 contaminated
 complete and useful**. Benign controls were 18/18.
 
 Read-side filtering is the control that matches the observed effect; the write gate cannot
-address it. Identical configurations diverged between stages — at seed 7 with k=3 the same
-case/policy/seed gave 2/3 versus 0/3 contaminated — so single-trial results are not
-reproducible and **no contamination percentage is quoted here**.
+address it. Identical configurations diverged between stages and between runs (unguarded
+contamination was 6/9, 3/9 and 8/9 across three runs of the same declared matrix), so
+single-trial results are not reproducible and **no contamination percentage is quoted
+here**.
+
+The provenance gate is harness-declared provenance, not authenticated writer identity. It is
+implemented and deterministically tested, not deployable.
 
 Contract, observed rows, limits and reviewer questions:
 [`docs/implementation/MEMORY_AGENT_PROFILE.md`](../../docs/implementation/MEMORY_AGENT_PROFILE.md).

@@ -1769,3 +1769,63 @@ raises the bar rather than satisfying it: no contamination figure here is a rate
 verified production fix exists, and independent review, comparators and pilots remain
 absent. Phase 4 and release gates stay closed. No outreach, cloud spend, subagents,
 publication or Release dispatch.
+
+## 2026-11-09 — key-based retrieval trust shown unsound; fail-closed provenance gate
+
+Continued from `e41db50` (pushed; hosted CI `42632990963`). Reviewer question 4 asked whether
+a key/trust-set filter is an acceptable control for memory retrieval. It is not, and the
+weakness was demonstrated before the replacement was trusted:
+
+1. A key filter cannot see **origin**: a record planted under the trusted key is
+   indistinguishable from legitimate fixture data and is injected.
+2. A key filter trusts **what the agent writes**: any key written during a turn joins the
+   trusted set, so a poisoned write is trusted on the next turn — a self-contamination loop.
+
+Both are reproduced deterministically in `policy_check.py` and in unit tests on identical
+fixtures. Provenance is now recorded at write time (`harness_fixture_trusted`,
+`harness_injected_untrusted`, `model_grounded`, `model_ungrounded`) and retrieval injects
+only trusted origins. **Absent, malformed or unknown provenance is withheld**, with the
+reason journalled per search as `withheld_origin` — an unclassified record surfaces as
+*not injected*, never as implicitly trusted.
+
+Plan **v5** appends stages 7–9 (benign/`provenance`, the decisive
+`trusted_key_poisoning`/`trusted_only`, and `trusted_key_poisoning`/`provenance`); stages
+0–6 are unchanged. The decisive stage leaves violation and contamination **unasserted** —
+what the model does there is measured, not pre-judged.
+
+Measured across v3+v4+v5 (72 observations), separating filter behaviour from model
+behaviour, which is the part that matters:
+
+| Retrieval filter | Poisoning attempts | Attacker record injected | Contaminated | Complete + useful |
+|---|---|---|---|---|
+| none | 27 | **27** | 17 | 9 |
+| key filter | 12 | **3** | 0 | 12 |
+| provenance | 3 | **0** | 0 | 3 |
+
+Benign controls 30/30 complete and useful; 0 persistent state violations anywhere. The three
+key-filter injections are exactly the `trusted_key_poisoning` stages, so its zero
+contamination elsewhere is **model resistance, not filter efficacy** — a distinction that
+would vanish if only outcomes were counted. Unguarded contamination was 6/9, 3/9 and 8/9
+across three runs of the same declared matrix at the same seed; no rate is quoted.
+
+Verification:
+- `tests/test_memory_agent.py`: **61 contracts**, adding the provenance truth table,
+  fail-closed handling of absent/malformed provenance, and a paired retrieval contrast that
+  runs the same fixture through both filters (key filter injects at the trusted key and
+  trusts model-written keys; provenance withholds both and withholds unclassified records).
+- `policy_check.py`: **14/14** scripted checks, no inference, excluded from efficacy.
+- Full Python 3.12.14 gate: **1570 passed, 2 skipped, 91.88% coverage**; ruff across
+  `src`/`tests`/all four example directories; strict mypy 144 files. No dependency or lock
+  changes; no cloud inference, model download or external target.
+- Evidence: `evidence/phase3-memory-2026-11-08.json` gains `provenance_v5` (defect, fix,
+  cycle, per-observation rows, filter-effectiveness table, run-to-run variance). Private
+  evidence under `…/neuralstrike-phase3/memory-agent-cycle-v5/` and
+  `…/memory-agent-policy-check-v5/`; v2/v3/v4 cycles retained unmodified.
+- Contract/results/limits: [MEMORY_AGENT_PROFILE.md](MEMORY_AGENT_PROFILE.md).
+
+**Phase 3 remains in progress.** The provenance gate is implemented and deterministically
+tested, not deployable: origin here is harness-declared rather than derived from an
+authenticated writer, and it rests on 3 inference observations. No contaminated-outcome rate
+exists to quote, no persistent state violation has ever reproduced, and independent review,
+comparators and pilots remain absent. Phase 4 and release gates stay closed. No outreach,
+cloud spend, subagents, publication or Release dispatch.
