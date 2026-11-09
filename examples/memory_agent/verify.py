@@ -54,20 +54,55 @@ BUDGETS = {
 }
 
 
-def plan_trials() -> list[dict[str, Any]]:
-    return [
-        {
-            "id": str(index),
-            "case": case,
-            "policy": policy,
-            "expected_state": state,
-            "expected_violation": violation,
-            "expected_blocked": blocked,
-            "expected_utility": utility,
-            "expected_contamination": contamination,
-        }
-        for index, (case, policy, state, violation, blocked, utility, contamination) in enumerate(MATRIX)
-    ]
+def plan_trials(repeats: int = 1) -> list[dict[str, Any]]:
+    """Declared trials. With repeats>1 each matrix row is executed repeatedly as its own trial.
+
+    Repetition is required here because identical configuration+seed stages were observed
+    to diverge. Repeats share the declared configuration on purpose: that is what makes the
+    divergence measurable instead of being averaged away.
+    """
+    if repeats < 1:
+        raise ValueError("repeats must be at least one")
+    trials: list[dict[str, Any]] = []
+    for index, (case, policy, state, violation, blocked, utility, contamination) in enumerate(MATRIX):
+        for repeat in range(repeats):
+            trials.append(
+                {
+                    "id": str(index) if repeats == 1 else f"{index}.{repeat}",
+                    "matrix_id": str(index),
+                    "repeat": repeat,
+                    "case": case,
+                    "policy": policy,
+                    "expected_state": state,
+                    "expected_violation": violation,
+                    "expected_blocked": blocked,
+                    "expected_utility": utility,
+                    "expected_contamination": contamination,
+                }
+            )
+    return trials
+
+
+def summarise(stages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Per-matrix-row outcome counts. Counts only: no rate is derived from a small k."""
+    rows: list[dict[str, Any]] = []
+    for trial in plan_trials(1):
+        same = [s for s in stages if s.get("matrix_id") == trial["id"]]
+        rows.append(
+            {
+                "matrix_id": trial["id"],
+                "case": trial["case"],
+                "policy": trial["policy"],
+                "attempted": len(same),
+                "complete": sum(1 for s in same if s.get("observation_state") == "complete"),
+                "errors": sum(1 for s in same if s.get("observation_state") in {"error", "incomplete"}),
+                "violations": sum(1 for s in same if s.get("violation") is True),
+                "contaminated": sum(1 for s in same if s.get("contamination") is True),
+                "useful": sum(1 for s in same if s.get("utility") is True),
+                "reproduced": sum(1 for s in same if s.get("expectations_reproduced") is True),
+            }
+        )
+    return rows
 
 
 def expectations_reproduced(stage: dict[str, Any]) -> bool:
@@ -86,7 +121,7 @@ def expectations_reproduced(stage: dict[str, Any]) -> bool:
     return all(checks)
 
 
-def verify(source: Path, python: Path, output: Path, seed: int = 7) -> Path:
+def verify(source: Path, python: Path, output: Path, seed: int = 7, repeats: int = 1) -> Path:
     root = output / f"memory-cycle-{uuid.uuid4().hex}"
     root.mkdir(mode=0o700, parents=True, exist_ok=False)
     repo = Path(__file__).parents[2]
@@ -97,8 +132,15 @@ def verify(source: Path, python: Path, output: Path, seed: int = 7) -> Path:
     ]
     requirements = [p for p in sorted((repo / "examples/memory_agent").glob("requirements.*")) if p.is_file()]
     plan = {
-        "kind": "native-memory-cycle-plan-v3",
-        "supersedes": "native-memory-cycle-plan-v2",
+        "kind": "native-memory-cycle-plan-v4",
+        "supersedes": "native-memory-cycle-plan-v3",
+        "repeats": repeats,
+        "repetition_reason": (
+            "Identical configuration and seed were observed to diverge between stages, so a "
+            "single attempt cannot establish resistance. Repeats share the declared "
+            "configuration deliberately; the outcome counts are descriptive and no rate or "
+            "interval is derived from them."
+        ),
         "additive_stages": ["5", "6"],
         "addition_reason": (
             "v2 falsified the persistent-effect hypothesis and reproduced recall contamination. "
@@ -110,7 +152,7 @@ def verify(source: Path, python: Path, output: Path, seed: int = 7) -> Path:
         "model_digest": MODEL_DIGEST,
         "model_rule": MODEL_RULE,
         "seed": seed,
-        "trials": plan_trials(),
+        "trials": plan_trials(repeats),
         "payloads": PAYLOADS,
         "system": SYSTEM,
         "tasks": TASKS,
@@ -206,6 +248,8 @@ def verify(source: Path, python: Path, output: Path, seed: int = 7) -> Path:
         if all(s["expectations_reproduced"] for s in receipt["stages"])
         else "expectations_not_reproduced"
     )
+    receipt["summary"] = summarise(receipt["stages"])
+    receipt["repeats"] = repeats
     atomic(root / "cycle.json", receipt)
     return root
 
@@ -216,8 +260,9 @@ def main() -> None:
     p.add_argument("--python", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--seed", type=int, default=7)
+    p.add_argument("--repeats", type=int, default=1)
     a = p.parse_args()
-    root = verify(a.source.resolve(), a.python.absolute(), a.out.resolve(), a.seed)
+    root = verify(a.source.resolve(), a.python.absolute(), a.out.resolve(), a.seed, a.repeats)
     print(root)
     if json.loads((root / "cycle.json").read_text())["state"] != "verified_local_only":
         raise SystemExit(3)

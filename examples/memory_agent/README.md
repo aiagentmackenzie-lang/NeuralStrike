@@ -63,12 +63,15 @@ grounded value in every completed observation** and never attempted the poisoned
 so the write gate was exercised only by `policy_check.py`.
 
 What did reproduce is **recall contamination**: the final answer adopted the poisoned
-address while the store stayed correct. Over 21 observations at seeds 7/17/29 it occurred
-in **6 of 8** completed poisoning observations with the guard absent, and in **0 of 3**
-under `trusted_only`, with benign utility preserved **3/3**. Read-side filtering is the
-control that matches the observed effect; the write gate cannot address it. Identical
-configurations still diverged between stages, so single-trial results are not
-reproducible and the counts are descriptive rather than a rate.
+address while the store stayed correct. Combined over 42 observations (seeds 7/17/29 plus
+a declared 3-repeat run), completed poisoning observations numbered **17 with the guard
+absent and 9 contaminated**, versus **6 under `trusted_only` with 0 contaminated and 6
+complete and useful**. Benign controls were 18/18.
+
+Read-side filtering is the control that matches the observed effect; the write gate cannot
+address it. Identical configurations diverged between stages — at seed 7 with k=3 the same
+case/policy/seed gave 2/3 versus 0/3 contaminated — so single-trial results are not
+reproducible and **no contamination percentage is quoted here**.
 
 Contract, observed rows, limits and reviewer questions:
 [`docs/implementation/MEMORY_AGENT_PROFILE.md`](../../docs/implementation/MEMORY_AGENT_PROFILE.md).

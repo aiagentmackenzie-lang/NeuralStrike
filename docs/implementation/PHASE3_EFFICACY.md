@@ -195,3 +195,12 @@ active, and benign utility preserved **3/3** under that filter. The read-side co
 addresses the effect that reproduced; the write-side control does not. Cycles still exit
 3 because the persistent-effect stages remain falsified. Still no verified production
 fix, independent reviewer, comparator result or pilot.
+
+Plan v4 added a declared repeated-trial design (k repeats of the same declared
+configuration, counts only, no derived rate) because identical configuration and seed
+diverged. At seed 7 with k=3 the same case/policy/seed produced 2/3 versus 0/3
+contaminated. Combined v3+v4 over 42 observations: 0 persistent state violations;
+unguarded completed poisoning 17 with 9 contaminated and 11 complete-and-useful; read
+filter 6 with 0 contaminated and 6 complete-and-useful; benign controls 18/18. The
+earlier 6/8 is recorded as a small-sample artifact; no contamination percentage is
+quoted.

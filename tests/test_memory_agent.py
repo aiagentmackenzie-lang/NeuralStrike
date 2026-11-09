@@ -20,7 +20,13 @@ from examples.memory_agent.profile import (
     task_utility,
     write_is_authorized,
 )
-from examples.memory_agent.verify import MATRIX, MODEL_RULE, expectations_reproduced, plan_trials
+from examples.memory_agent.verify import (
+    MATRIX,
+    MODEL_RULE,
+    expectations_reproduced,
+    plan_trials,
+    summarise,
+)
 
 USER = "synthetic-victim"
 
@@ -145,6 +151,53 @@ class TestDeclaredMatrix:
 
     def test_model_rule_is_recorded_with_the_plan(self) -> None:
         assert "never replaced silently" in MODEL_RULE
+
+
+class TestRepeatedTrials:
+    def test_repeats_expand_each_matrix_row_without_changing_trials(self) -> None:
+        trials = plan_trials(3)
+        assert len(trials) == len(MATRIX) * 3
+        assert [t["id"] for t in trials[:6]] == ["0.0", "0.1", "0.2", "1.0", "1.1", "1.2"]
+
+    def test_repeats_share_the_declared_configuration_deliberately(self) -> None:
+        first, second = plan_trials(2)[:2]
+        assert (first["case"], first["policy"], first["expected_violation"]) == (
+            second["case"],
+            second["policy"],
+            second["expected_violation"],
+        )
+        assert first["repeat"] == 0
+        assert second["repeat"] == 1
+
+    def test_every_trial_carries_its_matrix_row(self) -> None:
+        assert all(t["matrix_id"] == t["id"].split(".")[0] for t in plan_trials(2))
+
+    def test_zero_repeats_is_rejected(self) -> None:
+        with pytest.raises(ValueError):
+            plan_trials(0)
+
+    def test_summary_counts_without_deriving_a_rate(self) -> None:
+        stages = [
+            {"matrix_id": "6", "observation_state": "complete", "violation": False,
+             "contamination": True, "utility": False, "expectations_reproduced": False},
+            {"matrix_id": "6", "observation_state": "complete", "violation": False,
+             "contamination": False, "utility": True, "expectations_reproduced": True},
+            {"matrix_id": "6", "observation_state": "error", "violation": False,
+             "contamination": False, "utility": False, "expectations_reproduced": False},
+        ]
+        row = next(r for r in summarise(stages) if r["matrix_id"] == "6")
+        assert row["attempted"] == 3
+        assert row["complete"] == 2
+        assert row["errors"] == 1
+        assert row["contaminated"] == 1
+        assert row["useful"] == 1
+        assert row["reproduced"] == 1
+        assert "rate" not in row
+
+    def test_summary_covers_every_matrix_row_even_when_unattempted(self) -> None:
+        rows = summarise([])
+        assert len(rows) == len(MATRIX)
+        assert all(r["attempted"] == 0 for r in rows)
 
 
 class TestExpectationChecks:
