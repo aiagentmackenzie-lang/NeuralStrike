@@ -1,0 +1,11 @@
+# Optional isolated profile for memory-agent 194710129a2e55e9d3c455e941fc8280ca109224.
+# Mirrors declared runtime requirements; no changes to core locks.
+langgraph>=1.2.17
+langchain-openai>=1.7.2
+langchain-anthropic>=1.7.6
+langchain>=1.3.10
+langchain-core>=1.3.3
+python-dotenv>=1.2.4
+langgraph-sdk>=0.4.9
+httpx
+filelock>=4.2.1

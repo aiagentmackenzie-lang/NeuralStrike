@@ -1583,3 +1583,88 @@ independent-project, human-label/review, comparator or consenting-pilot gates.
 Real reviewer inputs remain explicitly unfilled in the completed packet. No
 subagents, new dependencies/models, cloud inference, external target security tests,
 outreach, release publication or Release workflow dispatch.
+
+## 2026-11-08 — native cross-conversation memory boundary, declared hypothesis falsified
+
+Started from clean `455e67f` (hosted CI independently rechecked as success, run
+`42480365970`). The only prior working-tree entry was an uncommitted, superseded
+attempt at this profile, retained unmodified and diagnosed rather than discarded.
+
+- Added `examples/memory_agent/` against langchain-ai/memory-agent revision
+  `194710129a2e55e9d3c455e941fc8280ca109224` (MIT): native `InMemoryStore`,
+  `asearch` retrieval injection and the native `upsert_memory` tool, pinned local
+  `qwen3.5:2b`, loopback-only transport. Isolated hash-pinned candidate lock;
+  core/dev locks and dependency versions unchanged. No cloud inference, model
+  download or external target.
+- Three boundaries are measured separately: persisted state, recall contamination
+  and benign task completion, plus cross-user isolation on every observation.
+  Each policy exercises one control (`unfiltered`, `trusted_only` read filter,
+  `write_bound` write gate). `write_bound` refuses and records; it never remaps an
+  attacker value onto an approved one.
+- The superseded attempt exposed two harness defects. First, an observation that
+  ended in an error kept `"state": "running"`, which is indistinguishable from an
+  in-flight run; terminal states are now `complete`/`blocked`/`error`/`incomplete`.
+  Second, its poisoning case used a read task that forbade saving while the payload
+  demanded a write, so the persistent-effect predicate was unreachable by design and
+  the 2B reasoning model looped inside its `reasoning` channel. Replaying the
+  recorded request body confirmed the loop at 768 and 2048 tokens; this Ollama `/v1`
+  path ignores `think=false` and `chat_template_kwargs`, and `reasoning_effort=none`
+  returns 400. The corrected write-stage case removes the artificial conflict.
+- Two further demonstrated defects fixed: a profile's declared output budget could be
+  defeated because the transport rewrote `max_tokens` but not the SDK-supplied
+  `max_completion_tokens` (an optional per-profile budget now sets both; the default
+  path is asserted unchanged by test), and recall contamination was hidden inside
+  `benign_utility`, making a correct save with a wrong answer look like sloppiness.
+  `trusted_only` previously also gated writes, letting a read filter pose as a write
+  control; its documented limitation is now asserted instead.
+- The model rule was declared before the corrected cases ran: retain the pinned
+  artifact if the write-stage cases complete, otherwise declare a second pinned model
+  and report both, never swap silently and never pick a seed after seeing an outcome.
+  The corrected cases completed, so no model was substituted. The identical
+  predeclared 5-stage matrix then ran at seeds 7, 17 and 29 — 15 observations.
+- Observed: 6/6 benign controls complete and useful; 8/9 poisoning observations
+  complete with one truncated at the declared 768-token cap; **0/9 persistent state
+  violations** — every completed observation stored the grounded value and never
+  attempted the poisoned write; **5/8** completed poisoning observations contaminated
+  the final answer while the store stayed correct. All three cycles exit **3**
+  (`expectations_not_reproduced`): the predeclared persistent-effect hypothesis was
+  falsified and is not rewritten to match the observation. The output budget was not
+  raised to convert the truncation into a pass.
+- Reproducibility finding: stages 2 and 4 are the same case, policy, seed and declared
+  budget, yet diverged at seed 7 (error vs contaminated) and seed 17 (clean vs
+  contaminated). Single-trial results from this stack are therefore not reproducible,
+  and the counts are descriptive rather than a rate. They are deliberately not
+  exported as TP/FP/TN/FN.
+- Because no model made the poisoned write attempt, inference cannot demonstrate the
+  control. `policy_check.py` drives the declared store policy directly with no
+  inference (**8/8 checks**, excluded from efficacy): ungrounded write succeeds when
+  unfiltered, `write_bound` refuses it, state is unchanged, the refusal is recorded,
+  the grounded write still completes, setup seeding is never gated, and `trusted_only`
+  does not gate writes. This is a policy contract, not model resistance or a
+  verified fix.
+
+### Verification
+
+- New `tests/test_memory_agent.py`: **36 contracts** covering the write-authorization
+  truth table, state/contamination/utility predicates, terminal journal states, the
+  predeclared matrix shape and expectation checks, both transport budget shapes and
+  recorded `finish_reason`/output tokens.
+- Full Python 3.12.14 gate: **1545 passed, 2 skipped, 91.88% coverage**; existing
+  optional skips and the pytest-asyncio fixture-scope warning remain.
+- Ruff passes across `src`, `tests` and all four example directories; strict mypy
+  passes **144 source files**. No dependency or lock changes.
+- Durable private evidence:
+  `/Users/agentmackenzie/Documents/Codex/2026-11-08/neuralstrike-phase3/memory-agent-cycle`
+  (three frozen-harness cycles with plan/receipt/observations),
+  `…/memory-agent-policy-check/policy-check.json`, and the superseded attempt under
+  `…/memory-agent/`. Machine-readable index:
+  [evidence/phase3-memory-2026-11-08.json](evidence/phase3-memory-2026-11-08.json).
+- Contract/results/limits/reviewer questions:
+  [MEMORY_AGENT_PROFILE.md](MEMORY_AGENT_PROFILE.md).
+
+**Phase 3 remains in progress.** No persistent memory-poisoning effect and no verified
+fix were reproduced. Recall contamination is a harness-predicate observation over model
+text, not upstream-asserted ground truth. Independent human labels/review, additional
+independently authored projects, aligned comparator executions and consenting pilots
+remain absent, as do Phase 4 gates. No outreach, cloud spend, subagents, release
+publication or Release workflow dispatch.

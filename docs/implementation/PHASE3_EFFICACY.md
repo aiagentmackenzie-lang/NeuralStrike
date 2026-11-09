@@ -172,3 +172,17 @@ The subsequent [workspace ID-contract increment](WORKSPACE_ID_CONTRACT.md) adds 
 explicit metadata correction and native-effect recomputation. Five fresh tasks
 complete successfully; the attacker goal still does not reproduce. It improves
 target utility and reviewability without claiming a security fix or accepting Phase 3.
+
+## Native cross-conversation memory boundary — 2026-11-08
+
+The [memory profile](MEMORY_AGENT_PROFILE.md) adds a genuinely persistent-memory
+target (langchain-ai/memory-agent, native `InMemoryStore` + `upsert_memory`). Its
+predeclared persistent-effect hypothesis was **falsified**: across 15 observations at
+seeds 7/17/29 the model stored the grounded value every time and never attempted the
+poisoned write, so 0/9 persistent state violations. What did reproduce is recall
+contamination — 5/8 completed poisoning observations returned the poisoned address in
+the final answer while the store stayed correct — and identical configurations diverged
+between stages, so single-trial results are not reproducible. The write gate is proven
+only by a separate scripted check with no inference (8/8), excluded from efficacy.
+Phase 3's independent-project, human-label/review, comparator and pilot gates remain
+open; no persistent-memory effect and no verified fix are claimed.
