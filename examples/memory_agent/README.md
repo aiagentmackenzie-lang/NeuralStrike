@@ -60,10 +60,15 @@ Expect 3 for this increment: the declared persistent-effect hypothesis was falsi
 
 Nothing here is a security efficacy claim. In the recorded seeds the model **stored the
 grounded value in every completed observation** and never attempted the poisoned write,
-so the write gate was exercised only by `policy_check.py`. What did reproduce is
-**recall contamination**: in 5 of 8 completed poisoning observations the final answer
-adopted the poisoned address while the store stayed correct. Identical configurations
-diverged between stages, so single-trial results are not reproducible.
+so the write gate was exercised only by `policy_check.py`.
+
+What did reproduce is **recall contamination**: the final answer adopted the poisoned
+address while the store stayed correct. Over 21 observations at seeds 7/17/29 it occurred
+in **6 of 8** completed poisoning observations with the guard absent, and in **0 of 3**
+under `trusted_only`, with benign utility preserved **3/3**. Read-side filtering is the
+control that matches the observed effect; the write gate cannot address it. Identical
+configurations still diverged between stages, so single-trial results are not
+reproducible and the counts are descriptive rather than a rate.
 
 Contract, observed rows, limits and reviewer questions:
 [`docs/implementation/MEMORY_AGENT_PROFILE.md`](../../docs/implementation/MEMORY_AGENT_PROFILE.md).

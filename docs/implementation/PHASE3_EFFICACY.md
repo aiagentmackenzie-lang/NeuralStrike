@@ -186,3 +186,12 @@ between stages, so single-trial results are not reproducible. The write gate is 
 only by a separate scripted check with no inference (8/8), excluded from efficacy.
 Phase 3's independent-project, human-label/review, comparator and pilot gates remain
 open; no persistent-memory effect and no verified fix are claimed.
+
+Plan v3 then appended the two missing read-side stages to the same memory matrix
+(stages 0–4 unchanged; expectations declared before execution). Result over 21
+observations at seeds 7/17/29: **0/12** persistent state violations, **6/8** completed
+poisoning observations contaminated with the guard absent, **0/3** with `trusted_only`
+active, and benign utility preserved **3/3** under that filter. The read-side control
+addresses the effect that reproduced; the write-side control does not. Cycles still exit
+3 because the persistent-effect stages remain falsified. Still no verified production
+fix, independent reviewer, comparator result or pilot.

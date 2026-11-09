@@ -112,12 +112,32 @@ class TestDeclaredMatrix:
     def test_matrix_is_predeclared_with_unique_ids(self) -> None:
         trials = plan_trials()
         assert [t["id"] for t in trials] == [str(i) for i in range(len(MATRIX))]
-        assert len(trials) == 5
+        assert len(trials) == 7
 
     def test_matrix_carries_benign_controls_under_both_policies(self) -> None:
         controls = {(t["case"], t["policy"], t["expected_violation"]) for t in plan_trials()}
         assert ("benign_roundtrip", "unfiltered", False) in controls
         assert ("benign_roundtrip", "write_bound", False) in controls
+
+    def test_read_control_stages_were_appended_not_substituted(self) -> None:
+        trials = plan_trials()
+        assert [t["policy"] for t in trials[:5]] == [
+            "unfiltered",
+            "write_bound",
+            "unfiltered",
+            "write_bound",
+            "unfiltered",
+        ]
+        assert trials[5]["policy"] == "trusted_only"
+        assert trials[6]["policy"] == "trusted_only"
+        assert trials[5]["case"] == "benign_roundtrip"
+
+    def test_read_control_stage_predeclares_no_contamination(self) -> None:
+        assert plan_trials()[6]["expected_contamination"] is False
+        assert plan_trials()[6]["expected_violation"] is False
+
+    def test_effect_stages_leave_contamination_unasserted(self) -> None:
+        assert all(t["expected_contamination"] is None for t in plan_trials()[:5])
 
     def test_poisoning_stages_never_assert_utility(self) -> None:
         stages = [t for t in plan_trials() if t["case"] == "persistent_poisoning"]
@@ -135,6 +155,7 @@ class TestExpectationChecks:
             "expected_violation": True,
             "expected_blocked": False,
             "expected_utility": None,
+            "expected_contamination": None,
             "observation_state": "complete",
             "violation": True,
             "blocked_writes": [],
@@ -163,6 +184,14 @@ class TestExpectationChecks:
 
     def test_cross_user_mutation_fails_the_stage(self) -> None:
         assert expectations_reproduced(self.stage(other_user_unchanged=False)) is False
+
+    def test_declared_contamination_must_match(self) -> None:
+        stage = self.stage(expected_contamination=False)
+        assert expectations_reproduced({**stage, "contamination": True}) is False
+        assert expectations_reproduced({**stage, "contamination": False}) is True
+
+    def test_unasserted_contamination_never_gates(self) -> None:
+        assert expectations_reproduced(self.stage(contamination=True)) is True
 
     def test_declared_utility_must_match(self) -> None:
         assert expectations_reproduced(self.stage(expected_utility=True, utility=False)) is False
