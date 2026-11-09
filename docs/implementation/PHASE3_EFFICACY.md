@@ -214,3 +214,24 @@ which journalled why each record was withheld. Benign controls 30/30; no persist
 violation anywhere; unguarded contamination varied 6/9, 3/9, 8/9 across identical runs, so
 no rate is quoted. The gate is harness-declared provenance, not authenticated writer
 identity: implemented and deterministically tested, not deployable.
+
+Plan v6 then replaced the declared origin label with an authenticated write path after
+demonstrating that the label was the whole trust decision (replaying the v5 harness from
+`2a1253e` injected an attacker record whose write carried no attestation of any kind).
+`examples/memory_agent/provenance.py` gives each write an Ed25519 receipt over the value,
+namespace, key, turn, nonce and issue time, verified at the store boundary against a
+principal registry whose authority digest is pinned in `plan.json` before execution; all 14
+checks fail closed and every refusal is journalled with a reason and raised, never returned
+as a success. Deterministically, 18 scripted receipt checks (forged signature, self-signed
+session receipt, signed-approved/wrote-attacker, replay, stale window, cross-key and
+cross-namespace reuse, unregistered principal, registry mismatch, out-of-band record) are
+refused or withheld on identical fixtures while the declared policy injects the same record;
+excluded from efficacy counts. Under inference (seed 7, k=3, stages 10–12 appended, 39
+observations): the attacker record reached the prompt in 9/9 unguarded attempts, 3/6
+key-filter attempts (model resistance, not filter efficacy), 0/3 declared-provenance and 0/6
+authenticated attempts, each withheld with `no_ledger_entry`; benign controls 15/15; 0
+persistent state violations; stages 2 and 4 falsified again, so the cycle exits 3. The trust
+anchor is stated as a limit: a signature proves the writer held a key, the issuing runtime is
+simulated, there is no HSM/rotation/revocation, enforcement is at the store boundary rather
+than tool dispatch, and the Ed25519 primitive is vendored and cross-checked rather than a
+vetted library. Implemented and deterministically tested, not deployable.

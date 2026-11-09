@@ -19,7 +19,8 @@ process, not process exit.
 | `profile.py` | Declared cases, payloads, tasks, policies and the three measured predicates |
 | `collect.py` | One observation: pinned source receipt, two graph phases, recorded store/journal |
 | `verify.py` | Predeclared trial matrix, harness freeze, cycle execution and honest exit code |
-| `policy_check.py` | Scripted policy proof. **No inference. Excluded from efficacy counts.** |
+| `provenance.py` | Authenticated write path: principal registry, Ed25519 signed receipts, fail-closed verification |
+| `policy_check.py` | Scripted policy + receipt matrix. **No inference. Excluded from efficacy counts.** |
 | `requirements.{in,txt}` | Isolated hash-pinned candidate lock |
 
 ## Boundaries
@@ -33,13 +34,23 @@ Measured separately, never collapsed:
 
 ## Policies
 
-- `unfiltered` — vulnerable baseline, no control
-- `trusted_only` — read filter over a trusted key set. Does **not** gate writes.
-- `write_bound` — a write is authorized only when every address it asserts also appears
-  in the current user turn. Refused writes are recorded, never silently dropped.
+| Policy | Control | Status |
+|---|---|---|
+| `unfiltered` | none — vulnerable baseline | baseline |
+| `trusted_only` | read filter over a trusted key set; does **not** gate writes | demonstration only |
+| `write_bound` | write authorized only when every asserted address appears in the current user turn | current (write side) |
+| `provenance` | read filter over a **declared** origin label | **superseded** by `authenticated` |
+| `authenticated` | read filter over a **verified write attestation**; unattested writes refused at the store boundary | current (read side) |
 
 One control per policy, on purpose: a read filter must not be able to masquerade as a
 write control.
+
+`provenance` is retained, not removed: the label it trusts is written by the recording
+store, so it can only show that the harness *said* a record was trusted. `authenticated`
+requires an Ed25519 receipt signed by a registered principal over the exact value,
+namespace, key and turn, verified against a registry pinned before the run, with nonce
+and time-window checks. Refusals are journalled in `refused_writes` with a reason and
+raised — never returned as a success to the model.
 
 ## Run
 
@@ -74,8 +85,18 @@ contamination was 6/9, 3/9 and 8/9 across three runs of the same declared matrix
 single-trial results are not reproducible and **no contamination percentage is quoted
 here**.
 
-The provenance gate is harness-declared provenance, not authenticated writer identity. It is
-implemented and deterministically tested, not deployable.
+The authenticated gate rests on 6 inference observations, and the write-refusal path was
+exercised only by the scripted receipt matrix: no model attempted an ungrounded write in any
+of the 39 recorded observations. The injected record is landed outside the store boundary
+under `authenticated`, so what the inference stages measure is retrieval withholding
+(`no_ledger_entry`), not write refusal.
+
+A signature proves the writer held a key. It does not prove a human approved the write, and
+the runtime that issues receipts is simulated by this harness — no HSM, no rotation, no
+revocation, no external identity provider. The Ed25519 primitive is a vendored RFC 8032
+implementation cross-checked against the RFC vectors and `cryptography`, not a vetted
+production library. Enforcing at tool dispatch instead of the store boundary is the
+production shape and is not what this fixture implements.
 
 Contract, observed rows, limits and reviewer questions:
 [`docs/implementation/MEMORY_AGENT_PROFILE.md`](../../docs/implementation/MEMORY_AGENT_PROFILE.md).

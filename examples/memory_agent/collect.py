@@ -7,7 +7,7 @@ policy configuration. Store contents survive conversations, not process exit.
 
 from __future__ import annotations
 
-# ruff: noqa: PLC0415, PLR0915
+# ruff: noqa: PLC0415, PLR0912, PLR0915  # run() is a linear procedure, one branch per phase
 import argparse
 import asyncio
 import hashlib
@@ -17,7 +17,9 @@ import os
 import socket
 import subprocess
 import sys
+import time
 import uuid
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -29,8 +31,10 @@ from examples.memory_agent.profile import (
     CASES,
     OTHER,
     PAYLOADS,
+    PINNED_REGISTRY_DIGEST,
     POISON_KEYS,
     POLICIES,
+    PRINCIPAL_AUTHORITY,
     READ_TASK,
     REVISION,
     SYSTEM,
@@ -38,11 +42,24 @@ from examples.memory_agent.profile import (
     TRUSTED,
     USER,
     answer_contamination,
+    authenticated_withhold_reason,
     is_trusted_provenance,
     origin_for_write,
     state_truth,
     task_utility,
     write_is_authorized,
+)
+from examples.memory_agent.provenance import (
+    PRINCIPAL_FIXTURE,
+    PRINCIPAL_UNTRUSTED,
+    AttestationAuthority,
+    Registry,
+    build_registry,
+    principal_for_write,
+    principal_registry_document,
+    turn_digest,
+    value_digest,
+    verify_write,
 )
 
 # Finite declared per-request output budget. Both max_tokens and
@@ -57,11 +74,22 @@ class WriteBlocked(PermissionError):
     """Declared write-bound policy refusal; recorded, never silently dropped."""
 
 
-def resolve_state(completed: bool, blocked_writes: int, error: str | None) -> str:
+class WriteNotAttested(PermissionError):
+    """Authenticated-policy refusal: the write carried no verifiable attestation.
+
+    A subclass of ``PermissionError`` for the same reason as ``WriteBlocked``: a refusal
+    must terminate the graph with a typed error, never return a false success receipt to
+    the model.
+    """
+
+
+def resolve_state(
+    completed: bool, blocked_writes: int, error: str | None, refused_writes: int = 0
+) -> str:
     """Terminal journal state. ``running`` is reserved for an un-updated in-flight run."""
     if completed:
         return "complete"
-    if blocked_writes:
+    if blocked_writes or refused_writes:
         return "blocked"
     if error:
         return "error"
@@ -77,16 +105,56 @@ def source_receipt(source: Path) -> dict[str, str]:
     return {str(p.relative_to(source)): hashlib.sha256(p.read_bytes()).hexdigest() for p in files}
 
 
-def build_store(document: dict[str, Any], journal: Path, policy: str) -> Any:
-    """Recording store wrapper. The langgraph import stays local so this module is importable alone."""
+def build_store(
+    document: dict[str, Any],
+    journal: Path,
+    policy: str,
+    *,
+    authority: AttestationAuthority | None = None,
+    registry: Registry | None = None,
+    clock: Callable[[], float] = time.time,
+) -> Any:
+    """Recording store wrapper. The langgraph import stays local so this module is importable alone.
+
+    Two boundaries live here and are never conflated:
+
+    * every write is *verified* against a signed receipt (the authenticated write path);
+    * ``policy == "authenticated"`` *enforces* that verdict and refuses unattested writes.
+
+    Legacy policies keep their v5 behaviour byte-for-byte so stages 0-9 stay comparable;
+    they still record the attestation outcome, they just do not act on it. ``authority``
+    is the simulated runtime that issues receipts. With no authority every write is
+    unattested, which is the fail-closed default, not a bypass.
+    """
     from langgraph.store.memory import InMemoryStore
+
+    if registry is not None:
+        store_registry = registry
+    elif authority is not None:
+        store_registry = authority.registry
+    else:
+        store_registry = build_registry(PRINCIPAL_AUTHORITY)
+    store_authority = authority
 
     class RecordingStore(InMemoryStore):
         phase = "setup"
         current_turn = ""
+        turn_sha256: str | None = None
         pending_origin = "harness_fixture_trusted"
+        pending_principal = PRINCIPAL_FIXTURE
         trusted_keys: set[str]
+        used_nonces: set[str]
         provenance: dict[tuple[tuple[str, ...], str], dict[str, Any]]
+        registry: Registry = store_registry
+        authority: AttestationAuthority | None = store_authority
+
+        def now(self) -> int:
+            return int(clock())
+
+        def begin_turn(self, text: str) -> None:
+            """Bind the authenticated user turn that session receipts are verified against."""
+            self.current_turn = text
+            self.turn_sha256 = turn_digest(text) if text else None
 
         def snapshot(self) -> dict[str, Any]:
             return {
@@ -97,7 +165,43 @@ def build_store(document: dict[str, Any], journal: Path, policy: str) -> Any:
         def provenance_entry(self, namespace: Any, key: str) -> dict[str, Any] | None:
             return self.provenance.get((tuple(namespace), key))
 
-        async def aput(self, namespace: Any, key: str, value: Any, *args: Any, **kwargs: Any) -> Any:
+        def attestation_for(
+            self, namespace: Any, key: str, value: Any, principal: str, presented: Any
+        ) -> Any:
+            """The receipt to verify: presented if given, otherwise requested from the runtime.
+
+            Requesting from the runtime is the architectural compromise this fixture cannot
+            avoid: the native tool cannot be wrapped, so verification lives at the store
+            boundary and the receipt is fetched by the store. The receipt is still verified
+            independently - signature, authority, namespace, key, value digest, turn,
+            nonce and window - so a hostile or buggy runtime cannot smuggle a pass.
+            """
+            if presented is not None:
+                return presented
+            if self.authority is None:
+                return None
+            return self.authority.issue_for_write(
+                namespace, key, value, principal=principal, turn_sha256=self.turn_sha256
+            )
+
+        def refuse(self, action: dict[str, Any], key: str, reason: str | None, verdict: Any) -> None:
+            """Journal the refusal, then raise. A swallowed refusal is a lie to the model."""
+            action.update(status="refused", reason=reason)
+            document["refused_writes"].append(
+                {
+                    "key": key,
+                    "phase": self.phase,
+                    "reason": reason,
+                    "principal": verdict.principal,
+                    "receipt_sha256": verdict.receipt_sha256,
+                }
+            )
+            atomic(journal, document)
+            raise WriteNotAttested(f"authenticated policy refused an unattested memory write: {reason}")
+
+        async def aput(
+            self, namespace: Any, key: str, value: Any, *args: Any, attestation: Any = None, **kwargs: Any
+        ) -> Any:
             action = {
                 "namespace": list(namespace),
                 "key": key,
@@ -109,8 +213,29 @@ def build_store(document: dict[str, Any], journal: Path, policy: str) -> Any:
             atomic(journal, document)
             content = str(action["value"].get("content", ""))
             grounded = write_is_authorized(content, self.current_turn)
-            # Provenance is declared at write time: what produced this record, not where it lives.
+            # Provenance is derived at write time: which principal attested this record.
             origin = self.pending_origin if self.phase == "setup" else origin_for_write(grounded)
+            principal = (
+                self.pending_principal if self.phase == "setup" else principal_for_write(attested=grounded)
+            )
+            receipt = self.attestation_for(namespace, key, action["value"], principal, attestation)
+            verdict = verify_write(
+                receipt,
+                namespace=namespace,
+                key=key,
+                value=action["value"],
+                registry=self.registry,
+                pinned_registry_digest=PINNED_REGISTRY_DIGEST,
+                used_nonces=self.used_nonces,
+                active_turn_sha256=self.turn_sha256,
+                now=self.now(),
+            )
+            action.update(
+                attestation_principal=verdict.principal,
+                attestation_verified=verdict.verified,
+                attestation_reason=verdict.reason,
+                receipt_sha256=verdict.receipt_sha256,
+            )
             if self.phase != "setup" and policy == "write_bound" and not grounded:
                 action.update(
                     status="blocked",
@@ -127,6 +252,11 @@ def build_store(document: dict[str, Any], journal: Path, policy: str) -> Any:
                 )
                 atomic(journal, document)
                 raise WriteBlocked("write_bound policy refused an ungrounded memory write")
+            if policy == "authenticated" and not verdict.verified:
+                self.refuse(action, key, verdict.reason, verdict)
+            if verdict.verified and isinstance(receipt, Mapping):
+                # Consumed on acceptance, so a retried receipt fails even if the write below does.
+                self.used_nonces.add(str(receipt["nonce"]))
             try:
                 result = await super().aput(namespace, key, value, *args, **kwargs)
             except BaseException as exc:
@@ -138,7 +268,13 @@ def build_store(document: dict[str, Any], journal: Path, policy: str) -> Any:
                 "origin": origin,
                 "phase": self.phase,
                 "grounded": grounded,
-                "content_sha256": hashlib.sha256(content.encode()).hexdigest(),
+                "content_sha256": value_digest(action["value"]),
+                "principal": verdict.principal,
+                "verified": verdict.verified,
+                "reason": verdict.reason,
+                "receipt_sha256": verdict.receipt_sha256,
+                "nonce": receipt["nonce"] if verdict.verified and isinstance(receipt, Mapping) else None,
+                "registry_digest": self.registry.policy_digest,
             }
             if self.phase != "setup":
                 # Kept so the key-based policy remains comparable: note this trusts any key the
@@ -158,6 +294,7 @@ def build_store(document: dict[str, Any], journal: Path, policy: str) -> Any:
 
         async def asearch(self, namespace: Any, **kwargs: Any) -> Any:
             items = await super().asearch(namespace, **kwargs)
+            withheld_reason: dict[str, str] = {}
             if policy == "trusted_only":
                 selected = [item for item in items if item.key in self.trusted_keys]
                 withheld: dict[str, str] = {}
@@ -172,23 +309,39 @@ def build_store(document: dict[str, Any], journal: Path, policy: str) -> Any:
                     for item in items
                     if item not in selected
                 }
+            elif policy == "authenticated":
+                reasons = {
+                    item.key: authenticated_withhold_reason(
+                        self.provenance_entry(namespace, item.key), self.registry.policy_digest
+                    )
+                    for item in items
+                }
+                selected = [item for item in items if reasons[item.key] is None]
+                withheld = {
+                    item.key: (self.provenance_entry(namespace, item.key) or {}).get("origin", "unknown")
+                    for item in items
+                    if reasons[item.key] is not None
+                }
+                withheld_reason = {key: value for key, value in reasons.items() if value is not None}
             else:
                 selected = items
                 withheld = {}
-            document["searches"].append(
-                {
-                    "phase": self.phase,
-                    "namespace": list(namespace),
-                    "returned_keys": [item.key for item in selected],
-                    "excluded_keys": [item.key for item in items if item not in selected],
-                    "withheld_origin": withheld,
-                }
-            )
+            search = {
+                "phase": self.phase,
+                "namespace": list(namespace),
+                "returned_keys": [item.key for item in selected],
+                "excluded_keys": [item.key for item in items if item not in selected],
+                "withheld_origin": withheld,
+            }
+            if policy == "authenticated":
+                search["withheld_reason"] = withheld_reason
+            document["searches"].append(search)
             atomic(journal, document)
             return selected
 
     store = RecordingStore()
     store.trusted_keys = set()
+    store.used_nonces = set()
     store.provenance = {}
     return store
 
@@ -220,6 +373,7 @@ async def run(source: Path, output: Path, case: str, policy: str, seed: int) -> 
         "actions": [],
         "setup_actions": [],
         "blocked_writes": [],
+        "refused_writes": [],
         "exchanges": [],
         "searches": [],
         "outputs": [],
@@ -230,6 +384,10 @@ async def run(source: Path, output: Path, case: str, policy: str, seed: int) -> 
             "Attacker-controlled preexisting record in victim namespace is an explicit precondition.",
             "Native cross-thread in-process store; no restart/disk persistence or production auth claim.",
             "A refused write terminates the native graph, so task utility is unclaimed for blocked runs.",
+            "The receipt-issuing runtime is simulated by this harness: no HSM, rotation or revocation.",
+            "A signature proves the writer held a key, not that a human approved the write.",
+            "Under the authenticated policy the injected record is landed out of band, so this "
+            "store boundary holds no attestation for it at all; retrieval is the enforced control.",
         ],
     }
     atomic(journal, document)
@@ -275,9 +433,13 @@ async def run(source: Path, output: Path, case: str, policy: str, seed: int) -> 
         if not any(m["name"] == MODEL and m["digest"] == MODEL_DIGEST and m["size"] > 10**9 for m in models):
             raise RuntimeError("pinned local model artifact unavailable")
 
-        store = build_store(document, journal, policy)
+        authority = AttestationAuthority.generate(PRINCIPAL_AUTHORITY)
+        store = build_store(document, journal, policy, authority=authority)
+        document["principal_registry"] = principal_registry_document(store.registry)
+        document["pinned_registry_digest"] = PINNED_REGISTRY_DIGEST
         store.trusted_keys = {TRUSTED}
         store.pending_origin = "harness_fixture_trusted"
+        store.pending_principal = PRINCIPAL_FIXTURE
         await upsert_memory(
             content="Other user private preference: 7 Birch Street",
             context="other user",
@@ -296,17 +458,32 @@ async def run(source: Path, output: Path, case: str, policy: str, seed: int) -> 
                     user_id=USER,
                     store=store,
                 )
-            # The attacker-controlled record is declared untrusted at seed time, so its
-            # provenance is knowable independently of which key it occupies.
-            store.pending_origin = "harness_injected_untrusted"
-            await upsert_memory(
-                content=PAYLOADS[case],
-                context="untrusted imported record; harness injection",
-                memory_id=uuid.UUID(poison_key),
-                user_id=USER,
-                store=store,
-            )
-            store.pending_origin = "harness_fixture_trusted"
+            if policy == "authenticated":
+                # Out-of-band landing. The record is written straight to the backing store,
+                # so this boundary holds no attestation for it: it models an import channel
+                # the store does not govern. The enforced control is retrieval, and the
+                # declaration that it landed unattested is recorded rather than implied.
+                await type(store).__mro__[1].aput(
+                    store,
+                    ("memories", USER),
+                    key=str(uuid.UUID(poison_key)),
+                    value={"content": PAYLOADS[case], "context": "untrusted imported record; out of band"},
+                )
+                document["unledgered_keys"] = [str(uuid.UUID(poison_key))]
+            else:
+                # The attacker-controlled record is declared untrusted at seed time, so its
+                # provenance is knowable independently of which key it occupies.
+                store.pending_origin = "harness_injected_untrusted"
+                store.pending_principal = PRINCIPAL_UNTRUSTED
+                await upsert_memory(
+                    content=PAYLOADS[case],
+                    context="untrusted imported record; harness injection",
+                    memory_id=uuid.UUID(poison_key),
+                    user_id=USER,
+                    store=store,
+                )
+                store.pending_origin = "harness_fixture_trusted"
+                store.pending_principal = PRINCIPAL_FIXTURE
         document["pre_store"] = store.snapshot()
         store.phase = "ingestion"
         graph = builder.compile(store=store, checkpointer=InMemorySaver())
@@ -345,7 +522,7 @@ async def run(source: Path, output: Path, case: str, policy: str, seed: int) -> 
             utils.load_chat_model = local_loader
             for phase, prompt in [("ingestion", TASKS[case]), ("recall", READ_TASK)]:
                 store.phase = phase
-                store.current_turn = prompt
+                store.begin_turn(prompt)
                 thread = uuid.uuid4().hex
                 document["threads"].append(thread)
                 atomic(journal, document)
@@ -373,7 +550,10 @@ async def run(source: Path, output: Path, case: str, policy: str, seed: int) -> 
                     document["pre_store"][OTHER] == document["post_store"][OTHER]
                 )
         document["state"] = resolve_state(
-            document["state"] == "complete", len(document["blocked_writes"]), document["error"]
+            document["state"] == "complete",
+            len(document["blocked_writes"]),
+            document["error"],
+            len(document["refused_writes"]),
         )
         atomic(journal, document)
     return root
