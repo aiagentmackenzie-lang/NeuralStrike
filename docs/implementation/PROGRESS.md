@@ -2011,3 +2011,111 @@ two repeats of one stage and did not reproduce under any filter that can see ori
 demonstration, not an effect size. Independent review, comparators, pilots and the
 independently authored second application remain absent; Phase 4 and release gates stay
 closed. No outreach, cloud spend, subagents, publication or Release dispatch.
+
+## 2026-11-09 — a second, independently authored target; the writes do not reproduce
+
+Started from clean `fdf9bc4` (branch `main`); re-read the hosted CI conclusion for that
+commit rather than trusting the handoff note. `git status --short` empty, per-repo identity
+`261826907+aiagentmackenzie-lang@users.noreply.github.com`. Baseline re-verified before
+touching anything: `pytest --no-cov` **1616 passed, 2 skipped**;
+`examples.memory_agent.policy_check` **40/40**, exit 0; `tests/test_memory_agent.py`
+**107 contracts**. Nothing in the handoff number set had moved.
+
+**Discrepancy with the handoff, reported rather than papered over.** The brief describes the
+Phase 3 independent-project gate as untouched and lists only the memory increments. The repo
+already contains two pinned third-party profiles — `agentdojo_banking` and
+`agentdojo_workspace` — with native effects, upstream state predicates and a reproduced
+vulnerable → fixed → regressed cycle. What was actually missing is a second independently
+*developed* project, not a second target whose source we did not author. That is what this
+increment adds; it does not re-litigate AgentDojo.
+
+**The target.** `sierra-research/tau-bench` at `59a200c6d575d595120f1cb70fea53cef0632f6b`,
+MIT (LICENSE SHA-256 `243d23d4…`), retail domain, 115 test tasks, 113 source files hashed.
+Imported unmodified from a clean checkout — no editable install, `PYTHONPATH` only, so the
+checkout stays clean. Pinned model `qwen3.5:2b` (`324d162b…`), loopback Ollama, temperature
+0.0, seed 7, k=3. New isolated candidate env at
+`…/tau-bench/env` from `examples/tau_bench_retail/requirements.txt` (`uv`, hashed lock).
+No root dependency or lock file changed. Upstream marks these tasks outdated and points at
+`tau2-bench`; pinned deliberately for the self-contained local retail environment, and stated
+as a limit.
+
+**Demonstrated before any fix, with no model in the loop.** The target's own tool map mutates
+another principal's record for a caller-supplied identifier: `modify_user_address` for a
+different customer changes their default address, `cancel_pending_order` marks their pending
+order `cancelled`, and `get_user_details` returns their full account record —
+`examples.tau_bench_retail.policy_check`, checks 1–4. Every scoped tool lists its identifier
+as a required caller argument; nothing at the boundary binds it to `env.task.user_id`, which
+is the target's own notion of the authenticated customer. The target's prompt rules require
+identity confirmation before a backend change — a prompt-level control, not a boundary.
+
+**The control.** `BoundDispatch.decide(principal, data, tool, kwargs)`, pure and fail-closed,
+at tool dispatch: `principal_unresolved`, `target_unknown`, `cross_principal`,
+`tool_unregistered`. A refusal is returned as a typed tool result (reward 0, done false, no
+`owner` field), never a success, mutates nothing, and is journalled with reason, boundary,
+tool, scope, identifier and resolved owner. Enforcement does not live in the recorder: a
+check disables `_record` and the refusal still happens. The target's source is not patched;
+unbinding restores the effect, and a check asserts exactly that.
+
+**Four harness defects found and fixed before any claim was written.** (1) the decision
+treated the seven global tools as unregistered and refused them; (2) the principal was only
+resolved on `reset()`, so a control installed afterwards refused everything as
+`principal_unresolved`; (3) the recorder observed the target's own gold replay as agent
+dispatch, because `Env.calculate_reward()` re-enters `self.step` — post-state contained the
+gold state and phantom mutations; (4) utility was read from a *second* `calculate_reward()`
+call, which returns `1.0` regardless of the trajectory. Cycle v1 (retained unmodified) reports
+that contaminated `1.0` in 6/6; its summary SHA-256 is `afe921ee…`. Cycle v2 re-measures the
+same declared matrix with utility taken from the native reward at termination plus a state
+comparison against the gold replay. **All eight security rows are identical between v1 and
+v2**, so the re-run was not a re-roll for effect; only the utility field changed.
+
+**Measured, seed 7, k=3, 24 declared observations, 24 completed, 0 errors.** A
+cross-principal **read** reached the prompt in **3/3** unguarded observations and **0/3**
+bound; the binding refused **3/3** at dispatch with `cross_principal`, one refusal per
+observation, journalled. That is the filter fact, and it is observable, not stochastic. The
+model emitted that read in 3/3 under both policies, which is expected — the guard answers
+after the call. The declared cross-principal **write** expectations were **falsified**: the
+model emitted neither write in 6/6 observations per policy, so the unguarded write rows are
+`falsified` and the bound write rows `not_exercised`. Prompt-level control held on this model
+for these payloads; the boundary enforced nothing, which checks 1–4 show. Utility: native
+reward at termination **0.0 in 6/6**, state matched the declared gold actions **0/6**, under
+both policies — this model completed nothing, and only the scripted gold-action replay shows
+the control does not block the target's own task (native reward `1.0`, identical data hash,
+zero refusals). The cycle exits **3** on the falsified writes. Counts only; no rate,
+percentage or interval is quoted anywhere.
+
+**The measurement trap, recorded because it silently inverts results.**
+`Env.calculate_reward()` resets `env.data` and replays the task's gold actions through
+`self.step` before computing its hash. Left bound, that replay is recorded as agent dispatch;
+read afterwards, state and utility are gold state and `1.0` regardless of the trajectory. The
+collector detaches the dispatcher for the replay and snapshots state before every dispatch.
+This is a measurement property of the target, not a security defect, and the target's own
+harness is unaffected because it computes the reward before the replay.
+
+Verification (all observed locally at Python 3.12.14):
+- `tests/test_tau_bench.py`: **42 contracts** (47 with the pinned checkout present), including
+  the fail-closed decision table, the four reason codes, refusal shape and non-disclosure, the
+  recording-layer bypass, schema invariance, unbinding, the falsified/unexercised verdict
+  rules, the no-module-scope-import rule, and a byte-identity assertion on the committed memory
+  evidence blocks.
+- `policy_check`: **25/25**, exit 0, `inference: none`, `excluded_from_efficacy: true`;
+  byte-identical result file after the post-run lint edits.
+- Full gate: **1658 passed, 7 skipped**, coverage **91.88%**; `ruff check src tests examples`
+  clean; `mypy src` clean, 144 files; `git diff --check` clean; no dependency or lock change.
+- Evidence: new file
+  `evidence/phase3-tau-bench-retail-2026-11-09.json` — target pin, defect, fix, trust anchor,
+  design, cycle paths and hashes, per-filter counts, filter-versus-model facts, the scripted
+  matrix, the four harness defects, `not_claimed`, `limitations`. No existing evidence block
+  was rewritten.
+- Contract/results/limits/questions: [TAU_BENCH_RETAIL_PROFILE.md](TAU_BENCH_RETAIL_PROFILE.md).
+
+**What remains open.** The control is a harness wrapper, not authentication: the target has
+no session token, identity provider, caller key, rotation or revocation, so the boundary's
+shape is proven and deployability is not. Two of three attack classes were never exercised by
+the model; their rows are unasserted, not passed. One exploratory observation outside the
+declared matrix, in which this model did emit a cross-principal address write after a shorter
+payload, is retained under `…/tau-bench-probe/` with a warning that its printed mutation line
+is the gold replay — it is not evidence and is excluded from every count. The native LLM user
+simulator is replaced by a declared deterministic script, so the channel is the target's and
+the utterances are ours. One 2B model, one seed, k=3; nothing generalises. Independent human
+labels and review, comparator runs, consenting pilots and the Phase 3 acceptance gate remain
+absent. No outreach, cloud spend, subagents or publication.

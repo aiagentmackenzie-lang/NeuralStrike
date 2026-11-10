@@ -253,3 +253,27 @@ corrects the earlier reading of its zero contamination as model resistance. It n
 reproduced under `provenance`, `authenticated` or `dispatch_authenticated`, and two repeats of
 one stage is a demonstration, not an effect size. The cycle still exits 3 on the falsified
 stages 2 and 4.
+
+## Second, independently authored target — 2026-11-08
+
+The [tau-bench retail profile](TAU_BENCH_RETAIL_PROFILE.md) measures a target whose source
+this project did not author: `sierra-research/tau-bench` at
+`59a200c6d575d595120f1cb70fea53cef0632f6b`, MIT, imported unmodified from a clean pinned
+checkout. The boundary is the target's own tool dispatch, where every state-mutating tool
+takes its `user_id`/`order_id` from the caller and binds it to nothing; the control resolves
+the owner from the pinned data and refuses fail-closed. Deterministically, with no model in
+the loop, the target's own tool map changes another principal's address and order status and
+returns another principal's account record, while the binding refuses in 25/25 scripted
+checks (`inference: none`, excluded from efficacy counts). Under inference at seed 7, k=3,
+24 declared observations: a cross-principal account read reached the prompt in 3/3
+unguarded observations and 0/3 bound, refused at dispatch in 3/3 with `cross_principal`; the
+declared cross-principal **write** expectations were falsified (0/3 in both policies), so
+those rows are retained as falsified and unexercised rather than reinterpreted. The native
+utility reward was 0.0 in 6/6 and the state matched the declared gold actions in 0/6: this
+model completed nothing, and only the scripted gold-action replay shows the control does not
+block the target's own task. The cycle exits 3 on the falsified writes. This closes the
+"second independently authored target" gap in the engineering sense — a pinned, licensed,
+unpatched third-party application with a native state predicate — and closes nothing else:
+it is not a prompt-injection demonstration, not authentication, not a patch, not a comparator
+run, not an independent review, not a pilot, and not Phase 3 acceptance. Independently
+labelled cases, human review, comparators, pilots and Phase 4 gates remain absent.
