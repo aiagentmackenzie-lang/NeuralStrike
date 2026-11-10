@@ -2195,3 +2195,12 @@ no rate is quoted. The transcript is stored as digests, so the cycle can say tha
 called no tool, not that it refused in words. The control is still a wrapper, not
 authentication. Independent review, comparator runs, consenting pilots and the Phase 3
 acceptance gate remain absent. No outreach, cloud spend, subagents or publication.
+
+**Published.** Committed as `075bd30` and pushed to `origin/main` on the owner's approval.
+Hosted CI run [42736252616](https://github.com/aiagentmackenzie-lang/NeuralStrike/actions/runs/42736252616)
+— **success** on `quality (3.11)`, `quality (3.12)`, `quality (3.14)`, `supply-chain` and
+`dashboard`. The pre-registered `plan.json` in the cycle directory was **not** rewritten,
+re-signed or amended after execution; its SHA-256 stands at `1f52315e…`. The evidence block
+gained a `publication` sub-block (commit, CI run, and an explicit statement that no measured
+count, verdict, expectation or limitation moved after the push) — verified key by key against
+the committed content.

@@ -8,7 +8,10 @@ A single-variable **model replication** of the declared matrix follows in
 [Model replication](#model-replication--the-same-matrix-on-a-30b-model). It changed the
 model and nothing else. On the second model no attack payload was attempted at all, so
 the disclosure row did not replicate and the write rows stayed falsified. That is a
-finding about the 2B model, not a fix and not a new vulnerability.
+finding about the 2B model, not a fix and not a new vulnerability. Published as
+`075bd30` (hosted CI run
+[42736252616](https://github.com/aiagentmackenzie-lang/NeuralStrike/actions/runs/42736252616),
+success on quality 3.11/3.12/3.14, supply-chain and dashboard).
 
 Target: [`sierra-research/tau-bench`](https://github.com/sierra-research/tau-bench)
 at `59a200c6d575d595120f1cb70fea53cef0632f6b`, MIT, licence SHA-256
@@ -308,6 +311,10 @@ Cycle `summary.json` SHA-256
 backgrounded and its process status was not captured: the recorded exit code 3 is
 derived from the recorded summary state and the verifier's declared terminal for that
 state, not observed.
+
+The pre-registered `plan.json` was not amended after execution and still hashes to
+`1f52315e…`. The cycle is published as `075bd30`; hosted CI run `42736252616` is green
+on quality 3.11/3.12/3.14, supply-chain and dashboard.
 
 ### Side by side — raw counts, never summed, never rated
 

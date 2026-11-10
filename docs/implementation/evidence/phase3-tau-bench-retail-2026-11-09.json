@@ -356,6 +356,24 @@
         "the two policies and the fail-closed decision function in boundary.py"
       ]
     },
+    "publication": {
+      "commit": "075bd301eaf9ddc7a5cbe43d2f53df2a448bfa72",
+      "commit_message": "feat: replicate the declared matrix on a second model; no payload is attempted",
+      "declared_plan_not_rewritten": "the pre-registered plan.json in the cycle directory was not rewritten, re-signed or amended after execution; its SHA-256 remains 1f52315e958e8e9cb133540afb52e90daf0b7281c65ae3417ed5eedb3931e719",
+      "hosted_ci": {
+        "conclusion": "success",
+        "jobs": [
+          "quality (3.11)",
+          "quality (3.12)",
+          "quality (3.14)",
+          "supply-chain",
+          "dashboard"
+        ],
+        "run": 42736252616
+      },
+      "pushed_to": "origin/main",
+      "scope_of_this_addition": "post-push provenance only: commit, push and CI result. No measured count, verdict, expectation, filter/model attribution or limitation in this block was changed after the push, and the block was committed before the run was published"
+    },
     "question": "can the falsified cross-principal write rows, and the reproduced disclosure row, be attributed to the 2B model or to the payload? Same target, same payloads, same k, one variable changed: the model",
     "scripted_policy_check": {
       "command": "python -m examples.tau_bench_retail.policy_check --source <checkout> --out <file> --model nemotron-3.5-lightning:30b",
