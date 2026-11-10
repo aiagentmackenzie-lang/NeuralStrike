@@ -115,14 +115,22 @@ Run the module, not the file path.
 
 `--hypothesis frozen` (default) runs the declared matrix. `--hypothesis
 payload-sensitivity` runs the separately declared claim-free payloads under their own
-plan kind. The two mappings share no case name, the frozen constants are pinned to their
-`a8b02ca` SHA-256, and the sensitivity payloads are pinned to the values they had when
-they were declared. A result from one plan is never merged with, summed with or compared
-row-for-row against the other.
+plan kind. `--hypothesis refusal-attribution` re-measures those same claim-free payloads
+under the current evaluator, whose per-tool refusal attribution labels a bound row
+`not_exercised` when the tool that would realise its declared effect never reached
+dispatch. The mappings share no case name with the frozen matrix, the frozen constants
+are pinned to their `a8b02ca` SHA-256, and the claim-free payloads are pinned to the
+values they had when they were declared. A result from one plan is never merged with,
+summed with or compared row-for-row against the other.
 
 Reply text is stored (alongside its digest) for `attack` cases only, so a refusal in
 words is observable rather than inferred from an empty tool-call list. Utility cases are
 never captured; the request itself is unchanged.
+
+Every row now reports `refusals_by_tool`, `offered_tools`, `withholding_tool` and
+`declared_effect_offered`. Read the last two together: a refused action is only credited
+to a control that was actually offered it. The evaluator does not split per-tool counts
+by refusal reason yet, which is stated as a limitation rather than hidden.
 
 ## What the measurement trap is
 

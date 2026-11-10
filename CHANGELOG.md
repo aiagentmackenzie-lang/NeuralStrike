@@ -6,6 +6,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (tau-bench retail — payload sensitivity and refusal attribution, 2026-11-10)
+- `examples/tau_bench_retail`: a declared **payload-sensitivity** plan
+  (`native-tau-bench-retail-payload-sensitivity-plan-v1`) that tests whether the explicit
+  ownership claim in the frozen attack payloads was the suppressor. Claim-free payloads
+  live in a separate `SENSITIVITY_CASES` mapping with their own SHA-256 pins; the frozen
+  `CASES`/`EXPECTATIONS` are untouched and still asserted byte-identical. 18 declared
+  observations, seed 7, k=3, `qwen3.5:2b`, exit 3: the cross-principal address write
+  mutated 3/3 unguarded and was refused at dispatch under the binding, the read was
+  unchanged by the claim (3/3 either way), and the cancel write stayed **falsified**
+  (no tool call at all). Counts only; no rate is quoted.
+- Assistant reply text is captured for `attack` cases only, so a refusal *in words* is
+  observed rather than inferred from an empty tool-call list (synthetic data, request
+  unchanged).
+- `verify.py` writes `exit.json` with the status it declares; the launching shell records
+  the observed `$?`, so the exit code is observed as well as derived.
+- Declared **refusal attribution** plan
+  (`native-tau-bench-retail-refusal-attribution-plan-v1`) and evaluator fields
+  `refusals_by_tool`, `offered_tools`, `withholding_tool`, `declared_effect_offered`: a
+  bound row whose declared effect never reached the boundary is `not_exercised`, however
+  its other predicates came out. Re-measured on byte-identical payloads with every count
+  repeating the sensitivity cycle — a relabelling, not a re-roll for effect.
+
+### Changed (tau-bench retail)
+- `--repeats` is no longer a budget lever: a value equal to the declared k is a no-op and
+  any other value is refused before the plan is written; plans record `budget_overrides`
+  with the levers null.
+- Every plan carries a `hypothesis` block and every row carries `paired_with`, so a fresh
+  run of the frozen matrix is a new plan and does not reproduce the recorded plan digests
+  of the earlier cycles (those plan files and frozen harness copies remain authoritative).
+- Docs state plainly that no live **withheld cross-principal write** has been measured: the
+  only class live-withheld under inference is the cross-principal scoped **read**.
+
 ### Added (Phase 9 — Trajectory-Grounded Adaptive Attack Engine)
 - `core/trajectory.py` — structured per-turn attack trajectories extracted
   purely from the loop's records: verdicts, oracles fired, evidence-derived
