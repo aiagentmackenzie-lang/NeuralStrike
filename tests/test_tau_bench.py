@@ -641,7 +641,8 @@ def test_journal_terminal_states_are_the_declared_set() -> None:
             verify.EXIT_NOT_EXERCISED, verify.EXIT_ERROR} == {0, 3, 4, 5, 6}
 
 
-@pytest.mark.parametrize("module", ["collect.py", "boundary.py", "profile.py", "verify.py"])
+@pytest.mark.parametrize("module", ["collect.py", "boundary.py", "profile.py", "verify.py",
+                                    "claims_audit.py", "refusal_audit.py"])
 def test_no_target_or_model_import_at_module_scope(module: str) -> None:
     """The profile must import without the third-party package or the model client."""
     import ast
@@ -1177,6 +1178,50 @@ def test_the_write_first_replication_declares_the_same_withholding_expectations(
             assert row["expectations"]["withheld_for_declared_class"] is True
         else:
             assert row["expectations"] == {"cross_principal_mutation": True}
+
+
+def test_the_auditor_detects_an_unresolved_hash_claim(tmp_path: Path) -> None:
+    """The claims check can fail: a bogus hash is reported, a real one is not."""
+    from examples.tau_bench_retail import claims_audit
+
+    root = Path(__file__).resolve().parents[1]
+    real = profile.digest(profile.CASES)[:8]
+    text = f"a real claim `{real}…` and a bogus one `deadbeef…`"
+    claims = claims_audit.profile_hash_claims(text)
+    known = claims_audit.known_hashes(tmp_path, root)
+    assert [claim["prefix"] for claim in claims if claim["prefix"] not in known] == ["deadbeef"]
+    assert [claim["prefix"] for claim in claims if claim["prefix"] in known] == [real]
+
+
+@pytest.mark.skipif(
+    not (Path.home() / "Documents/Codex/2026-11-08/neuralstrike-phase3/").is_dir(),
+    reason="recorded cycle packets are private and not part of the repository",
+)
+def test_the_profiles_mechanical_claims_reconcile_with_the_record() -> None:
+    """Every hash the profile quotes resolves, and every evidence block matches disk.
+
+    The prose is not checked and the audit says so: this is a drift detector for hashes and
+    counts, and a hand-audit of this profile once found four stale sentences the hashes could
+    not see.
+    """
+    from examples.tau_bench_retail import claims_audit
+
+    root = Path(__file__).resolve().parents[1]
+    document = claims_audit.audit(
+        Path.home() / "Documents/Codex/2026-11-08/neuralstrike-phase3",
+        root,
+        root / "docs/implementation/TAU_BENCH_RETAIL_PROFILE.md",
+        root / EVIDENCE,
+    )
+    assert document["ok"] is True, document["profile"]["unresolved"] + document["evidence"]["mismatched"]
+    assert document["profile"]["claims_checked"] >= 20
+    assert document["evidence"]["mismatched"] == []
+    names = {cycle["name"] for cycle in document["cycles"]}
+    assert "tau-bench-retail-cycle-write-first-v1" in names
+    assert "tau-bench-retail-cycle-write-first-replication-v1" in names
+    for cycle in document["cycles"]:
+        if cycle["exit_declared"] is not None:
+            assert cycle["exit_declared"] == cycle["exit_observed"], cycle["name"]
 
 
 @pytest.mark.skipif(

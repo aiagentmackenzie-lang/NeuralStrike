@@ -6,6 +6,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (tau-bench retail — claims audit, 2026-11-10)
+- `examples/tau_bench_retail/claims_audit.py` — read-only, no model, `inference: none`,
+  `excluded_from_efficacy`. Resolves every `<8 hex>…` hash claim in the profile against
+  hashes that exist on disk, re-hashes every cycle packet an evidence block names, and
+  reconciles every recorded count. Output is a separate artifact; recorded plans, summaries
+  and observations are never touched. It states in its own output that it does **not** check
+  prose.
+- Result on this record: 28 hash claims, 0 unresolved; 6 evidence blocks, 0 mismatched;
+  9 cycles reconciled.
+- Four stale profile sentences corrected by a hand-audit that the hashes could not see: the
+  "no comparator" limit (a comparator run exists), the frozen-matrix scope of the
+  "never exercised" limit, the 30B-only phrasing of "gave it nothing to withhold" (the 31B
+  also did), and "a single-variable model replication" (there are two, and they are never
+  pooled).
+- Contracts: the profile's mechanical claims reconcile with the record (skipif the private
+  packets are absent), and a negative contract proves the check can fail. `claims_audit` and
+  `refusal_audit` join the module-scope import contract.
+
 ### Added (tau-bench retail — write-first model replication, 2026-11-10)
 - Declared the one-variable **model replication** of the write-first matrix
   (`native-tau-bench-retail-write-first-replication-plan-v1`, replicates the write-first

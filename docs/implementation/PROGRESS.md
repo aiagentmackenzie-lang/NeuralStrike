@@ -2532,3 +2532,48 @@ user turn cannot override, and by the model's habit of reading before it writes.
 work is either a target or task whose change tool needs no record read (a new target pin, a new
 plan) or the comparator's cross-episode state primitive. Neither is another payload or another
 model chosen after seeing a result.
+
+## 2026-11-10 — the profile's claims are now checked by a tool, and a hand-audit found four stale sentences
+
+**Why.** The profile is the artifact a reviewer has to trust, and it quotes 28 hashes, six
+evidence blocks and nine recorded cycles. I checked them by hand at the start of this session
+and found four sentences that were true when written and are not true now:
+
+1. *"No independent reviewer, comparator, pilot or production deployment is involved"* — a
+   comparator run exists (a declared attacker at a declared budget, still not independent
+   verification, but "no comparator" had become false).
+2. *"Two of the three attack cases were never exercised by the 2B model"* — true of the frozen
+   matrix, read as the whole profile after two more payload families were added.
+3. *"Under inference the 30B gave it nothing to withhold"* — the 31B now also gave it nothing.
+4. *"A single-variable model replication of the declared matrix follows"* — there are two, and
+   they are never pooled.
+
+A hand-check is not a control, so this increment turns it into one.
+
+**The tool.** `examples/tau_bench_retail/claims_audit.py` — read-only, no model, no network, no
+target import, `inference: none`, output a separate artifact. It resolves every `<8 hex>…`
+claim in the profile against hashes that provably exist (plan, summary and exit documents, plan
+digests, frozen harness copies, repository modules, pinned constants, model digests, the pinned
+target revision, derived evidence artifacts), re-hashes every cycle packet an evidence block
+names, and reconciles the recorded counts. It states what it does **not** check — prose — in its
+own output, because that is exactly the gap the hand-audit found.
+
+**Result.** 28 hash claims, **0 unresolved**; 6 evidence blocks with a cycle, **0 mismatched**;
+9 cycles reconciled (24/24 for three frozen cycles, 18/18 twice, 12/12 twice, and the two
+comparator cycles, which carry a different row shape). Exit 0. A negative contract proves the
+check can fail: a fabricated hash is reported and a real one is not.
+
+**Contracts.** `test_the_profiles_mechanical_claims_reconcile_with_the_record` (skipif the
+private packets are absent) and `test_the_auditor_detects_an_unresolved_hash_claim`.
+`claims_audit.py` and `refusal_audit.py` join the module-scope import contract, so neither can
+grow a model or target import.
+
+**Gates.** 1709 passed, 7 skipped; coverage 91.88 %; `ruff` and `mypy` clean (144 files);
+`tests/test_tau_bench.py` 98 passed with the pinned checkout; `policy_check` 25/25,
+`inference: none`, byte-identical at `16825eda…`; target clean at `59a200c6…`.
+
+**Next.** The two increments are packaged for independent review
+(`phase3-write-first-review.zip`: brief, diff from `083a524`, both cycle packets with their
+frozen harness). No new run: the write path has now been tested three ways and the remaining
+options are a different target or the comparator's cross-episode primitive, both of which need
+their own declared plan before any observation.
