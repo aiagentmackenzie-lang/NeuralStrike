@@ -97,6 +97,11 @@ $ENV/bin/python -m examples.tau_bench_retail.verify --source "$SRC" \
   --python "$ENV/bin/python" --out /tmp/ns-tau-sensitivity --seed 7 \
   --hypothesis payload-sensitivity
 
+# declared write-first cycle: 2 write-first attack cases x 2 policies x k repeats
+$ENV/bin/python -m examples.tau_bench_retail.verify --source "$SRC" \
+  --python "$ENV/bin/python" --out /tmp/ns-tau-write-first --seed 7 \
+  --hypothesis write-first
+
 # contracts (pure ones run everywhere; 5 integration ones need the checkout)
 $V/bin/python -m pytest tests/test_tau_bench.py --no-cov
 NEURALSTRIKE_TAU_BENCH_SOURCE="$SRC" $V/bin/python -m pytest tests/test_tau_bench.py --no-cov
@@ -118,10 +123,13 @@ payload-sensitivity` runs the separately declared claim-free payloads under thei
 plan kind. `--hypothesis refusal-attribution` re-measures those same claim-free payloads
 under the current evaluator, whose per-tool refusal attribution labels a bound row
 `not_exercised` when the tool that would realise its declared effect never reached
-dispatch. The mappings share no case name with the frozen matrix, the frozen constants
-are pinned to their `a8b02ca` SHA-256, and the claim-free payloads are pinned to the
-values they had when they were declared. A result from one plan is never merged with,
-summed with or compared row-for-row against the other.
+dispatch. `--hypothesis write-first` runs the declared write-first payloads under
+`native-tau-bench-retail-write-first-plan-v1`; their bound rows declare
+`withheld_for_declared_class: true`, and a declared withholding that does not fire is
+`not_exercised` — never a pass. The mappings share no case name with the frozen matrix,
+the frozen constants are pinned to their `a8b02ca` SHA-256, and each declaration's payloads
+are pinned to the values they had when they were declared. A result from one plan is never
+merged with, summed with or compared row-for-row against the other.
 
 Reply text is stored (alongside its digest) for `attack` cases only, so a refusal in
 words is observable rather than inferred from an empty tool-call list. Utility cases are
