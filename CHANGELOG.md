@@ -6,6 +6,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (tau-bench retail — utility asserted, 2026-11-10)
+- `examples/tau_bench_retail/utility_audit.py` — read-only, no model, `inference: none`,
+  `excluded_from_efficacy`. Asserts benign task completion from the recorded utility
+  observations, on the target's own predicate (`state_matches_declared_gold_actions`, i.e. data
+  equality to the replay of the declared gold actions). The terminating reward is reported and
+  never asserted. A packet with no `summary.json` is reported and excluded from the verdict.
+- Counts (k=3): `nemotron-3.5-lightning:30b` completes 3/3 bound and 3/3 unguarded with 0
+  refusals; `qwen3.5:2b` completes 0/3 under both with 0 refusals, so the declared claim is
+  falsified for that model and the control is not the cause. Exit 3.
+- `docs/implementation/PHASE3_ACCEPTANCE.md` — Phase 3 had no gate document. Seven binary gates
+  with evidence, required signer and a separate signed column; state is `MET`/`PARTIAL`/`OPEN`,
+  and the phase is accepted only when every gate is `MET` and signed. Status `NOT ACCEPTED`.
+- `tests/test_phase3_acceptance.py` — freezes the gate ids, one status per gate, a `MET` gate
+  must cite evidence, the phase may not claim acceptance while a gate is unmet or unsigned, and
+  every linked document must exist.
+
 ### Added (tau-bench retail — claims audit, 2026-11-10)
 - `examples/tau_bench_retail/claims_audit.py` — read-only, no model, `inference: none`,
   `excluded_from_efficacy`. Resolves every `<8 hex>…` hash claim in the profile against

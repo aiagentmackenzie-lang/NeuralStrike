@@ -395,6 +395,17 @@ family), same payloads shared by identity, 12 observations, exit 3: **zero model
 A null. It says nothing about ordering because the model never acted; it does record that two
 of the three declared models obey the target's authentication rule as a hard stop.
 
+**Utility, previously left as `None`.** Every plan carried `utility: None`, so benign
+completion was never asserted. A declared counting rule now derives it from the recorded
+observations (`utility_audit.py`, read-only, no model, `inference: none`): the predicate is the
+target's own success definition — data equality to the replay of the declared gold actions —
+and the terminating reward is reported, never asserted, because it was 0.0 even where the state
+matched gold. The 30B completes 3/3 bound and 3/3 unguarded with 0 refusals; the 2B completes 0/3
+under both with 0 refusals, so its failure is model behaviour and the control is not implicated.
+The audit exits 3 because the declared claim is falsified for the 2B, and that is the finding.
+Artifact: `evidence/tau-bench-utility-audit-2026-11-10.json`. Gate P3-7 moves from `PARTIAL` to
+`MET` in [PHASE3_ACCEPTANCE.md](PHASE3_ACCEPTANCE.md); it is still unsigned.
+
 **Standing claim, unchanged and now mechanically checked.** The only class the control has ever
 been shown to withhold live under inference is the scoped **read**. Every withheld-write claim
 in this project remains scripted. `examples/tau_bench_retail/claims_audit.py` resolves every hash
@@ -419,7 +430,7 @@ signed by anyone but the author.
 | Pilot | consenting owner, exact deployment, synthetic data, criteria, retention | **none** |
 | Commercial signal | customer feedback / willingness to pay | **none** |
 | Boundary diversity | privilege change, outbound transfer, destructive action, argument redirection, retrieval contamination, persistent memory, non-vulnerable configurations, benign operations | privilege ✓ (self-authored app), outbound transfer ✓ (AgentDojo banking `send_money`), argument redirection ✓ (the bill's account field controlling the payment destination), retrieval ✓, object authority ✓ (tau-bench, read withheld live), persistent memory: one 2/3 demonstration in one stage, destructive: attempts only, never a reproduced effect, non-vulnerable ✓ (hardened), benign ✓ — **but the ground truth is corroborated nowhere outside this repository** |
-| Utility preserved | benign task completion under the control | AgentDojo/memory benign controls pass; **tau-bench utility is unasserted** (`None`), 0.0 at termination with 0/6 gold-state match on the 2B and 6/6 on the 30B |
+| Utility preserved | benign task completion under the control, asserted per target | **asserted for every target with a benign row**: tau-bench `nemotron-3.5-lightning:30b` 3/3 bound and 3/3 unguarded, 0 refusals; `qwen3.5:2b` 0/3 under both, 0 refusals, so the claim is falsified for that model and the control is not the cause; AgentDojo banking fixed-stage utility true, workspace 5/5, memory-agent benign 18/18 and 30/30 |
 | Phase 4 | release / provenance / platform / pilot gates | **open** |
 
 Gates 1–5 need people and customers. No amount of further engineering moves them, and this

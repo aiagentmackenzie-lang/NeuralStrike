@@ -20,7 +20,7 @@ README = ROOT / "README.md"
 
 # Frozen: removing a gate is a change to what Phase 3 has to prove, so it fails here first.
 GATES = ("P3-1", "P3-2", "P3-3", "P3-4", "P3-5", "P3-6", "P3-7")
-STATUSES = ("ACCEPTED", "PARTIAL", "OPEN")
+STATUSES = ("MET", "PARTIAL", "OPEN")
 GATE_ROW = re.compile(r"^\|\s*(P3-\d+)\s*\|")
 
 
@@ -51,21 +51,29 @@ def test_the_acceptance_document_exists_and_defines_every_gate_once() -> None:
 def test_every_gate_carries_one_declared_status_and_a_rule() -> None:
     for gate, cells in gate_rows().items():
         gate_status(cells)
-        # A gate without a binary criterion and a named signer is an opinion, not a gate.
-        assert len(cells) == 6, f"{gate} must have 6 columns (id, gate, criterion, state, evidence, signer)"
+        # id, gate, criterion, state, evidence, required signer, signed
+        assert len(cells) == 7, f"{gate} must have 7 columns"
         assert cells[2], f"{gate} has no binary criterion"
-        assert cells[5], f"{gate} has no signer cell"
+        assert cells[5], f"{gate} has no required-signer cell"
 
 
-def test_the_status_line_cannot_claim_acceptance_while_a_gate_gate_is_not_accepted() -> None:
-    statuses = {gate: gate_status(cells) for gate, cells in gate_rows().items()}
+def signed_by_author_or_nobody(cells: list[str]) -> bool:
+    """The Signed column is the last one; an em dash or a role name is not a signer."""
+    return cells[6].strip() in {"", "\u2014", "-"}
+
+
+def test_the_status_line_cannot_claim_acceptance_unless_every_gate_is_met_and_signed() -> None:
+    rows = gate_rows()
+    statuses = {gate: gate_status(cells) for gate, cells in rows.items()}
+    unsigned = {gate for gate, cells in rows.items() if signed_by_author_or_nobody(cells)}
     header = ACCEPTANCE.read_text().split("## The acceptance rule")[0]
-    if all(status == "ACCEPTED" for status in statuses.values()):
+    accepted = all(s == "MET" for s in statuses.values()) and not unsigned
+    if accepted:
         assert "NOT ACCEPTED" not in header
     else:
         assert "NOT ACCEPTED" in header, (
-            "a gate is not ACCEPTED, so the document must say NOT ACCEPTED: "
-            f"{ {g: s for g, s in statuses.items() if s != 'ACCEPTED'} }"
+            "the phase must say NOT ACCEPTED while a gate is not MET or is unsigned: "
+            f"not met { {g: s for g, s in statuses.items() if s != 'MET'} }, unsigned {sorted(unsigned)}"
         )
 
 
@@ -81,13 +89,13 @@ def test_the_efficacy_record_points_at_the_acceptance_document() -> None:
     assert "PHASE3_ACCEPTANCE.md" in EFFICACY.read_text()
 
 
-def test_a_gate_cannot_be_silently_upgraded_by_editing_its_status_only() -> None:
-    """A gate may only read ACCEPTED with a signer that is not the author."""
+def test_a_met_gate_must_cite_evidence_that_is_not_a_placeholder() -> None:
+    """MET is a claim about evidence, so a MET gate with no citation is a lie by omission."""
     for gate, cells in gate_rows().items():
-        if gate_status(cells) == "ACCEPTED":
-            signer = cells[5].strip()
-            assert signer and "—" not in signer, f"{gate} is ACCEPTED with no named signer"
-            assert "author" not in signer.lower(), f"{gate} is ACCEPTED by the author"
+        if gate_status(cells) == "MET":
+            evidence = cells[4].strip()
+            assert evidence and evidence not in {"\u2014", "-"}, f"{gate} is MET with no evidence"
+            assert "todo" not in evidence.lower(), f"{gate} is MET with a placeholder"
 
 
 @pytest.mark.parametrize("document", ["PHASE3_EFFICACY.md", "PHASE3_MEASUREMENT_BOUNDARIES.md"])

@@ -15,26 +15,31 @@ this file.
 
 ## The acceptance rule
 
-Phase 3 may be called **accepted** only when every gate below is `ACCEPTED`, each with a named
-signer who is not the author of the increment, and each with evidence at a path a reviewer can
-open without asking me anything. A gate is `ACCEPTED` when its binary criterion is met, not
-when its discussion is persuasive. Any gate `PARTIAL` or `OPEN` makes the phase `NOT ACCEPTED`,
-and no other result of this project changes that.
+Two independent things have to be true, and they are recorded in separate columns because
+conflating them made this table useless: a gate's **evidence** can be complete while nobody has
+signed it.
 
-`PARTIAL` and `OPEN` are different claims. `PARTIAL` means some of the required evidence exists
-and I can name the exact shortfall. `OPEN` means the evidence is absent in kind.
+- **State** is `MET`, `PARTIAL` or `OPEN`, and it is a statement about evidence only.
+  `MET` means the binary criterion is satisfied by evidence at a path a reviewer can open
+  without asking me anything. `PARTIAL` means some of the required evidence exists and I can
+  name the exact shortfall. `OPEN` means the evidence is absent in kind.
+- **Signed** is a name and a date from someone who is not the author of the increment. A state
+  of `MET` with no signature is an author's claim, which is what every row below currently is.
+
+Phase 3 may be called **accepted** only when every gate is `MET` **and** every gate is signed.
+Until then it is `NOT ACCEPTED`, and no other result of this project changes that.
 
 ## Gates
 
-| ID | Gate | Binary criterion | Current state | Evidence | Signer |
-|---|---|---|---|---|---|
-| P3-1 | Independent labels | ≥10 distinct cases, each with `label_origin` of `independent_review` or `pilot_owner`, and the referenced originals present in the packet | **OPEN** — 1 distinct scenario, origin `self_authored`; all 282 committed assessments are that same scenario | `runs/assessment-*/plan.json`, `examples/langgraph_account_support/efficacy.py` | named independent labeller |
-| P3-2 | Independent review | a reviewer who did not run the increment inspects policy and labels *before* predictions, replays every assessment, reruns the controlled cycle, and records a dated identity plus any disagreements | **OPEN** — none contacted, none available; review packets exist unread | `~/Documents/Codex/2026-11-08/neuralstrike-phase3/phase3-*-review.zip` | named reviewer |
-| P3-3 | Fair comparison | a pinned common workflow, same target build, explicit prompts/budgets/seeds, independent policy-and-state ground truth, and a reported result including adapter mismatches as unsupported rather than zero | **OPEN** — no NeuralStrike-vs-tool score exists; the one comparator run varies the attacker and keeps our measurement | [comparator protocol](TAU_BENCH_COMPARATOR_PROTOCOL.md) §10 | named comparator author |
-| P3-4 | Consent-based pilot | a consenting owner, exact deployment/build/configuration, synthetic or authorised data, declared capabilities, benign-task criteria, budgets and retention rules, and a recorded result | **OPEN** — no consent, no pilot | — | named pilot owner |
-| P3-5 | Commercial signal | documented feedback or willingness to pay from someone who is not the author | **OPEN** — none | — | named counterparty |
-| P3-6 | Boundary diversity and independence | a native measured observation for each of: privilege change, outbound transfer, destructive action, argument redirection, retrieval contamination, persistent-memory influence, non-vulnerable configuration, benign operation — and each on an application this project did not author, with ground truth corroborated outside this repository | **PARTIAL** — seven of eight classes have a native measured observation (destructive action: attempts only, never a reproduced effect), and object-level authority was measured on a pinned third-party target; but the ground truth is corroborated nowhere outside this repository, and two of the five measured applications are authored here | [efficacy record](PHASE3_EFFICACY.md), the five profile documents | named reviewer |
-| P3-7 | Utility preserved | benign task completion under the control, asserted per target rather than inferred, with the denominator stated | **PARTIAL** — AgentDojo and memory-agent benign controls pass; tau-bench utility is declared `None` and never asserted (native reward 0.0 at termination, gold-state match 0/6 on the 2B, 6/6 on the 30B) | profile Limits sections | named reviewer |
+| ID | Gate | Binary criterion | State | Evidence | Required signer | Signed |
+|---|---|---|---|---|---|---|
+| P3-1 | Independent labels | ≥10 distinct cases, each with `label_origin` of `independent_review` or `pilot_owner`, and the referenced originals present in the packet | **OPEN** — 1 distinct scenario, origin `self_authored`; all 282 committed assessments are that same scenario | `runs/assessment-*/plan.json`, `examples/langgraph_account_support/efficacy.py` | independent labeller | — |
+| P3-2 | Independent review | a reviewer who did not run the increment inspects policy and labels *before* predictions, replays every assessment, reruns the controlled cycle, and records a dated identity plus any disagreements | **OPEN** — none contacted, none available; review packets exist unread | `~/Documents/Codex/2026-11-08/neuralstrike-phase3/phase3-*-review.zip` | reviewer | — |
+| P3-3 | Fair comparison | a pinned common workflow, same target build, explicit prompts/budgets/seeds, independent policy-and-state ground truth, and a reported result including adapter mismatches as unsupported rather than zero | **OPEN** — no NeuralStrike-vs-tool score exists; the one comparator run varies the attacker and keeps our measurement | [comparator protocol](TAU_BENCH_COMPARATOR_PROTOCOL.md) §10 | comparator author | — |
+| P3-4 | Consent-based pilot | a consenting owner, exact deployment/build/configuration, synthetic or authorised data, declared capabilities, benign-task criteria, budgets and retention rules, and a recorded result | **OPEN** — no consent, no pilot | — | pilot owner | — |
+| P3-5 | Commercial signal | documented feedback or willingness to pay from someone who is not the author | **OPEN** — none | — | counterparty | — |
+| P3-6 | Boundary diversity and independence | a native measured observation for each of: privilege change, outbound transfer, destructive action, argument redirection, retrieval contamination, persistent-memory influence, non-vulnerable configuration, benign operation — and each on an application this project did not author, with ground truth corroborated outside this repository | **PARTIAL** — seven of eight classes have a native measured observation (destructive action: attempts only, never a reproduced effect), and object-level authority was measured on a pinned third-party target; but the ground truth is corroborated nowhere outside this repository, and two of the five measured applications are authored here | [efficacy record](PHASE3_EFFICACY.md), the five profile documents | reviewer | — |
+| P3-7 | Utility preserved | benign task completion under the control, asserted per target rather than inferred, with the denominator stated | **MET** — asserted for every target that has a benign row: tau-bench `nemotron-3.5-lightning:30b` completes 3/3 bound and 3/3 unguarded with 0 refusals; tau-bench `qwen3.5:2b` completes 0/3 bound and 0/3 unguarded with 0 refusals, so the utility claim is falsified **for that model** and the control is not the cause; AgentDojo banking utility true in the fixed stage, workspace 5/5 tasks, memory-agent benign 18/18 and 30/30 | `examples/tau_bench_retail/utility_audit.py` artifact, `evidence/tau-bench-utility-audit-2026-11-10.json`; the four profile documents | reviewer | — |
 
 ## What "counts" as evidence, and what does not
 
@@ -93,6 +98,6 @@ something to disagree with.
 
 | Gate | Signed by | Date | Note |
 |---|---|---|---|
-| all gates | — | — | no signer; Phase 3 is not accepted |
+| all gates | — | — | no gate is signed; Phase 3 is not accepted |
 
 No reviewer, pilot owner or counterparty has been contacted for this document.
