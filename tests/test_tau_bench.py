@@ -62,6 +62,17 @@ PINNED_IDENTIFIER_ARGUMENTS = {
 EVIDENCE = Path("docs/implementation/evidence/phase3-tau-bench-retail-2026-11-09.json")
 MEMORY_EVIDENCE = Path("docs/implementation/evidence/phase3-memory-2026-11-08.json")
 
+# Payload and matrix pins. These are the SHA-256 of the declared constants as they stood
+# at a8b02ca, before the model replication. The replication changes one variable — the
+# model — so these must not move. A retuned payload would make the matrix a fit to an
+# outcome rather than a test of one.
+PAYLOAD_SHA256_V1 = "6dae63613741e9c311c88d5004c6d368c8e22d4b23fbde2f6101c1aa6829140c"
+CASES_SHA256_V1 = "0146d474d31597ab688d39c5099ffd0a58a6452015bc8a55f8ac808f10871894"
+EXPECTATIONS_SHA256_V1 = "d27aed0a27263bdd1bfd176b618d36798a95543d1702264f54e244b45376f216"
+BUDGETS_SHA256_V1 = "a3a38e7f659c2fd0565c4c9cacfc0bfd7709e964505c6fb43bcf414457b5d6a1"
+REPLICATION_MODEL = "nemotron-3.5-lightning:30b"
+REPLICATION_DIGEST = "e7a64ff15fb174c42b4f463e5c888c4f2c7b9cabf9e8d65a1c0874405426c1b2"
+
 DATA = {
     "users": {"alice": {"address": {"city": "A"}, "orders": ["#A"]}, "bob": {"address": {"city": "B"}}},
     "orders": {"#A": {"user_id": "alice", "status": "pending"}, "#B": {"user_id": "bob", "status": "pending"}},
@@ -81,6 +92,113 @@ def test_target_pins_are_the_declared_literals() -> None:
     )
     assert profile.MODEL_ORIGIN == "http://127.0.0.1:11434"
     assert profile.PLAN_KIND == "native-tau-bench-retail-plan-v1"
+
+
+def test_model_registry_is_a_declared_literal_with_digests() -> None:
+    assert set(profile.MODEL_REGISTRY) == {profile.MODEL, REPLICATION_MODEL}
+    assert profile.MODEL_DIGESTS == {
+        profile.MODEL: profile.MODEL_DIGEST,
+        REPLICATION_MODEL: REPLICATION_DIGEST,
+    }
+    for name, entry in profile.MODEL_REGISTRY.items():
+        assert len(entry["digest"]) == 64, name
+        assert set(entry["digest"]) <= set("0123456789abcdef"), name
+        assert entry["origin"] == "http://127.0.0.1:11434", name
+        assert entry["parameters"] and entry["family"] and entry["quantization"], name
+        assert entry["role"], name
+
+
+def test_an_undeclared_model_fails_closed_everywhere() -> None:
+    from examples.tau_bench_retail import verify
+
+    with pytest.raises(ValueError):
+        profile.resolve_model("gpt-oss:120b-cloud")
+    with pytest.raises(ValueError):
+        profile.verify_model_pin("gpt-oss:120b-cloud")
+    with pytest.raises(ValueError):
+        verify.model_block("gpt-oss:120b-cloud")
+    with pytest.raises(ValueError):
+        verify.plan_relationship("")
+
+
+def test_a_cloud_model_name_cannot_be_planned_even_if_the_registry_listed_it() -> None:
+    # The loopback rule is checked independently of the registry entry, so a later edit
+    # that adds a cloud model cannot slip past it.
+    poisoned = dict(profile.MODEL_REGISTRY)
+    poisoned["cloud-model"] = {
+        "digest": "0" * 64,
+        "origin": "https://ollama.com",
+        "family": "x",
+        "parameters": "1B",
+        "quantization": "Q4",
+        "role": "test",
+    }
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(profile, "MODEL_REGISTRY", poisoned)
+    try:
+        with pytest.raises(ValueError, match="non-loopback"):
+            profile.verify_model_pin("cloud-model")
+    finally:
+        monkey.undo()
+
+
+def test_plan_relationship_declares_replication_not_supersession() -> None:
+    from examples.tau_bench_retail import verify
+
+    assert verify.plan_relationship(REPLICATION_MODEL) == {
+        "replicates": profile.PLAN_KIND,
+        "supersedes": None,
+    }
+    assert verify.plan_relationship(profile.MODEL) == {"replicates": None, "supersedes": None}
+
+
+def test_model_block_carries_name_digest_and_origin() -> None:
+    from examples.tau_bench_retail import verify
+
+    block = verify.model_block(REPLICATION_MODEL)
+    assert block["name"] == REPLICATION_MODEL
+    assert block["digest"] == REPLICATION_DIGEST
+    assert block["origin"] == "http://127.0.0.1:11434"
+    assert block["provider"] == profile.PROVIDER
+    assert block["temperature"] == 0.0
+    assert "loopback" in block["network_rule"]
+
+
+def test_build_plan_refuses_to_declare_an_unverified_model() -> None:
+    from examples.tau_bench_retail import verify
+
+    # The pin gate is checked before the target is read, so this needs no checkout.
+    with pytest.raises(ValueError, match="without a matched pin check"):
+        verify.build_plan(Path("."), REPLICATION_MODEL, None)
+    stale = {"name": REPLICATION_MODEL, "matched": False}
+    with pytest.raises(ValueError, match="without a matched pin check"):
+        verify.build_plan(Path("."), REPLICATION_MODEL, stale)
+    other = {"name": profile.MODEL, "matched": True}
+    with pytest.raises(ValueError, match="without a matched pin check"):
+        verify.build_plan(Path("."), REPLICATION_MODEL, other)
+
+
+def test_payload_and_matrix_constants_are_byte_identical_to_v1() -> None:
+    payload = {
+        "cases": profile.CASES,
+        "address": profile.ATTACKER_ADDRESS,
+        "cancel": profile.CANCEL_REASON,
+        "victim_user": profile.VICTIM_USER,
+        "victim_order": profile.VICTIM_ORDER,
+        "read_target": profile.READ_TARGET,
+        "task_index": profile.SESSION_TASK_INDEX,
+        "session_principal": profile.SESSION_PRINCIPAL,
+    }
+    budgets = {
+        "seed": profile.SEED,
+        "repeats": profile.REPEATS,
+        "max_steps": profile.MAX_STEPS,
+        "user_turns": profile.USER_MAX_TURNS,
+    }
+    assert profile.digest(payload) == PAYLOAD_SHA256_V1
+    assert profile.digest(profile.CASES) == CASES_SHA256_V1
+    assert profile.digest(profile.EXPECTATIONS) == EXPECTATIONS_SHA256_V1
+    assert profile.digest(budgets) == BUDGETS_SHA256_V1
 
 
 def test_registry_partitions_the_pinned_tool_list() -> None:
@@ -234,7 +352,17 @@ def test_plan_rows_are_declared_before_execution_and_carry_no_outcome() -> None:
         assert not {"effects", "refusals", "verdict", "completed", "falsified"} & set(row)
     text = Path(verify.__file__).read_text()
     assert '"supersedes": None' in text
+    assert '"replicates"' in text
     assert '"expectations_declared_before_execution": True' in text
+
+
+def test_harness_freeze_covers_the_verifier() -> None:
+    from examples.tau_bench_retail import verify
+
+    assert set(verify.HARNESS) == {
+        "profile.py", "boundary.py", "collect.py", "policy_check.py", "verify.py"
+    }
+    assert set(verify.harness_files()) == set(verify.HARNESS)
 
 
 def test_evaluate_marks_a_contradicted_expectation_falsified() -> None:

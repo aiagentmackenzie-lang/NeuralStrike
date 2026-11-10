@@ -16,6 +16,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import urllib.error
+import urllib.request
 import uuid
 from pathlib import Path
 from typing import Any
@@ -28,6 +30,71 @@ MODEL = "qwen3.5:2b"
 MODEL_DIGEST = "324d162be6ca5629ae4517c8710434d0bd2d665bc94dbad46e9af8fbf8a2f0df"
 PROVIDER = "ollama_chat"
 MODEL_ORIGIN = "http://127.0.0.1:11434"
+
+# Declared model registry. A cycle may only run against a model named here, and the
+# digest is resolved from this literal, never from the daemon's own answer. The
+# daemon is checked *against* the registry at run time; a mismatch is a refusal.
+MODEL_REGISTRY: dict[str, dict[str, str]] = {
+    "qwen3.5:2b": {
+        "digest": MODEL_DIGEST,
+        "origin": MODEL_ORIGIN,
+        "family": "qwen35",
+        "parameters": "2.3B",
+        "quantization": "Q8_0",
+        "role": "declared baseline; the model the v1 matrix was measured on",
+    },
+    "nemotron-3.5-lightning:30b": {
+        "digest": "e7a64ff15fb174c42b4f463e5c888c4f2c7b9cabf9e8d65a1c0874405426c1b2",
+        "origin": MODEL_ORIGIN,
+        "family": "nemotron_h_moe",
+        "parameters": "32.9B",
+        "quantization": "Q4_K_M",
+        "role": "single-variable replication of the v1 matrix; not a second target",
+    },
+}
+MODEL_DIGESTS: dict[str, str] = {name: entry["digest"] for name, entry in MODEL_REGISTRY.items()}
+
+
+def resolve_model(name: str) -> dict[str, str]:
+    """Registry lookup. An undeclared model is refused, never defaulted."""
+    entry = MODEL_REGISTRY.get(name)
+    if entry is None:
+        raise ValueError(f"model {name!r} is not in the declared registry {sorted(MODEL_REGISTRY)}")
+    return {"name": name, **entry}
+
+
+def verify_model_pin(name: str, timeout: float = 10.0) -> dict[str, Any]:
+    """Check the declared digest against the local daemon. Fail closed on any difference.
+
+    Loopback only: the origin comes from the registry, and a non-loopback origin is
+    refused rather than fetched, so this check cannot reach an inference provider.
+    """
+    entry = resolve_model(name)
+    origin = entry["origin"]
+    if not origin.startswith(("http://127.0.0.1:", "http://localhost:")):
+        raise ValueError(f"model {name!r} declares a non-loopback origin {origin!r}")
+    url = f"{origin}/api/tags"
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as stream:
+            document = json.loads(stream.read().decode())
+    except (urllib.error.URLError, OSError, ValueError) as error:
+        raise ValueError(f"model {name!r} could not be verified at {url}: {error}") from error
+    listed = document.get("models") if isinstance(document, dict) else None
+    observed = {
+        item.get("name"): item.get("digest") for item in listed or [] if isinstance(item, dict)
+    }
+    if observed.get(name) != entry["digest"]:
+        found = observed.get(name)
+        raise ValueError(
+            f"model {name!r} digest {found!r} does not match the declared {entry['digest']!r}"
+        )
+    return {
+        "name": name,
+        "endpoint": url,
+        "declared_digest": entry["digest"],
+        "observed_digest": observed[name],
+        "matched": True,
+    }
 
 PLAN_KIND = "native-tau-bench-retail-plan-v1"
 SEED = 7

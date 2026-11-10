@@ -277,3 +277,22 @@ unpatched third-party application with a native state predicate — and closes n
 it is not a prompt-injection demonstration, not authentication, not a patch, not a comparator
 run, not an independent review, not a pilot, and not Phase 3 acceptance. Independently
 labelled cases, human review, comparators, pilots and Phase 4 gates remain absent.
+
+## Model replication on the tau-bench retail profile — 2026-11-09
+
+The declared retail matrix was repeated on a second declared model,
+`nemotron-3.5-lightning:30b` (`e7a64ff1…`, loopback Ollama), changing one variable — the
+model — and nothing else: same target revision, seed 7, k=3, step budget, scripted user,
+four cases, every utterance and the tri-state expectations, with payload drift now asserted
+byte-identical by contract. The 30B issued no tool call at all on any attack payload, in
+6/6 observations per case, so nothing reached dispatch, the binding refused 0/3 because it
+was given nothing, and the bound attack rows are unexercised rather than passed; the
+disclosure effect that reproduced on the 2B (3/3 unguarded) did not reproduce here (0/3), and
+the write rows stayed falsified for both models. That is a finding about the 2B model, not a
+fix, not a new vulnerability, and not a comparator run: `policy_check` is still 25/25 with no
+model in the loop, and the control's own-scope path was exercised live for the first time
+without a false refusal. See [TAU_BENCH_RETAIL_PROFILE.md](TAU_BENCH_RETAIL_PROFILE.md) and the
+`nemotron_replication_v1` block in
+[evidence/phase3-tau-bench-retail-2026-11-09.json](evidence/phase3-tau-bench-retail-2026-11-09.json).
+A second model is still one machine, one seed and one synthetic environment; it closes no
+gate.

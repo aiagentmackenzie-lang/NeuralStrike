@@ -38,7 +38,6 @@ from examples.tau_bench_retail.profile import (
     GLOBAL_TOOLS,
     LICENSE_SHA256,
     MODEL,
-    MODEL_DIGEST,
     REVISION,
     SESSION_PRINCIPAL,
     SESSION_TASK_INDEX,
@@ -48,6 +47,7 @@ from examples.tau_bench_retail.profile import (
     VICTIM_USER,
     canonical,
     digest,
+    resolve_model,
     state_predicates,
 )
 
@@ -346,7 +346,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="scripted tau-bench boundary check, no inference")
     parser.add_argument("--source", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path)
+    parser.add_argument("--model", default=MODEL,
+                        help="declared model this check is recorded against; no model runs here")
     arguments = parser.parse_args()
+    declared = resolve_model(arguments.model)
     target = load(arguments.source)
     records: list[dict[str, Any]] = []
     for name, check in checks(target):
@@ -362,7 +365,10 @@ def main() -> int:
         "kind": "tau-bench-retail-policy-check-v1",
         "inference": "none",
         "excluded_from_efficacy": True,
-        "model": {"name": MODEL, "digest": MODEL_DIGEST},
+        # No model is in the loop for any check. This block names the declared model the
+        # check is recorded against, so the result can be filed beside that cycle; it is
+        # not a measurement of it.
+        "model": {"name": declared["name"], "digest": declared["digest"]},
         "target": {"upstream": UPSTREAM, "revision": REVISION, "license_sha256": LICENSE_SHA256},
         "checks": records,
         "passed": passed,

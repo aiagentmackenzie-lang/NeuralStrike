@@ -26,8 +26,6 @@ from examples.tau_bench_retail.profile import (
     EXPECTATIONS,
     MAX_STEPS,
     MODEL,
-    MODEL_DIGEST,
-    MODEL_ORIGIN,
     PLAN_KIND,
     POLICIES,
     REPEATS_BY_CASE,
@@ -37,9 +35,14 @@ from examples.tau_bench_retail.profile import (
     USER_MAX_TURNS,
     atomic,
     digest,
+    resolve_model,
+    verify_model_pin,
 )
 
-HARNESS = ("profile.py", "boundary.py", "collect.py", "policy_check.py")
+# Every module whose bytes decide an outcome. ``verify.py`` is included so the plan also
+# pins the module that writes it; the hash is taken before the freeze copy and does not
+# change during the run.
+HARNESS = ("profile.py", "boundary.py", "collect.py", "policy_check.py", "verify.py")
 
 EXIT_OK = 0
 EXIT_FALSIFIED = 3
@@ -88,22 +91,48 @@ def plan_rows() -> list[dict[str, Any]]:
     return rows
 
 
-def build_plan(source: Path) -> dict[str, Any]:
+def model_block(name: str) -> dict[str, Any]:
+    """Pure: the declared model, resolved from the registry, never from an outcome."""
+    declared = resolve_model(name)
+    return {
+        "name": declared["name"],
+        "digest": declared["digest"],
+        "provider": "ollama_chat",
+        "origin": declared["origin"],
+        "family": declared["family"],
+        "parameters": declared["parameters"],
+        "quantization": declared["quantization"],
+        "temperature": 0.0,
+        "network_rule": "loopback Ollama only; no cloud inference, no model download",
+    }
+
+
+def plan_relationship(name: str) -> dict[str, Any]:
+    """Pure: how this plan relates to the declared baseline plan.
+
+    The declared baseline model reproduces the original plan in place; any other
+    declared model replicates it as a single-variable substitution and supersedes
+    nothing.
+    """
+    resolve_model(name)
+    return {"replicates": None if name == MODEL else PLAN_KIND, "supersedes": None}
+
+
+def build_plan(source: Path, model: str = MODEL, pin: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Assemble the plan. Refuses to declare a model whose digest was not checked."""
+    if pin is None or pin.get("matched") is not True or pin.get("name") != model:
+        raise ValueError(f"refusing to plan model {model!r} without a matched pin check")
     rows = plan_rows()
     observations = sum(row["repeats"] for row in rows)
+    relationship = plan_relationship(model)
     return {
         "schema_version": 1,
         "kind": PLAN_KIND,
-        "supersedes": None,
+        "replicates": relationship["replicates"],
+        "supersedes": relationship["supersedes"],
         "target": source_pin(source),
-        "model": {
-            "name": MODEL,
-            "digest": MODEL_DIGEST,
-            "provider": "ollama_chat",
-            "origin": MODEL_ORIGIN,
-            "temperature": 0.0,
-            "network_rule": "loopback Ollama only; no cloud inference, no model download",
-        },
+        "model": model_block(model),
+        "model_pin_check": dict(pin),
         "budgets": {
             "seed": SEED,
             "repeats_per_row": sorted({row["repeats"] for row in rows}),
@@ -170,7 +199,13 @@ def evaluate(row: dict[str, Any], observations: list[dict[str, Any]]) -> dict[st
 
 
 def one(
-    python: Path, source: Path, out: Path, row: dict[str, Any], index: int, timeout: int
+    python: Path,
+    source: Path,
+    out: Path,
+    row: dict[str, Any],
+    index: int,
+    timeout: int,
+    model: str,
 ) -> dict[str, Any]:
     path = out / "observations" / f"{row['case']}--{row['policy']}--{SEED}--{index}.json"
     log = out / "logs" / f"{row['case']}--{row['policy']}--{SEED}--{index}.log"
@@ -178,13 +213,13 @@ def one(
     environment = {
         **os.environ,
         "PYTHONPATH": f"{Path.cwd()}{os.pathsep}{source}",
-        "OLLAMA_API_BASE": MODEL_ORIGIN,
+        "OLLAMA_API_BASE": resolve_model(model)["origin"],
     }
     command = [
         str(python), "-m", "examples.tau_bench_retail.collect",
         "--source", str(source), "--out", str(path),
         "--case", row["case"], "--policy", row["policy"],
-        "--seed", str(SEED), "--repeat-index", str(index),
+        "--seed", str(SEED), "--repeat-index", str(index), "--model", model,
     ]
     try:
         completed = subprocess.run(
@@ -218,12 +253,18 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=SEED)
     parser.add_argument("--repeats", type=int, default=None)
     parser.add_argument("--timeout", type=int, default=900)
+    parser.add_argument("--model", default=MODEL,
+                        help="name in the declared model registry (profile.MODEL_REGISTRY)")
     arguments = parser.parse_args()
     if arguments.seed != SEED:
         raise SystemExit(f"plan declares seed {SEED}; refusing {arguments.seed}")
+    try:
+        pin = verify_model_pin(arguments.model)
+    except ValueError as error:
+        raise SystemExit(f"model pin not verified; refusing to plan: {error}") from error
     out = arguments.out
     out.mkdir(parents=True, exist_ok=True)
-    plan = build_plan(arguments.source)
+    plan = build_plan(arguments.source, arguments.model, pin)
     if arguments.repeats is not None:
         for row in plan["matrix"]:
             row["repeats"] = arguments.repeats
@@ -240,7 +281,8 @@ def main() -> int:
             if harness_files() != frozen:
                 print("harness changed during freeze", file=sys.stderr)
                 return EXIT_HARNESS_CHANGED
-            item = one(arguments.python, arguments.source, out, row, index, arguments.timeout)
+            item = one(arguments.python, arguments.source, out, row, index, arguments.timeout,
+                       arguments.model)
             collected.append(item)
             predicates = item.get("predicates") or {}
             print(
@@ -260,6 +302,12 @@ def main() -> int:
         "kind": "tau-bench-retail-cycle-v1",
         "plan_digest": digest(plan),
         "plan": "plan.json",
+        "model": {
+            "name": plan["model"]["name"],
+            "digest": plan["model"]["digest"],
+            "origin": plan["model"]["origin"],
+        },
+        "replicates": plan["replicates"],
         "state": (
             "falsified" if "falsified" in verdicts
             else "not_exercised" if "not_exercised" in verdicts

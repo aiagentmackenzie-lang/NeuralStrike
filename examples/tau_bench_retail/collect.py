@@ -11,7 +11,7 @@ bindings are installed and both are journalled:
   change the request shape beyond the declared seed.
 
 The native ``ToolCallingAgent.solve`` loop is otherwise unmodified. The native user
-simulator is replaced by a declared deterministic script: a local 2B model cannot be
+simulator is replaced by a declared deterministic script: a small local model cannot be
 trusted to reproduce a fixed utterance, and the user turn is the measurement channel,
 not the thing under test.
 """
@@ -33,8 +33,6 @@ from examples.tau_bench_retail.profile import (
     LICENSE_SHA256,
     MAX_STEPS,
     MODEL,
-    MODEL_DIGEST,
-    MODEL_ORIGIN,
     PLAN_KIND,
     PROVIDER,
     REVISION,
@@ -45,8 +43,10 @@ from examples.tau_bench_retail.profile import (
     canonical,
     digest,
     owner_of,
+    resolve_model,
     state_predicates,
     utterances_for,
+    verify_model_pin,
 )
 
 DATA_FILES = (
@@ -113,12 +113,14 @@ class ScriptedUser:
         return 0.0
 
 
-def bind_model(module: Any, seed: int, exchanges: list[dict[str, Any]]) -> None:
+def bind_model(
+    module: Any, model: str, digest_hex: str, seed: int, exchanges: list[dict[str, Any]]
+) -> None:
     """Pin and record the model call. Request shape unchanged except the declared seed."""
     native = module.completion
 
     def completion(**kwargs: Any) -> Any:
-        if kwargs.get("custom_llm_provider") != PROVIDER or kwargs.get("model") != MODEL:
+        if kwargs.get("custom_llm_provider") != PROVIDER or kwargs.get("model") != model:
             raise ValueError("model call escaped the declared provider/model pin")
         if float(kwargs.get("temperature", -1)) != 0.0:
             raise ValueError("model call did not use the declared temperature")
@@ -129,6 +131,7 @@ def bind_model(module: Any, seed: int, exchanges: list[dict[str, Any]]) -> None:
         exchanges.append(
             {
                 "model": kwargs.get("model"),
+                "model_digest": digest_hex,
                 "provider": kwargs.get("custom_llm_provider"),
                 "temperature": 0.0,
                 "seed": seed,
@@ -168,11 +171,19 @@ def disclosed(entry: dict[str, Any], initial: dict[str, Any]) -> bool:
 
 
 def run(
-    source: Path, output: Path, case: str, policy: str, seed: int, repeat_index: int
+    source: Path,
+    output: Path,
+    case: str,
+    policy: str,
+    seed: int,
+    repeat_index: int,
+    model: str = MODEL,
 ) -> dict[str, Any]:
     from examples.tau_bench_retail.boundary import install, resolve_principal  # noqa: PLC0415
 
-    os.environ["OLLAMA_API_BASE"] = MODEL_ORIGIN
+    declared = resolve_model(model)
+    pin = verify_model_pin(model)
+    os.environ["OLLAMA_API_BASE"] = declared["origin"]
     started = time.time()
     receipt = source_receipt(source)
     target = load_target(source)
@@ -184,9 +195,9 @@ def run(
     schema_before = digest(env.tools_info)
     dispatcher = install(env, policy)
     exchanges: list[dict[str, Any]] = []
-    bind_model(target["module"], seed, exchanges)
+    bind_model(target["module"], model, declared["digest"], seed, exchanges)
     agent = target["agent"](
-        tools_info=env.tools_info, wiki=env.wiki, model=MODEL, provider=PROVIDER, temperature=0.0
+        tools_info=env.tools_info, wiki=env.wiki, model=model, provider=PROVIDER, temperature=0.0
     )
     outcome = agent.solve(env, task_index=spec["task_index"], max_num_steps=MAX_STEPS)
     schema_after = digest(env.tools_info)
@@ -236,10 +247,13 @@ def run(
             "task_index": spec["task_index"],
         },
         "model": {
-            "name": MODEL,
-            "digest": MODEL_DIGEST,
+            "name": declared["name"],
+            "digest": declared["digest"],
             "provider": PROVIDER,
-            "origin": MODEL_ORIGIN,
+            "origin": declared["origin"],
+            "parameters": declared["parameters"],
+            "registry": "profile.MODEL_REGISTRY",
+            "pin": pin,
             "temperature": 0.0,
             "seed": seed,
         },
@@ -286,7 +300,7 @@ def run(
         "utility": utility,
         "limits": [
             "simulated retail environment, no real customer data or real order actions",
-            "one local 2B model, one seed family, k repeats of a declared configuration",
+            f"one local model ({declared['parameters']}), one seed family, k repeats of a declared run",
             "native user simulator replaced by a declared deterministic script",
             "the control is a wrapper at dispatch; the target's own tools remain unguarded",
             "the target's reward replays gold state destructively; state is snapshotted before dispatch",
@@ -308,10 +322,12 @@ def main() -> int:
     parser.add_argument("--policy", required=True, choices=["unfiltered", "bound"])
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--repeat-index", type=int, default=0)
+    parser.add_argument("--model", default=MODEL,
+                        help="name in the declared model registry (profile.MODEL_REGISTRY)")
     arguments = parser.parse_args()
     observation = run(
         arguments.source, arguments.out, arguments.case, arguments.policy,
-        arguments.seed, arguments.repeat_index,
+        arguments.seed, arguments.repeat_index, arguments.model,
     )
     print(canonical(observation["predicates"]))
     return 0
