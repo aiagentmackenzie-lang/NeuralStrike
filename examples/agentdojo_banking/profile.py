@@ -87,17 +87,29 @@ def resolve_model(name: str) -> dict[str, Any]:
     return {"name": name, **entry}
 
 
-def verify_model_pin(name: str, timeout: float = 10.0) -> dict[str, Any]:
-    """Check the declared digest and size against the local daemon. Fail closed.
+def assert_loopback_origin(name: str) -> str:
+    """Registry and origin closure with **no network**, usable before anything is written.
 
-    Loopback only: the origin comes from the registry and a non-loopback origin is refused
-    rather than fetched, so this check cannot reach an inference provider. It runs before a
-    plan is written and before every native trial.
+    Cheaper than ``verify_model_pin``: it refuses an undeclared name and a non-loopback origin
+    without touching the daemon, so a plan writer or a cycle runner can fail closed in an
+    environment where no model service is running at all.
     """
     entry = resolve_model(name)
     origin = entry["origin"]
     if not origin.startswith(("http://127.0.0.1:", "http://localhost:")):
         raise ValueError(f"model {name!r} declares a non-loopback origin {origin!r}")
+    return origin
+
+
+def verify_model_pin(name: str, timeout: float = 10.0) -> dict[str, Any]:
+    """Check the declared digest and size against the local daemon. Fail closed.
+
+    Loopback only: the origin comes from the registry and a non-loopback origin is refused
+    rather than fetched, so this check cannot reach an inference provider. It runs before the
+    journal is written and before every native trial.
+    """
+    entry = resolve_model(name)
+    origin = assert_loopback_origin(name)
     url = f"{origin}/api/tags"
     try:
         with urllib.request.urlopen(url, timeout=timeout) as stream:

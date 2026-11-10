@@ -34,6 +34,7 @@ from examples.agentdojo_banking.profile import (
     MODEL,
     MODEL_DIGEST,
     REVISION,
+    assert_loopback_origin,
     observation_model_fields,
     verify_model_pin,
 )
@@ -79,10 +80,10 @@ def run(
     profile: str = "banking",
     tool_schema: str = "native",
 ) -> Path:
-    # Registry resolution and the digest/size pin run before the plan is written and before
-    # any inference. A name outside the declared registry, a non-loopback origin or a digest
-    # difference raises here, so an unverified artifact cannot reach a journal.
-    pin = verify_model_pin(model)
+    # Registry and origin closure need no network, so they run first; the digest/size pin runs
+    # after source validation and before the journal, so an unverified artifact can never reach
+    # a journal while a wrong-revision checkout is still reported as a source error.
+    assert_loopback_origin(model)
     if profile not in {"banking", "workspace"}:
         raise ValueError("unsupported native profile")
     workspace = profile == "workspace"
@@ -97,6 +98,7 @@ def run(
     if case not in selected_cases or (workspace and policy not in POLICIES):
         raise ValueError("unsupported native case/policy")
     hashes = source_receipt(source)
+    pin = verify_model_pin(model)
     root = output / f"agentdojo-{uuid.uuid4().hex}"
     root.mkdir(mode=0o700, parents=True, exist_ok=False)
     journal = root / "observation.json"

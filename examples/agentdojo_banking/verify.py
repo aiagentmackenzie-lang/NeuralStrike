@@ -14,13 +14,16 @@ import uuid
 from pathlib import Path
 
 from examples.agentdojo_banking.collect import MODEL, atomic
-from examples.agentdojo_banking.profile import verify_model_pin
+from examples.agentdojo_banking.profile import assert_loopback_origin, resolve_model
 
 
 def verify(source: Path, python: Path, output: Path, *, seed: int = 7, model: str = MODEL) -> Path:
-    # Fail closed before the cycle receipt is written: an undeclared name, a non-loopback
-    # origin or a digest difference refuses the run rather than producing a partial cycle.
-    pin = verify_model_pin(model)
+    # Fail closed before the receipt is written, but without needing a model service: an
+    # undeclared name or a non-loopback origin refuses the cycle. The digest/size pin is
+    # re-checked inside every collector before its journal, so a moved artifact stops the
+    # next stage instead of producing a partial cycle here.
+    assert_loopback_origin(model)
+    declared = resolve_model(model)
     root = output / f"remediation-{uuid.uuid4().hex}"
     root.mkdir(mode=0o700, parents=True, exist_ok=False)
     receipt = {
@@ -30,7 +33,7 @@ def verify(source: Path, python: Path, output: Path, *, seed: int = 7, model: st
         "independent_human_validation": False,
         "seed": seed,
         "model": model,
-        "model_digest": pin["observed_digest"],
+        "model_digest": declared["digest"],
     }
     atomic(root / "cycle.json", receipt)
     for policy, expected_violation, expected_utility in [

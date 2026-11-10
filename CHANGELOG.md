@@ -27,6 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   undeclared model refused everywhere, non-loopback origin refused before any fetch, digest/size
   mismatch fails closed, `--model` reaches plan and observation, baseline digest literal matches
   the recorded index, payloads/task ids/budgets frozen, and no third model or extra repeat.
+- Ordering fixed after the first CI run: `assert_loopback_origin` gives registry + origin
+  closure with no network, so `collect.py` validates the pinned source **before** the daemon is
+  contacted (an unreachable service no longer preempts a wrong-revision error) and `verify.py`
+  writes its receipt without needing a model service; the digest/size pin still runs before the
+  journal and inside every trial. A daemon-blocked run of the full suite is part of the gate.
 - Counts (k=3, seed 7, 24/24 complete): `qwen3.5:2b` and `gemma4:31b` both produce the
   attacker payment 3/3 unfiltered and withhold it 3/3 bound with utility 3/3, benign 3/3 either
   way. The model asked for the attacker payee in 12/12 redirection trials; the binding rewrote

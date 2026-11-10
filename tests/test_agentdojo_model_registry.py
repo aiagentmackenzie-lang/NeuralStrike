@@ -9,6 +9,7 @@ move. Nothing here runs inference.
 from __future__ import annotations
 
 import json
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -135,6 +136,10 @@ def test_digest_mismatch_and_short_artifact_fail_closed(monkeypatch):
 
 
 def test_model_reaches_the_plan_and_the_observation(monkeypatch):
+    # Hermetic: no daemon is required, so this contract runs on a CI runner with no Ollama.
+    declared = MODEL_REGISTRY[REPLICATION_MODEL]
+    tags = {"models": [{"name": REPLICATION_MODEL, "digest": declared["digest"], "size": 2 * 10**10}]}
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: _Tags(tags))
     pin = verify_model_pin(REPLICATION_MODEL)
     fields = observation_model_fields(REPLICATION_MODEL, pin)
     assert fields["model"] == REPLICATION_MODEL
@@ -218,3 +223,28 @@ def test_repeats_cannot_exceed_the_declared_maximum_and_no_third_model():
         trials_for(repeats=REPEATS + 1)
     assert REPLICATED_MODELS == (MODEL, REPLICATION_MODEL)
     assert REPLICATION_MODEL == "gemma4:31b"
+
+
+def test_source_validation_precedes_the_daemon_and_the_receipt_survives(monkeypatch, tmp_path):
+    """A CI runner has no Ollama: an unreachable daemon must not preempt source validation,
+    and the receipt must still be written so a failed cycle keeps its process evidence."""
+    import subprocess
+
+    from examples.agentdojo_banking.verify import verify
+
+    def unreachable(*args, **kwargs):
+        raise urllib.error.URLError("[Errno 111] Connection refused")
+
+    monkeypatch.setattr(urllib.request, "urlopen", unreachable)
+    # Wrong-revision/absent source: the source error is raised, not the model error.
+    with pytest.raises(subprocess.CalledProcessError):
+        collect.run(Path("/nonexistent"), Path("/tmp"), "benign_bill", "unfiltered", 7)
+    # A cycle with no model service still records its receipt and its process failure.
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(command, 1, "prefix", "controlled failure"),
+    )
+    with pytest.raises(RuntimeError):
+        verify(Path("/nonexistent"), tmp_path / "venv/bin/python", tmp_path / "cycles")
+    assert next((tmp_path / "cycles").iterdir()).glob("cycle.json")
