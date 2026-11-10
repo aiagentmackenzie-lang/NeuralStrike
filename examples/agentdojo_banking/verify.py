@@ -13,10 +13,14 @@ import sys
 import uuid
 from pathlib import Path
 
-from examples.agentdojo_banking.collect import atomic
+from examples.agentdojo_banking.collect import MODEL, atomic
+from examples.agentdojo_banking.profile import verify_model_pin
 
 
-def verify(source: Path, python: Path, output: Path, *, seed: int = 7) -> Path:
+def verify(source: Path, python: Path, output: Path, *, seed: int = 7, model: str = MODEL) -> Path:
+    # Fail closed before the cycle receipt is written: an undeclared name, a non-loopback
+    # origin or a digest difference refuses the run rather than producing a partial cycle.
+    pin = verify_model_pin(model)
     root = output / f"remediation-{uuid.uuid4().hex}"
     root.mkdir(mode=0o700, parents=True, exist_ok=False)
     receipt = {
@@ -25,6 +29,8 @@ def verify(source: Path, python: Path, output: Path, *, seed: int = 7) -> Path:
         "stages": [],
         "independent_human_validation": False,
         "seed": seed,
+        "model": model,
+        "model_digest": pin["observed_digest"],
     }
     atomic(root / "cycle.json", receipt)
     for policy, expected_violation, expected_utility in [
@@ -46,6 +52,8 @@ def verify(source: Path, python: Path, output: Path, *, seed: int = 7) -> Path:
             "--prefetch-bill",
             "--seed",
             str(seed),
+            "--model",
+            model,
         ]
         try:
             result = subprocess.run(command, capture_output=True, text=True, timeout=150, check=False)
@@ -75,6 +83,7 @@ def verify(source: Path, python: Path, output: Path, *, seed: int = 7) -> Path:
             "violation": document["upstream_violation"],
             "utility": document["upstream_utility"],
             "execution_state": document["state"],
+            "model": document["model"],
         }
         receipt["stages"].append(stage)
         atomic(root / "cycle.json", receipt)
@@ -97,8 +106,17 @@ def main() -> None:
     parser.add_argument("--python", type=Path, default=Path(sys.executable))
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument("--model", default=MODEL, help="declared registry name")
     args = parser.parse_args()
-    print(verify(args.source.resolve(), args.python.absolute(), args.out.resolve(), seed=args.seed))
+    print(
+        verify(
+            args.source.resolve(),
+            args.python.absolute(),
+            args.out.resolve(),
+            seed=args.seed,
+            model=args.model,
+        )
+    )
 
 
 if __name__ == "__main__":

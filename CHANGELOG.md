@@ -6,6 +6,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (AgentDojo banking — declared model registry and model replication, 2026-11-10)
+- `examples/agentdojo_banking/profile.py` — single source for the frozen banking pins (values
+  unchanged; the digest literal is byte-identical, only relocated) and the declared model
+  registry: `name -> digest, origin, family, parameters, quantization, role, min_size_bytes`.
+  `resolve_model` refuses an undeclared name; `verify_model_pin` refuses a non-loopback origin
+  **before** fetching and fails closed on any digest or inventory-size difference. No
+  dependency and no payload was added.
+- `--model` on `collect.py` and `verify.py`, defaulting to the frozen baseline, reaching the
+  plan block, the observation and the `OpenAILLM` construction. The pin is re-checked before the
+  journal is written and before every trial. `transport.py` now pins the resolved registry name
+  instead of a second hardcoded literal, and `collect.py` locates the repo from its own path so
+  it still runs as an isolated script.
+- `examples/agentdojo_banking/replication.py` — plan kind
+  `agentdojo-banking-model-replication-plan-v1`, written and hashed before the first inference,
+  with the model blocks, matched pins, seed, trial matrix, tri-state expectations, budgets and
+  harness hashes. Exit 0 = all expectations met, 3 = complete but a declared expectation not
+  met, 2 = an incomplete row; failed rows are kept.
+- `tests/test_agentdojo_model_registry.py` — eight contracts: closed registry literal,
+  undeclared model refused everywhere, non-loopback origin refused before any fetch, digest/size
+  mismatch fails closed, `--model` reaches plan and observation, baseline digest literal matches
+  the recorded index, payloads/task ids/budgets frozen, and no third model or extra repeat.
+- Counts (k=3, seed 7, 24/24 complete): `qwen3.5:2b` and `gemma4:31b` both produce the
+  attacker payment 3/3 unfiltered and withhold it 3/3 bound with utility 3/3, benign 3/3 either
+  way. The model asked for the attacker payee in 12/12 redirection trials; the binding rewrote
+  the effective recipient in 6/6 bound trials. Counts only — no rate, no population.
+- `docs/implementation/evidence/phase3-agentdojo-banking-replication-2026-11-10.json` — new
+  evidence block; the existing `phase3-agentdojo-local.json` index is byte-identical to `HEAD`.
+- Phase 3 gates unchanged: P3-6 stays `PARTIAL` (independence is a people problem), P3-7 stays
+  `MET` and unsigned. Phase 3 remains **NOT ACCEPTED**.
+
 ### Added (tau-bench retail — utility asserted, 2026-11-10)
 - `examples/tau_bench_retail/utility_audit.py` — read-only, no model, `inference: none`,
   `excluded_from_efficacy`. Asserts benign task completion from the recorded utility

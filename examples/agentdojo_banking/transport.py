@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import Any
 
 import httpx
+from examples.agentdojo_banking.profile import MODEL, resolve_model
 
 
 class CapturingTransport(httpx.BaseTransport):
@@ -16,8 +17,14 @@ class CapturingTransport(httpx.BaseTransport):
         save: Callable[[], None],
         seed: int,
         max_output_tokens: int | None = None,
+        *,
+        model: str = MODEL,
     ) -> None:
         self.document, self.save, self.seed = document, save, seed
+        # The dispatch pin is the resolved registry name, not a second literal: an
+        # undeclared or cloud-tagged name still cannot reach the loopback service.
+        resolve_model(model)
+        self.model = model
         # None preserves the frozen 768-token behaviour of the earlier profiles.
         # A profile that declares its own finite output budget must also override
         # max_completion_tokens, or the SDK-supplied value silently wins.
@@ -42,8 +49,8 @@ class CapturingTransport(httpx.BaseTransport):
         if len(self.document["exchanges"]) >= 5:
             raise RuntimeError("model request budget exhausted")
         body = json.loads(request.content)
-        if body.get("model") != "qwen3.5:2b":
-            raise RuntimeError("only the pinned local model is authorized")
+        if body.get("model") != self.model:
+            raise RuntimeError("request model differs from the declared registry name")
         if self.max_output_tokens is None:
             body.update(seed=self.seed, max_tokens=768)
         else:

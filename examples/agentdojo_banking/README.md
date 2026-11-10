@@ -22,8 +22,10 @@ NeuralStrike's mandatory security floor remains unchanged.
 Run from the NeuralStrike checkout, with an existing Ollama service and locally
 installed `qwen3.5:2b` artifact digest
 `324d162be6ca5629ae4517c8710434d0bd2d665bc94dbad46e9af8fbf8a2f0df`.
-The script does not download models. Cloud tags and alternate model names are
-rejected before dispatch, even on the loopback Ollama service. The tag inventory
+The script does not download models. Only a name declared in the registry in
+`profile.py` is accepted: an undeclared name (including every cloud tag) is refused
+before dispatch, even on the loopback Ollama service, and its declared digest and
+inventory size are checked before the journal is written and before every trial. The tag inventory
 must report the pinned artifact and size greater than 1 GB. That is inventory
 binding, not signed model-file attestation.
 
@@ -78,6 +80,30 @@ Policies:
   denied. Requested and effective arguments are preserved separately. This is a
   deliberately narrow hardcoded fixture configuration, not a general payee mapper
   or production authorization implementation.
+
+## Declared models and the replication plan
+
+`profile.py` owns the frozen pins (revision, baseline model and digest, attacker
+account, case table, seed, budgets) and the declared model registry
+`name -> {digest, origin, family, parameters, quantization, role, min_size_bytes}`.
+`--model` is available on `collect.py` and `verify.py` and defaults to the frozen
+baseline; it reaches the plan block, the observation and the model call. Adding a
+model is an edit to that literal, adds no dependency and changes no payload.
+
+`replication.py` writes and hashes a plan of kind
+`agentdojo-banking-model-replication-plan-v1` before the first inference, re-verifies
+each pin before each trial, and keeps every incomplete row:
+
+```sh
+/tmp/agentdojo-venv/bin/python -m examples.agentdojo_banking.replication \
+  --source /tmp/agentdojo-reviewed --out /tmp/agentdojo-replication \
+  --python /tmp/agentdojo-venv/bin/python
+```
+
+Exit 0 means every trial completed and every declared expectation was met, 3 means the
+trials completed but a declared expectation did not (a recorded null, not a harness
+error), 2 means at least one trial is incomplete. Counts only: one machine, one seed,
+two models is not a population, and a replication closes no Phase 3 gate.
 
 ## Replay and useful-remediation rerun
 
