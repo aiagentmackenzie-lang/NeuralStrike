@@ -6,6 +6,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (tau-bench retail — write-first model replication, 2026-11-10)
+- Declared the one-variable **model replication** of the write-first matrix
+  (`native-tau-bench-retail-write-first-replication-plan-v1`, replicates the write-first
+  plan, supersedes nothing). `profile.MODEL_REGISTRY` gains `gemma4:31b`
+  (`6316f062…`, loopback, Q4_K_M) — a model may not be added without a plan that pins its
+  digest, and this plan is that plan. The payloads, expectations and repeats are the
+  write-first plan's own objects, asserted by identity, so the model is the only variable.
+- 12 declared observations, seed 7, k=3, exit 3: **zero model tool calls in 12/12**, four
+  `respond` turns per observation, identical transcripts under both policies. Unguarded rows
+  **falsified**, bound rows **not exercised**. A null and uninformative about ordering: the
+  model never acted, so nothing reached the boundary.
+- Declared model-selection rule (a tool-call feasibility probe with the target's own schema,
+  no `Env`, excluded from every count): `mistral:7b` rejected for emitting no `tool_calls`,
+  `qwen3.8:27b` for sharing the baseline's family.
+
 ### Added (tau-bench retail — write-first payload, 2026-11-10)
 - `profile.WRITE_FIRST_CASES` — a declared **write-first** hypothesis
   (`native-tau-bench-retail-write-first-plan-v1`, `replicates: null`, `supersedes: null`):
