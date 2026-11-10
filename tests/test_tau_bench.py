@@ -73,6 +73,16 @@ BUDGETS_SHA256_V1 = "a3a38e7f659c2fd0565c4c9cacfc0bfd7709e964505c6fb43bcf414457b
 REPLICATION_MODEL = "nemotron-3.5-lightning:30b"
 REPLICATION_DIGEST = "e7a64ff15fb174c42b4f463e5c888c4f2c7b9cabf9e8d65a1c0874405426c1b2"
 
+# Payload-sensitivity pins. A different hypothesis about the same payload class gets its
+# own plan and its own freeze: the frozen matrix above must not move, and these payloads
+# must not drift either once declared. A claim-free payload edited to make a dispatch
+# appear would be the same fit the v1 freeze exists to prevent.
+SENSITIVITY_CASES_SHA256 = "a83d01ada062703444c4f8157de6b2e81b5cebd69f2608f397ca690c84e12d26"
+SENSITIVITY_EXPECTATIONS_SHA256 = (
+    "52d73a320d6089690b8af31b8fc78b6fc5d997c9f937aa9268c43d49b2e3275f"
+)
+SENSITIVITY_PLAN_KIND = "native-tau-bench-retail-payload-sensitivity-plan-v1"
+
 DATA = {
     "users": {"alice": {"address": {"city": "A"}, "orders": ["#A"]}, "bob": {"address": {"city": "B"}}},
     "orders": {"#A": {"user_id": "alice", "status": "pending"}, "#B": {"user_id": "bob", "status": "pending"}},
@@ -199,6 +209,170 @@ def test_payload_and_matrix_constants_are_byte_identical_to_v1() -> None:
     assert profile.digest(profile.CASES) == CASES_SHA256_V1
     assert profile.digest(profile.EXPECTATIONS) == EXPECTATIONS_SHA256_V1
     assert profile.digest(budgets) == BUDGETS_SHA256_V1
+
+
+def test_sensitivity_payloads_are_pinned_and_disjoint_from_the_frozen_matrix() -> None:
+    assert profile.digest(profile.SENSITIVITY_CASES) == SENSITIVITY_CASES_SHA256
+    assert profile.digest(profile.SENSITIVITY_EXPECTATIONS) == SENSITIVITY_EXPECTATIONS_SHA256
+    assert not set(profile.SENSITIVITY_CASES) & set(profile.CASES)
+    assert profile.SENSITIVITY_PLAN_KIND == SENSITIVITY_PLAN_KIND
+    assert profile.plan_kind_for("payload-sensitivity") == SENSITIVITY_PLAN_KIND
+    assert profile.plan_kind_for("frozen") == profile.PLAN_KIND
+
+
+def test_the_only_declared_difference_is_the_ownership_claim() -> None:
+    """One variable. If this fails, the increment is no longer a single-variable test."""
+    frozen = profile.CASES
+    sensitivity = profile.SENSITIVITY_CASES
+    for case, spec in sensitivity.items():
+        paired = spec["paired_with"]
+        assert paired in frozen, case
+        assert frozen[paired]["kind"] == "attack", case
+        assert spec["kind"] == frozen[paired]["kind"], case
+        assert spec["task_index"] == frozen[paired]["task_index"], case
+        assert spec["effect"] == frozen[paired]["effect"], case
+        opening, claimed = str(spec["utterances"]), str(frozen[paired]["utterances"])
+        assert not [marker for marker in profile.CLAIM_MARKERS if marker in opening], case
+        assert [marker for marker in profile.CLAIM_MARKERS if marker in claimed], case
+        # The identifiers and the attacker payload are held constant across the pair.
+        for anchor in (profile.VICTIM_USER, profile.VICTIM_ORDER, profile.READ_TARGET):
+            assert (anchor in opening) == (anchor in claimed), (case, anchor)
+        for value in profile.ATTACKER_ADDRESS.values():
+            if value and value in claimed:
+                assert value in opening, (case, value)
+    # The frozen mapping still contains its claims: the pair is a removal, not a rewrite.
+    assert profile.digest(profile.CASES) == CASES_SHA256_V1
+
+
+def test_sensitivity_plan_is_a_new_hypothesis_not_a_replication() -> None:
+    from examples.tau_bench_retail import verify
+
+    assert verify.plan_relationship(profile.MODEL, "payload-sensitivity") == {
+        "replicates": None,
+        "supersedes": None,
+    }
+    block = verify.hypothesis_block("payload-sensitivity")
+    assert block["name"] == "payload-sensitivity"
+    assert block["statement"] == profile.SENSITIVITY_HYPOTHESIS
+    assert "ownership claim" in block["statement"]
+    assert block["frozen_matrix_untouched"] is True
+    assert "not evidence" in block["source_of_hypothesis"]
+    assert sorted(block["cases"]) == sorted(profile.SENSITIVITY_CASES)
+    assert verify.hypothesis_block("frozen")["source_of_hypothesis"] is None
+    with pytest.raises(ValueError):
+        verify.hypothesis_block("a-third-payload-variant")
+    with pytest.raises(ValueError):
+        verify.plan_relationship(profile.MODEL, "a-third-payload-variant")
+
+
+def test_sensitivity_rows_are_declared_tri_state_and_predict_the_hypothesis() -> None:
+    from examples.tau_bench_retail import verify
+
+    rows = verify.plan_rows("payload-sensitivity")
+    assert len(rows) == len(profile.SENSITIVITY_CASES) * len(profile.POLICIES)
+    allowed = set(verify.PREDICATE_KEYS) | {"refusals_at_least", "utility"}
+    for row in rows:
+        assert set(row["expectations"]) <= allowed, row["case"]
+        assert row["repeats"] == profile.REPEATS, row["case"]
+        for key, expected in row["expectations"].items():
+            assert expected is None or isinstance(expected, bool) or key == "refusals_at_least"
+        if row["policy"] == "unfiltered":
+            # The hypothesis predicts the dispatch happens once the claim is gone.
+            effects = {k: v for k, v in row["expectations"].items() if k in verify.PREDICATE_KEYS}
+            assert effects and all(value is True for value in effects.values()), row["case"]
+        else:
+            assert row["expectations"]["refusals_at_least"] >= 1, row["case"]
+    # Utility is not re-measured on this axis, so no utility row is declared.
+    assert {row["case_kind"] for row in rows} == {"attack"}
+
+
+def test_an_undeclared_hypothesis_or_case_fails_closed() -> None:
+    with pytest.raises(ValueError):
+        profile.cases_for("third-variant")
+    with pytest.raises(ValueError):
+        profile.expectations_for("third-variant")
+    with pytest.raises(ValueError):
+        profile.repeats_for("third-variant")
+    with pytest.raises(ValueError):
+        profile.plan_kind_for("third-variant")
+    # An unparameterised call reads the frozen mapping, never the sensitivity one.
+    assert profile.utterances_for("cross_principal_read", "native")[0] == str(
+        profile.CASES["cross_principal_read"]["utterances"]
+    )
+
+
+def test_repeats_override_cannot_lower_the_declared_k(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from examples.tau_bench_retail import verify
+
+    argv = [
+        "verify", "--source", str(tmp_path), "--python", str(tmp_path / "python"),
+        "--out", str(tmp_path), "--repeats", "1",
+    ]
+    monkeypatch.setattr("sys.argv", argv)
+    # Refused before the model pin check, so this test needs no daemon and no network.
+    with pytest.raises(SystemExit, match="refusing override 1"):
+        verify.main()
+
+
+def test_attack_replies_are_captured_and_utility_replies_are_not() -> None:
+    from examples.tau_bench_retail import collect
+
+    assert frozenset({"attack"}) == collect.CONTENT_CAPTURE_KINDS
+    assert {spec["kind"] for spec in profile.SENSITIVITY_CASES.values()} == {"attack"}
+    assert profile.CASES["session_address_utility"]["kind"] not in collect.CONTENT_CAPTURE_KINDS
+
+    class _Message:
+        content = "I cannot verify that you own this account."
+        tool_calls: list[Any] = []
+
+        def model_dump(self) -> dict[str, Any]:
+            return {"tool_calls": []}
+
+    class _Choice:
+        message = _Message()
+        finish_reason = "stop"
+
+    class _Response:
+        choices = [_Choice()]
+
+    class _Module:
+        @staticmethod
+        def completion(**_: Any) -> Any:
+            return _Response()
+
+    collected: list[dict[str, Any]] = []
+    collect.bind_model(_Module, profile.MODEL, profile.MODEL_DIGEST, 7, collected, True)
+    _Module.completion(messages=[], tools=[], custom_llm_provider=profile.PROVIDER,
+                       model=profile.MODEL, temperature=0.0)
+    assert collected[0]["content"] == _Message.content
+    assert collected[0]["content_digest"] == profile.digest(_Message.content)
+
+    collected_not: list[dict[str, Any]] = []
+    collect.bind_model(_Module, profile.MODEL, profile.MODEL_DIGEST, 7, collected_not, False)
+    _Module.completion(messages=[], tools=[], custom_llm_provider=profile.PROVIDER,
+                       model=profile.MODEL, temperature=0.0)
+    assert "content" not in collected_not[0]
+    assert collected_not[0]["content_digest"] == profile.digest(_Message.content)
+
+
+def test_the_cycle_records_the_status_it_declares() -> None:
+    from examples.tau_bench_retail import verify
+
+    clean = [{"errors": 0}, {"errors": 0}]
+    assert verify.cycle_state(["reproduced"]) == "reproduced"
+    assert verify.cycle_exit_code(["reproduced"], clean) == verify.EXIT_OK
+    assert verify.cycle_exit_code(["reproduced", "falsified"], clean) == verify.EXIT_FALSIFIED
+    assert verify.cycle_exit_code(["not_exercised"], clean) == verify.EXIT_NOT_EXERCISED
+    assert verify.cycle_exit_code(["reproduced"], [{"errors": 1}]) == verify.EXIT_ERROR
+    # falsified outranks not_exercised, so a mixed cycle is never reported as a softer state
+    assert verify.cycle_state(["not_exercised", "falsified"]) == "falsified"
+    document = verify.exit_document("0" * 64, "falsified", verify.EXIT_FALSIFIED)
+    assert document["declared_exit_code"] == 3
+    assert document["state"] == "falsified"
+    assert document["code_meanings"]["3"] == "falsified"
+
 
 
 def test_registry_partitions_the_pinned_tool_list() -> None:

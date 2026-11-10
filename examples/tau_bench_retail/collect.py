@@ -29,11 +29,10 @@ from pathlib import Path
 from typing import Any
 
 from examples.tau_bench_retail.profile import (
-    CASES,
+    CASES_BY_HYPOTHESIS,
     LICENSE_SHA256,
     MAX_STEPS,
     MODEL,
-    PLAN_KIND,
     PROVIDER,
     REVISION,
     TERMINAL,
@@ -41,13 +40,20 @@ from examples.tau_bench_retail.profile import (
     UPSTREAM,
     atomic,
     canonical,
+    cases_for,
     digest,
     owner_of,
+    plan_kind_for,
     resolve_model,
     state_predicates,
     utterances_for,
     verify_model_pin,
 )
+
+# Attack cases only: the reply text is stored so a refusal can be observed rather than
+# inferred from an empty tool-call list. The data is synthetic, so there is nothing to
+# redact, and a utility case is never captured.
+CONTENT_CAPTURE_KINDS = frozenset({"attack"})
 
 DATA_FILES = (
     "tau_bench/envs/retail/data/orders.json",
@@ -114,7 +120,12 @@ class ScriptedUser:
 
 
 def bind_model(
-    module: Any, model: str, digest_hex: str, seed: int, exchanges: list[dict[str, Any]]
+    module: Any,
+    model: str,
+    digest_hex: str,
+    seed: int,
+    exchanges: list[dict[str, Any]],
+    capture_content: bool = False,
 ) -> None:
     """Pin and record the model call. Request shape unchanged except the declared seed."""
     native = module.completion
@@ -128,26 +139,28 @@ def bind_model(
         response = native(**kwargs)
         choice = response.choices[0]
         calls = (choice.message.model_dump().get("tool_calls") or []) if hasattr(choice, "message") else []
-        exchanges.append(
-            {
-                "model": kwargs.get("model"),
-                "model_digest": digest_hex,
-                "provider": kwargs.get("custom_llm_provider"),
-                "temperature": 0.0,
-                "seed": seed,
-                "messages_digest": digest(kwargs.get("messages")),
-                "tools_digest": digest(kwargs.get("tools")),
-                "finish_reason": getattr(choice, "finish_reason", None),
-                "tool_calls": [
-                    {
-                        "name": call["function"]["name"],
-                        "arguments": call["function"]["arguments"],
-                    }
-                    for call in calls
-                ],
-                "content_digest": digest(getattr(choice.message, "content", "") or ""),
-            }
-        )
+        content = getattr(choice.message, "content", "") or ""
+        exchange = {
+            "model": kwargs.get("model"),
+            "model_digest": digest_hex,
+            "provider": kwargs.get("custom_llm_provider"),
+            "temperature": 0.0,
+            "seed": seed,
+            "messages_digest": digest(kwargs.get("messages")),
+            "tools_digest": digest(kwargs.get("tools")),
+            "finish_reason": getattr(choice, "finish_reason", None),
+            "tool_calls": [
+                {
+                    "name": call["function"]["name"],
+                    "arguments": call["function"]["arguments"],
+                }
+                for call in calls
+            ],
+            "content_digest": digest(content),
+        }
+        if capture_content:
+            exchange["content"] = content
+        exchanges.append(exchange)
         return response
 
     module.completion = completion
@@ -178,24 +191,30 @@ def run(
     seed: int,
     repeat_index: int,
     model: str = MODEL,
+    hypothesis: str = "frozen",
 ) -> dict[str, Any]:
     from examples.tau_bench_retail.boundary import install, resolve_principal  # noqa: PLC0415
 
     declared = resolve_model(model)
+    cases = cases_for(hypothesis)
+    plan_kind = plan_kind_for(hypothesis)
     pin = verify_model_pin(model)
     os.environ["OLLAMA_API_BASE"] = declared["origin"]
     started = time.time()
     receipt = source_receipt(source)
     target = load_target(source)
-    spec = CASES[case]
+    spec = cases[case]
+    capture_content = spec["kind"] in CONTENT_CAPTURE_KINDS
     env = target["env"](
         user_strategy="human", user_model="unused", task_split="test", task_index=spec["task_index"]
     )
-    env.user = ScriptedUser(utterances_for(case, env.tasks[spec["task_index"]].instruction))
+    env.user = ScriptedUser(utterances_for(case, env.tasks[spec["task_index"]].instruction, cases))
     schema_before = digest(env.tools_info)
     dispatcher = install(env, policy)
     exchanges: list[dict[str, Any]] = []
-    bind_model(target["module"], model, declared["digest"], seed, exchanges)
+    bind_model(
+        target["module"], model, declared["digest"], seed, exchanges, capture_content
+    )
     agent = target["agent"](
         tools_info=env.tools_info, wiki=env.wiki, model=model, provider=PROVIDER, temperature=0.0
     )
@@ -231,7 +250,8 @@ def run(
     refusals = [entry for entry in dispatcher.entries if entry["reason"] is not None]
     observation = {
         "schema_version": 1,
-        "kind": PLAN_KIND,
+        "kind": plan_kind,
+        "hypothesis": hypothesis,
         "case": case,
         "policy": policy,
         "case_kind": spec["kind"],
@@ -262,6 +282,7 @@ def run(
             "schema_digest_after": schema_after,
             "schema_unchanged": schema_before == schema_after,
             "user_simulator": "scripted",
+            "content_capture": "attack_cases" if capture_content else "none",
             "max_num_steps": MAX_STEPS,
             "utterances": list(env.user.utterances),
         },
@@ -318,16 +339,21 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="one tau-bench retail observation")
     parser.add_argument("--source", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path)
-    parser.add_argument("--case", required=True, choices=sorted(CASES))
+    parser.add_argument("--case", required=True)
     parser.add_argument("--policy", required=True, choices=["unfiltered", "bound"])
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--repeat-index", type=int, default=0)
     parser.add_argument("--model", default=MODEL,
                         help="name in the declared model registry (profile.MODEL_REGISTRY)")
+    parser.add_argument("--hypothesis", default="frozen", choices=sorted(CASES_BY_HYPOTHESIS))
     arguments = parser.parse_args()
+    if arguments.case not in cases_for(arguments.hypothesis):
+        raise SystemExit(
+            f"case {arguments.case!r} is not declared for hypothesis {arguments.hypothesis!r}"
+        )
     observation = run(
         arguments.source, arguments.out, arguments.case, arguments.policy,
-        arguments.seed, arguments.repeat_index, arguments.model,
+        arguments.seed, arguments.repeat_index, arguments.model, arguments.hypothesis,
     )
     print(canonical(observation["predicates"]))
     return 0

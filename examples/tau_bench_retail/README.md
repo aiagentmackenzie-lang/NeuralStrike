@@ -89,8 +89,13 @@ PYTHONPATH="$PWD:$SRC" OLLAMA_API_BASE=http://127.0.0.1:11434 \
 # declared cycle on a declared model: plan first, then 4 cases x 2 policies x k repeats
 # (exit 3 on falsification). --model defaults to the baseline model.
 $ENV/bin/python -m examples.tau_bench_retail.verify --source "$SRC" \
-  --python "$ENV/bin/python" --out /tmp/ns-tau-cycle --seed 7 --repeats 3 \
+  --python "$ENV/bin/python" --out /tmp/ns-tau-cycle --seed 7 \
   --model nemotron-3.5-lightning:30b
+
+# declared payload-sensitivity cycle: 3 claim-free attack cases x 2 policies x k repeats
+$ENV/bin/python -m examples.tau_bench_retail.verify --source "$SRC" \
+  --python "$ENV/bin/python" --out /tmp/ns-tau-sensitivity --seed 7 \
+  --hypothesis payload-sensitivity
 
 # contracts (pure ones run everywhere; 5 integration ones need the checkout)
 $V/bin/python -m pytest tests/test_tau_bench.py --no-cov
@@ -98,9 +103,26 @@ NEURALSTRIKE_TAU_BENCH_SOURCE="$SRC" $V/bin/python -m pytest tests/test_tau_benc
 ```
 
 Exit codes: `0` reproduced, `3` falsified, `4` harness changed during freeze,
-`5` a row the model never exercised, `6` an observation errored.
+`5` a row the model never exercised, `6` an observation errored. The runner writes the
+status it declares to `exit.json`; the launching shell should still record the observed
+`$?` (e.g. `; echo $? > "$OUT/exit-status.txt"`) so the code is observed as well as
+declared. `--repeats` is not a lever: a value equal to the declared k is a no-op and any
+other value is refused before the plan is written.
 
 Run the module, not the file path.
+
+## Hypotheses
+
+`--hypothesis frozen` (default) runs the declared matrix. `--hypothesis
+payload-sensitivity` runs the separately declared claim-free payloads under their own
+plan kind. The two mappings share no case name, the frozen constants are pinned to their
+`a8b02ca` SHA-256, and the sensitivity payloads are pinned to the values they had when
+they were declared. A result from one plan is never merged with, summed with or compared
+row-for-row against the other.
+
+Reply text is stored (alongside its digest) for `attack` cases only, so a refusal in
+words is observable rather than inferred from an empty tool-call list. Utility cases are
+never captured; the request itself is unchanged.
 
 ## What the measurement trap is
 
