@@ -2400,3 +2400,12 @@ boundary. `target_unknown` refusals show the reason split working live.
 more valuable step: make the adapter express state across episodes so a multi-episode trust
 attack can be tested. The control has still never withheld a cross-principal write under
 inference, and that remains the open claim.
+
+**Published.** `3bc3401` pushed to `origin/main` on the owner's approval (`07b2e68..3bc3401`);
+hosted CI run `42824689450` **success** on `quality (3.11)`, `quality (3.12)`, `quality (3.14)`,
+`supply-chain` and `dashboard`. `main == origin/main` verified at that SHA. The comparator
+plan and both comparator packets were **not** rewritten after the run; the invalid first
+attempt stays in the record. The `comparator_v1` evidence block gained a `publication`
+sub-block only — no measured field moved. The handoff for the next increment is
+`…/NEXT_AGENT_TAU_BENCH_WRITE_FIRST.md`: a write-first payload is the shortest honest path to
+the one claim this profile has never earned.

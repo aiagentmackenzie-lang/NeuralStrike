@@ -71,9 +71,11 @@
       "plan_sha256": "075eb6cc3a83fb63478c0cec0cd3509ac360f227dd7d54e965a221ab31677f87"
     },
     "publication": {
-      "ci_run": null,
-      "commit": null,
-      "status": "local only; push awaiting owner approval"
+      "ci_conclusion": "success on quality (3.11), quality (3.12), quality (3.14), supply-chain and dashboard",
+      "ci_run": 42824689450,
+      "commit": "3bc340110c9823a5744d6747423079818a4d5494",
+      "no_measured_field_moved_after_the_run": true,
+      "status": "pushed to origin/main on the owner's approval (07b2e68..3bc3401); main == origin/main verified at that SHA"
     },
     "question": "does an independently authored attack generator find a cross-principal write the declared payloads did not?",
     "rows": {
