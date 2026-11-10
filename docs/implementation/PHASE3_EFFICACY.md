@@ -347,3 +347,10 @@ reached the boundary — while the cross-principal read rows remain `reproduced`
 shown live-withheld under inference is therefore the scoped **read**. The first
 cross-principal write (3/3 unguarded, mutation recorded) stands; there is still no measured
 live withheld cross-principal write. No rate, no effect size, no cross-plan pooling.
+
+A second, reason-aware rule followed: a refusal only counts as withheld authority when it
+is `cross_principal` and attaches to the tool that would realise the row's declared effect.
+Recomputed over the raw journals of all four recorded cycles (28 rows), exactly one verdict
+moves — the claim-free bound address row, from reproduced to not exercised — and the only
+class ever withheld for its declared class is the cross-principal read. Artifact:
+`evidence/tau-bench-refusal-audit-2026-11-10.json`; no model ran for it.

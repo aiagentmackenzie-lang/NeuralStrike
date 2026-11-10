@@ -127,10 +127,13 @@ Reply text is stored (alongside its digest) for `attack` cases only, so a refusa
 words is observable rather than inferred from an empty tool-call list. Utility cases are
 never captured; the request itself is unchanged.
 
-Every row now reports `refusals_by_tool`, `offered_tools`, `withholding_tool` and
-`declared_effect_offered`. Read the last two together: a refused action is only credited
-to a control that was actually offered it. The evaluator does not split per-tool counts
-by refusal reason yet, which is stated as a limitation rather than hidden.
+Every row now reports `refusals_by_tool`, `refusals_by_tool_and_reason`, `offered_tools`,
+`withholding_tool`, `declared_effect_offered` and `withheld_for_declared_class`. Read the
+last two together: a refused action is only credited to a control that was actually offered
+it **for the declared reason** — a `tool_unregistered` refusal is a misfire, not withheld
+authority. `refusal_audit.py` recomputes recorded verdicts from the raw journals without a
+model, so a rule change is auditable against evidence that already exists instead of being
+bought with another identical run.
 
 ## What the measurement trap is
 
