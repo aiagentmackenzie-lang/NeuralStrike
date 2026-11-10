@@ -2577,3 +2577,51 @@ grow a model or target import.
 frozen harness). No new run: the write path has now been tested three ways and the remaining
 options are a different target or the comparator's cross-episode primitive, both of which need
 their own declared plan before any observation.
+
+## 2026-11-10 — Phase 3 gets a gate document, and the gate table catches a false claim in its own draft
+
+**Why.** Phase 0, 1 and 2 each have an acceptance document with binary gates. Phase 3 had
+none: its criteria were prose spread across six files, so "is Phase 3 done" had no checkable
+answer — which is why the question came up. `docs/implementation/PHASE3_ACCEPTANCE.md` now
+defines seven gates (P3-1 independent labels, P3-2 independent review, P3-3 fair comparison,
+P3-4 consent-based pilot, P3-5 commercial signal, P3-6 boundary diversity and independence,
+P3-7 utility preserved), each with a binary criterion, the evidence that would satisfy it, its
+current state and a named signer. Status is **NOT ACCEPTED**: five gates OPEN, two PARTIAL.
+
+**The rule, stated once.** Phase 3 may be called accepted only when every gate is ACCEPTED with
+a signer who is not the author of the increment. A gate is not accepted because its discussion
+is persuasive. The document also lists the seven failure modes this project has actually caught
+— scripted checks read as efficacy, model non-action read as control efficacy, a refusal of
+another action credited to a write row, a recorded summary re-scored in place, plans pooled, a
+self-authored label treated as independent, and hashes mistaken for prose review — because each
+was once true of a draft of the record.
+
+**A false claim caught in this increment's own draft.** The first version of P3-6 said
+"argument redirection has no native measurement anywhere". That is wrong: the AgentDojo banking
+finding *is* argument redirection — an untrusted bill's account field controlling the payment
+destination while the authorised payee differed. The gate was rewritten before commit, and the
+matching row in the Phase 3 efficacy table corrected. Boundary coverage is seven of eight
+classes with a native measured observation (destructive action: attempts only, never a
+reproduced effect); the real gap is not coverage but **independence** — the ground truth is
+corroborated nowhere outside this repository.
+
+**Contracts.** `tests/test_phase3_acceptance.py` (9 tests) freezes the seven gate ids, requires
+exactly one declared status per gate, requires the status line to say NOT ACCEPTED while any
+gate is not accepted, forbids an ACCEPTED gate with no named signer or with the author as
+signer, checks that every document the acceptance file links to exists, and checks that the
+efficacy record and the README point at it. A gate document nobody can find, or one that drifts
+into claiming more than its gates support, fails the suite.
+
+**Also corrected.** `PHASE3_EFFICACY.md` was stale by three increments (the comparator, the
+write-first payload and the model replication): it still said PyRIT was "not a measured
+comparator run", that PyRIT execution "remains absent", and "comparison status: not performed"
+unqualified. All three fixed; the three increments are now recorded there with their counts, and
+a gate table summarises the acceptance document.
+
+**Gates.** 1718 passed, 7 skipped; coverage 91.88 %; `ruff` and `mypy` clean (144 files); claims
+audit 32 claims, 0 unresolved, 6 blocks, 0 mismatched; `policy_check` 25/25, `inference: none`,
+byte-identical at `16825eda…`.
+
+**Next.** P3-7 (tau-bench utility is declared `None` and never asserted) and P3-6's destructive
+class are the only two gates where engineering can still add evidence rather than restate it.
+Everything else needs a labeller, a reviewer, a comparator author, a pilot owner or a customer.

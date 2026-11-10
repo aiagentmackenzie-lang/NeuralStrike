@@ -405,8 +405,11 @@ not see.
 
 ## Where the Phase 3 gates stand — 2026-11-10
 
-Gathered in one table because they were previously scattered across six documents. This is an
-assessment, not an acceptance: nothing here is signed by anyone but the author.
+Gathered in one table because they were previously scattered across six documents. The binary
+definition of each gate, its evidence and its signer live in
+[`PHASE3_ACCEPTANCE.md`](PHASE3_ACCEPTANCE.md); this table is the summary, and that document is
+the one a reviewer should mark up. It is an assessment, not an acceptance: nothing here is
+signed by anyone but the author.
 
 | Gate | Declared requirement | Status 2026-11-10 |
 |---|---|---|
@@ -415,7 +418,7 @@ assessment, not an acceptance: nothing here is signed by anyone but the author.
 | Fair comparison | a pinned common workflow, same build, explicit budgets, independent ground truth | **not performed**; the comparator varies the attacker, not the tool, and produces no score |
 | Pilot | consenting owner, exact deployment, synthetic data, criteria, retention | **none** |
 | Commercial signal | customer feedback / willingness to pay | **none** |
-| Boundary diversity | privilege change, outbound transfer, destructive action, argument redirection, retrieval contamination, persistent memory, non-vulnerable configurations, benign operations | privilege ✓ (self-authored app), retrieval ✓, object authority ✓ (tau-bench, read withheld live), persistent memory: one 2/3 demonstration in one stage, destructive: attempts only, never a reproduced effect, **argument redirection: no native measurement**, non-vulnerable ✓ (hardened), benign ✓ |
+| Boundary diversity | privilege change, outbound transfer, destructive action, argument redirection, retrieval contamination, persistent memory, non-vulnerable configurations, benign operations | privilege ✓ (self-authored app), outbound transfer ✓ (AgentDojo banking `send_money`), argument redirection ✓ (the bill's account field controlling the payment destination), retrieval ✓, object authority ✓ (tau-bench, read withheld live), persistent memory: one 2/3 demonstration in one stage, destructive: attempts only, never a reproduced effect, non-vulnerable ✓ (hardened), benign ✓ — **but the ground truth is corroborated nowhere outside this repository** |
 | Utility preserved | benign task completion under the control | AgentDojo/memory benign controls pass; **tau-bench utility is unasserted** (`None`), 0.0 at termination with 0/6 gold-state match on the 2B and 6/6 on the 30B |
 | Phase 4 | release / provenance / platform / pilot gates | **open** |
 

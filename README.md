@@ -52,7 +52,9 @@ Independent application efficacy, third-party review and customer pilots remain
 uncompleted. Benchmark importers, oracle-honesty tests, local application cycles
 and code coverage do not establish those results. The first Phase 3 offline
 label/prediction comparison is documented in
-[PHASE3_EFFICACY.md](docs/implementation/PHASE3_EFFICACY.md).
+[PHASE3_EFFICACY.md](docs/implementation/PHASE3_EFFICACY.md), and the binary gates
+by which Phase 3 will be judged — with their current status, which is **not
+accepted** — are in [PHASE3_ACCEPTANCE.md](docs/implementation/PHASE3_ACCEPTANCE.md).
 
 ## Overview
 
