@@ -72,6 +72,10 @@ EXPECTATIONS_SHA256_V1 = "d27aed0a27263bdd1bfd176b618d36798a95543d1702264f54e244
 BUDGETS_SHA256_V1 = "a3a38e7f659c2fd0565c4c9cacfc0bfd7709e964505c6fb43bcf414457b5d6a1"
 REPLICATION_MODEL = "nemotron-3.5-lightning:30b"
 REPLICATION_DIGEST = "e7a64ff15fb174c42b4f463e5c888c4f2c7b9cabf9e8d65a1c0874405426c1b2"
+WRITE_FIRST_REPLICATION_MODEL = "gemma4:31b"
+WRITE_FIRST_REPLICATION_DIGEST = (
+    "6316f0629137b426c9d9b853ffc4c8209589f30ee39aebede6285096c0ff47e7"
+)
 
 # Payload-sensitivity pins. A different hypothesis about the same payload class gets its
 # own plan and its own freeze: the frozen matrix above must not move, and these payloads
@@ -105,10 +109,17 @@ def test_target_pins_are_the_declared_literals() -> None:
 
 
 def test_model_registry_is_a_declared_literal_with_digests() -> None:
-    assert set(profile.MODEL_REGISTRY) == {profile.MODEL, REPLICATION_MODEL}
+    # The set stays closed: a model may only appear here together with a declared plan that
+    # pins its digest, and each addition is named in this literal rather than discovered.
+    assert set(profile.MODEL_REGISTRY) == {
+        profile.MODEL,
+        REPLICATION_MODEL,
+        WRITE_FIRST_REPLICATION_MODEL,
+    }
     assert profile.MODEL_DIGESTS == {
         profile.MODEL: profile.MODEL_DIGEST,
         REPLICATION_MODEL: REPLICATION_DIGEST,
+        WRITE_FIRST_REPLICATION_MODEL: WRITE_FIRST_REPLICATION_DIGEST,
     }
     for name, entry in profile.MODEL_REGISTRY.items():
         assert len(entry["digest"]) == 64, name
@@ -1104,6 +1115,68 @@ def test_a_withholding_declared_false_cannot_be_observed_true() -> None:
         for _ in range(3)
     ]
     assert verify.evaluate(row, observations)["verdict"] == "falsified"
+
+
+# --------------------------------------------------------------------------------------
+# One-variable model replication of the write-first matrix
+# --------------------------------------------------------------------------------------
+
+WRITE_FIRST_REPLICATION_PLAN_KIND = (
+    "native-tau-bench-retail-write-first-replication-plan-v1"
+)
+
+
+def test_the_write_first_replication_changes_the_model_and_nothing_else() -> None:
+    """The payloads and expectations are the write-first plan's own objects."""
+    from examples.tau_bench_retail import verify
+
+    assert profile.plan_kind_for("write-first-replication") == WRITE_FIRST_REPLICATION_PLAN_KIND
+    assert verify.plan_relationship(
+        WRITE_FIRST_REPLICATION_MODEL, "write-first-replication"
+    ) == {"replicates": WRITE_FIRST_PLAN_KIND, "supersedes": None}
+    # Identity, not equality: an edit to WRITE_FIRST_CASES cannot diverge silently here.
+    assert profile.cases_for("write-first-replication") is profile.WRITE_FIRST_CASES
+    assert profile.expectations_for("write-first-replication") is profile.WRITE_FIRST_EXPECTATIONS
+    assert profile.repeats_for("write-first-replication") is profile.WRITE_FIRST_REPEATS_BY_CASE
+    assert profile.plan_kind_for("write-first-replication") != profile.plan_kind_for("write-first")
+    # Every frozen and declared pin is still where it was.
+    assert profile.digest(profile.WRITE_FIRST_CASES) == WRITE_FIRST_CASES_SHA256
+    assert profile.digest(profile.CASES) == CASES_SHA256_V1
+    assert profile.digest(profile.WITHHOLDING_TOOL) == WITHHOLDING_TOOL_SHA256
+
+
+def test_the_write_first_replication_model_is_declared_and_loopback_only() -> None:
+    from examples.tau_bench_retail import verify
+
+    entry = profile.resolve_model(WRITE_FIRST_REPLICATION_MODEL)
+    assert entry["digest"] == WRITE_FIRST_REPLICATION_DIGEST
+    assert entry["origin"].startswith("http://127.0.0.1:")
+    # A different family from both already-declared models: the model is the one variable.
+    assert entry["family"] != profile.MODEL_REGISTRY[profile.MODEL]["family"]
+    assert entry["family"] != profile.MODEL_REGISTRY[REPLICATION_MODEL]["family"]
+    block = verify.model_block(WRITE_FIRST_REPLICATION_MODEL)
+    assert block["name"] == WRITE_FIRST_REPLICATION_MODEL
+    assert block["digest"] == profile.MODEL_DIGESTS[WRITE_FIRST_REPLICATION_MODEL]
+
+
+def test_the_write_first_replication_declares_the_same_withholding_expectations() -> None:
+    from examples.tau_bench_retail import verify
+
+    block = verify.hypothesis_block("write-first-replication")
+    assert block["statement"] == profile.WRITE_FIRST_REPLICATION_HYPOTHESIS
+    assert block["frozen_matrix_untouched"] is True
+    assert "model" in block["statement"]
+    rows = verify.plan_rows("write-first-replication")
+    assert len(rows) == len(profile.WRITE_FIRST_CASES) * len(profile.POLICIES)
+    for row in rows:
+        assert row["case_kind"] == "attack", row["case"]
+        assert row["repeats"] == profile.REPEATS, row["case"]
+        assert row["paired_with"] is None, row["case"]
+        if row["policy"] == "bound":
+            assert row["expectations"]["cross_principal_mutation"] is False
+            assert row["expectations"]["withheld_for_declared_class"] is True
+        else:
+            assert row["expectations"] == {"cross_principal_mutation": True}
 
 
 @pytest.mark.skipif(

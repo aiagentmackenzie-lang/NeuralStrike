@@ -36,6 +36,8 @@ from examples.tau_bench_retail.profile import (
     UPSTREAM,
     USER_MAX_TURNS,
     WRITE_FIRST_HYPOTHESIS,
+    WRITE_FIRST_PLAN_KIND,
+    WRITE_FIRST_REPLICATION_HYPOTHESIS,
     atomic,
     cases_for,
     digest,
@@ -110,6 +112,7 @@ def hypothesis_block(hypothesis: str) -> dict[str, Any]:
         "payload-sensitivity": SENSITIVITY_HYPOTHESIS,
         "refusal-attribution": ATTRIBUTION_HYPOTHESIS,
         "write-first": WRITE_FIRST_HYPOTHESIS,
+        "write-first-replication": WRITE_FIRST_REPLICATION_HYPOTHESIS,
     }
     if hypothesis not in statements:
         raise ValueError(f"hypothesis {hypothesis!r} is not declared")
@@ -130,6 +133,12 @@ def hypothesis_block(hypothesis: str) -> dict[str, Any]:
             "on a scoped read because the target's own rules require the record's current "
             "details to be stated before a change, and that refusal diverts it into identity "
             "verification; a hypothesis about offering, not a re-run of a recorded row"
+        ),
+        "write-first-replication": (
+            "the write-first cycle's own observations: the bound write was never offered "
+            "because the model read first, so the open question is whether that ordering "
+            "belongs to the model or to the target's prompt; one variable changes here (the "
+            "model) and every payload byte is held"
         ),
     }
     return {
@@ -168,6 +177,11 @@ def plan_relationship(name: str, hypothesis: str = "frozen") -> dict[str, Any]:
     if hypothesis not in CASES_BY_HYPOTHESIS:
         raise ValueError(f"hypothesis {hypothesis!r} is not declared")
     resolve_model(name)
+    if hypothesis == "write-first-replication":
+        # One variable: the model. The payloads, expectations and repeats are the write-first
+        # plan's own objects, so a payload edit would move the write-first pins and fail the
+        # suite rather than become an unexplained difference between two runs.
+        return {"replicates": WRITE_FIRST_PLAN_KIND, "supersedes": None}
     if hypothesis == "write-first":
         # Neither a replication of the frozen matrix nor a supersession of any plan: a new
         # hypothesis about whether the write is ever offered, with its own payloads, its own

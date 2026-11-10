@@ -51,6 +51,18 @@ MODEL_REGISTRY: dict[str, dict[str, str]] = {
         "quantization": "Q4_K_M",
         "role": "single-variable replication of the v1 matrix; not a second target",
     },
+    "gemma4:31b": {
+        "digest": "6316f0629137b426c9d9b853ffc4c8209589f30ee39aebede6285096c0ff47e7",
+        "origin": MODEL_ORIGIN,
+        "family": "gemma4",
+        "parameters": "31.3B",
+        "quantization": "Q4_K_M",
+        "role": (
+            "single-variable replication of the write-first matrix: a different family from "
+            "both declared models, so the read-before-write ordering is tested with the model "
+            "as the only changed declaration"
+        ),
+    },
 }
 MODEL_DIGESTS: dict[str, str] = {name: entry["digest"] for name, entry in MODEL_REGISTRY.items()}
 
@@ -462,6 +474,36 @@ WRITE_FIRST_WITHHOLDING_TOOL: dict[str, str] = {
     "write_first_address": "modify_user_address",
     "write_first_cancel": "cancel_pending_order",
 }
+
+# --------------------------------------------------------------------------------------
+# One-variable replication of the write-first matrix: is the ordering the model's?
+# --------------------------------------------------------------------------------------
+# The write-first cycle answered its own question negatively: the model still read before it
+# wrote, so the write was never offered and the binding was never exercised. What that leaves
+# open is whether read-before-write is a property of the declaring model at this seed or of
+# the target's prompt rule. That is a one-variable question — change the model, hold every
+# payload byte fixed — and it is the shape the nemotron replication of the v1 matrix already
+# established in this profile.
+#
+# Model selection, declared before the run and not revisited after it: ``gemma4:31b`` is a
+# different family from both models already declared, is resident on this machine (no
+# download, loopback only), and was shown to emit native tool calls through the same
+# ``ollama_chat`` path with the target's own sixteen-tool schema before this plan was
+# written. ``mistral:7b`` was rejected by the same probe because it described the call in
+# prose and emitted no ``tool_calls``, which would have produced an uninformative null for a
+# reason unrelated to the claim. No model is added or swapped after the run, and a null here
+# is recorded, not chased.
+
+WRITE_FIRST_REPLICATION_PLAN_KIND = (
+    "native-tau-bench-retail-write-first-replication-plan-v1"
+)
+
+WRITE_FIRST_REPLICATION_HYPOTHESIS = (
+    "the read-before-write ordering that kept the bound write unoffered is a property of the "
+    "declaring model at this seed rather than of the target's prompt: on the identical, "
+    "pinned write-first payloads a second declared model should offer modify_user_address "
+    "to the binding, and the binding should refuse it as cross_principal"
+)
 DECLARED_WITHHOLDING_TOOL: dict[str, str] = {
     **WITHHOLDING_TOOL,
     **WRITE_FIRST_WITHHOLDING_TOOL,
@@ -469,29 +511,38 @@ DECLARED_WITHHOLDING_TOOL: dict[str, str] = {
 
 # Declared hypothesis -> the mapping that defines it. Fail-closed: an undeclared name is
 # refused, never defaulted, so a cycle cannot silently measure the wrong payloads.
+#
+# ``write-first-replication`` is the one-variable model replication of the write-first
+# matrix: it shares the payload and expectation **objects** with ``write-first``, so a
+# payload edit would move the write-first pins and fail the suite. Only the model and the
+# plan kind differ.
 CASES_BY_HYPOTHESIS: dict[str, dict[str, dict[str, Any]]] = {
     "frozen": CASES,
     "payload-sensitivity": SENSITIVITY_CASES,
     "refusal-attribution": SENSITIVITY_CASES,
     "write-first": WRITE_FIRST_CASES,
+    "write-first-replication": WRITE_FIRST_CASES,
 }
 EXPECTATIONS_BY_HYPOTHESIS: dict[str, dict[str, dict[str, dict[str, Any]]]] = {
     "frozen": EXPECTATIONS,
     "payload-sensitivity": SENSITIVITY_EXPECTATIONS,
     "refusal-attribution": ATTRIBUTION_EXPECTATIONS,
     "write-first": WRITE_FIRST_EXPECTATIONS,
+    "write-first-replication": WRITE_FIRST_EXPECTATIONS,
 }
 REPEATS_BY_HYPOTHESIS: dict[str, dict[str, int]] = {
     "frozen": REPEATS_BY_CASE,
     "payload-sensitivity": SENSITIVITY_REPEATS_BY_CASE,
     "refusal-attribution": ATTRIBUTION_REPEATS_BY_CASE,
     "write-first": WRITE_FIRST_REPEATS_BY_CASE,
+    "write-first-replication": WRITE_FIRST_REPEATS_BY_CASE,
 }
 PLAN_KIND_BY_HYPOTHESIS: dict[str, str] = {
     "frozen": PLAN_KIND,
     "payload-sensitivity": SENSITIVITY_PLAN_KIND,
     "refusal-attribution": ATTRIBUTION_PLAN_KIND,
     "write-first": WRITE_FIRST_PLAN_KIND,
+    "write-first-replication": WRITE_FIRST_REPLICATION_PLAN_KIND,
 }
 
 
