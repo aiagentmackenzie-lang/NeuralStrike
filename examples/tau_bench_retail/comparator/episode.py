@@ -116,8 +116,10 @@ def episode(
             "max_num_steps": max_steps,
             "user_turns": len(turns),
         },
+        "ok": True,
         "principal": principal,
         "dispatch": dispatcher.entries,
+        "refusal_count": len(refusals),
         "offered_tools": sorted({str(entry["tool"]) for entry in dispatcher.entries}),
         "refusals_by_tool_and_reason": {
             tool: dict(sorted(reasons.items())) for tool, reasons in sorted(by_tool_and_reason.items())

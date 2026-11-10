@@ -56,6 +56,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   local Ollama endpoint in an isolated environment (`/tmp/pyrit-env`); it is not a
   dependency of this project.
 
+### Added (tau-bench retail — declared comparator run, 2026-11-10)
+- `comparator/plan.py` — declared comparator plan (`native-tau-bench-retail-comparator-plan-v1`)
+  with its own kind, expectations on disk before the first episode, harness hashes, and a
+  rule that the verdict is the recorded state predicate, never the orchestrator's outcome.
+- `comparator/adversary.py` — PyRIT `RedTeamingAttack` with `StatePredicateScorer`, a scorer
+  that reads the episode's predicate so the attack loop stops on a real mutation instead of
+  on reply text. Retains any prior invalid attempt in the plan rather than deleting it.
+- Run result: with the binding off, the generator produced a cross-principal **mutation on
+  its fourth consecutive turn**; under the binding, six turns produced **no mutation**, the
+  write was never offered, and `get_user_details` was refused `cross_principal` 4× and
+  `target_unknown` 4×. Verdicts `reproduced` / `not_exercised`, exit 5. The first attempt is
+  retained as `tau-bench-comparator-cycle-v1-invalid` because its adapter ran single-turn
+  episodes.
+
 ### Changed (tau-bench retail)
 - `--repeats` is no longer a budget lever: a value equal to the declared k is a no-op and
   any other value is refused before the plan is written; plans record `budget_overrides`

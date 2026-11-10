@@ -43,11 +43,11 @@ class TauBenchRetailTarget(PromptTarget):
         self._seed = seed
         self._max_num_steps = max_num_steps
         self.episodes: list[dict[str, Any]] = []
-        # PyRIT does not guarantee that a custom target sees prior turns, so the adapter
-        # accumulates the attacker's script per conversation itself. Each send therefore
-        # re-runs the episode from scratch with one more turn: independent, and quadratic in
-        # turns, which is why the script is capped at the declared USER_MAX_TURNS.
-        self._history: dict[str, list[str]] = {}
+        # PyRIT opens a fresh conversation id per attack turn, so history must accumulate per
+        # *target instance*, not per conversation: one target instance is one attack run, and
+        # the runner builds a new one for each policy. Measured the hard way — the first
+        # comparator run keyed on conversation_id and silently ran single-turn episodes.
+        self._history: list[str] = []
 
     def _build_identifier(self) -> Any:
         return self._create_identifier(
@@ -69,15 +69,14 @@ class TauBenchRetailTarget(PromptTarget):
         turns = self._turns(normalized_conversation)
         if not turns:
             turns = [request.converted_value]
-        history = self._history.setdefault(request.conversation_id, [])
         for turn in turns:
-            if turn not in history:
-                history.append(turn)
-        if len(history) > USER_MAX_TURNS:
+            if turn not in self._history:
+                self._history.append(turn)
+        if len(self._history) > USER_MAX_TURNS:
             raise ValueError(
                 f"attacker script exceeds the declared {USER_MAX_TURNS} user turns; refusing"
             )
-        turns = tuple(history)
+        turns = tuple(self._history)
         result = await asyncio.to_thread(
             episode, turns, self._policy, self._source,
             self._model_name, self._seed, self._max_num_steps,
