@@ -38,6 +38,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reports which verdicts moved. Over the four recorded cycles (28 rows) exactly one moves:
   `claim_free_address/bound`, `reproduced` → `not_exercised`.
 
+### Added (tau-bench retail — comparator episode primitive, 2026-11-10)
+- `examples/tau_bench_retail/comparator/` — optional comparator tooling, never a project
+  dependency: `episode.py` runs an attacker **turn script** against the pinned target
+  through the declared dispatcher and returns state predicates plus per-tool refusal
+  counts; `selfcheck.py` reproduces a known recorded row before any external attack
+  generator is trusted. Self-check: mutation 3/3 unmodified and 0/3 bound, matching the
+  recorded refusal-attribution row; a single-turn control recorded 0 mutation in both
+  policies, proving the turn-shape dependency.
+- `comparator/tau_target.py` — PyRIT `PromptTarget` adapter over `episode()`, proven end to
+  end against the pinned target: mutation true unguarded and false under the binding with
+  `get_user_details` refused `cross_principal`. PyRIT is imported only by this optional
+  module; nothing in `src/` or the test suite depends on it.
+- `docs/implementation/TAU_BENCH_COMPARATOR_PROTOCOL.md` — the comparator question, what
+  PyRIT/garak can and cannot express about object authority, declared expectations and the
+  decision rule, written before any comparator run. PyRIT 1.1.0 was verified against the
+  local Ollama endpoint in an isolated environment (`/tmp/pyrit-env`); it is not a
+  dependency of this project.
+
 ### Changed (tau-bench retail)
 - `--repeats` is no longer a budget lever: a value equal to the declared k is a no-op and
   any other value is refused before the plan is written; plans record `budget_overrides`

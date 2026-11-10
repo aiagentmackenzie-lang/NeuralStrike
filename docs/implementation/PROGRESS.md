@@ -2324,3 +2324,43 @@ CHANGELOG and README updated with the new fields and the audit table.
 **Next.** The comparator: decide how an independent tool (PyRIT/garak) can be pointed at
 this defect class, or record honestly that it cannot express object authority and write the
 adapter requirement instead.
+
+### tau-bench retail — comparator episode primitive verified against a known row
+
+**Why.** The standing Phase 3 gap is a comparator. No off-the-shelf tool measures object
+authority: PyRIT is prompt-centric (the tool executor and the state are the integrator's),
+and garak has no tool-call loop or environment state. Writing `TAU_BENCH_COMPARATOR_PROTOCOL.md`
+before any run fixes the question, the budgets, the expectations and the decision rule —
+including that a comparator null result is a statement about one attacker, not a validation
+of the boundary.
+
+**Feasibility, measured.** PyRIT 1.1.0 installed into an isolated `/tmp/pyrit-env` (uv, no
+build scripts, no `plain-crypto-js`, not a project dependency) and its `OpenAIChatTarget`
+reached the local model over the loopback OpenAI-compatible endpoint. The comparator's model
+access layer works; nothing else is claimed from that.
+
+**Primitive, and its first failure.** `comparator/episode.py` drives the pinned target with
+an arbitrary attacker turn script through the declared dispatcher and returns the state
+predicates plus per-tool refusal counts. `comparator/selfcheck.py` demands that it reproduce
+a row already on disk. The first attempt, one prompt per episode, produced **0/3** mutations
+against a recorded **3/3**: the model asks for confirmation and only dispatches the write
+after the declared follow-ups. The primitive was changed to take turns, not a prompt, and the
+self-check now passes — mutation 3/3 unmodified, 0/3 bound, `get_user_details` refused
+`cross_principal` 3/3, mismatches none (2m16s, exit 0). The single-turn control is kept in the
+artifact because it is the finding: attack *shape*, not just payload, decides reachability.
+
+**Contracts.** The comparator is not a project dependency (asserted against `pyproject.toml`
+and by scanning the package), an episode needs at least one non-empty turn, and the
+self-check's "known row" reference must equal the recorded summary's effects.
+
+**Adapter, proven end to end.** `comparator/tau_target.py` subclasses PyRIT's
+`PromptTarget` over `episode()` and accumulates the attacker's turns per conversation (a
+custom target is not guaranteed to see prior turns). Through PyRIT, against the pinned target:
+mutation **true** unmodified and **false** under the binding with `get_user_details` refused
+`cross_principal`. PyRIT lives only in an isolated `/tmp/pyrit-env` (plus the target's own
+`litellm`); nothing in `src/` or the test suite imports it, and a contract asserts the project
+does not depend on it.
+
+**Next.** One declared comparator plan — its own kind, expectations on disk first, §6
+decision rule — then an adversarial run with a local adversary model. The predicate stays
+ours; only the attack generation becomes independent.
