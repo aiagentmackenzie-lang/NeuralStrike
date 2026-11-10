@@ -2204,3 +2204,9 @@ re-signed or amended after execution; its SHA-256 stands at `1f52315e…`. The e
 gained a `publication` sub-block (commit, CI run, and an explicit statement that no measured
 count, verdict, expectation or limitation moved after the push) — verified key by key against
 the committed content.
+
+That record was itself published as `d6a9ce4` — hosted CI run
+[42741189977](https://github.com/aiagentmackenzie-lang/NeuralStrike/actions/runs/42741189977),
+**success** on the same five jobs. The `publication` sub-block now carries both commits and
+both runs; the twelve measured keys of the replication block are unchanged, verified key by key
+against the bytes committed in `075bd30`, and `plan.json` still hashes to `1f52315e…`.

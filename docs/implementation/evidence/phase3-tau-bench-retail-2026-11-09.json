@@ -360,6 +360,22 @@
       "commit": "075bd301eaf9ddc7a5cbe43d2f53df2a448bfa72",
       "commit_message": "feat: replicate the declared matrix on a second model; no payload is attempted",
       "declared_plan_not_rewritten": "the pre-registered plan.json in the cycle directory was not rewritten, re-signed or amended after execution; its SHA-256 remains 1f52315e958e8e9cb133540afb52e90daf0b7281c65ae3417ed5eedb3931e719",
+      "docs_commit": {
+        "commit": "d6a9ce4eb7caae64094f71442ac5ce770e4cee19",
+        "commit_message": "docs: record the replication's publication, and leave its plan untouched",
+        "content": "publication record only: the commit, its CI run, and the statement that no measured field moved; verified key by key against the block committed in 075bd30",
+        "hosted_ci": {
+          "conclusion": "success",
+          "jobs": [
+            "quality (3.11)",
+            "quality (3.12)",
+            "quality (3.14)",
+            "supply-chain",
+            "dashboard"
+          ],
+          "run": 42741189977
+        }
+      },
       "hosted_ci": {
         "conclusion": "success",
         "jobs": [
