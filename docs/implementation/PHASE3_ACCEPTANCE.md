@@ -8,7 +8,7 @@ satisfy each, and states what is true today.
 
 Phase 2 engineering acceptance is separate and remains scoped to
 [its own declared profiles](PHASE2_ACCEPTANCE.md). Phase 4 (release, provenance, platform,
-pilot) has its own plan and is out of scope here.
+pilot) has [its own plan](PHASE4_PLAN.md) and is out of scope here.
 
 Date: 2026-11-10. Source revision at this assessment: `7692e92` plus the docs commit that added
 this file.

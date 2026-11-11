@@ -2724,3 +2724,45 @@ evidence index byte-identical to `HEAD`.
 **Not claimed.** Not a population, not a second seed, not independence, not a comparator, not
 Phase 3 acceptance. P3-6 stays `PARTIAL`; P3-7's evidence cell gained the counts and stays
 `MET` and unsigned.
+
+## 2026-11-10 — Phase 4 started: gates defined, scheduled dependency health implemented
+
+Phase 4 was prose in the master plan and had no gate document, so it could not be checked.
+`docs/implementation/PHASE4_PLAN.md` now defines seven binary gates with the same two-column
+discipline as Phase 3 (state about evidence, `Signed` about people): command spine, artifact
+binding, signing policy, scheduled dependency health, pilot-facing docs, pilot evidence, and
+platform claims. All seven are unsigned; status is **NOT RELEASED**.
+
+First gate taken, because it is the one the master plan explicitly names — "a historical green
+CI badge cannot imply current dependency health". `.github/workflows/dependency-check.yml`
+audits both hashed locks every Monday and on demand, writes JSON records, uploads them with
+`if: always()`, and holds `contents: read`; it publishes, tags and signs nothing. The mechanism
+is the same `pip-audit --require-hashes -r …` invocation that is green on `17b9832`; both exact
+commands were re-run locally (runtime lock and dev lock, 140 dev distributions, 0 advisories).
+
+P4-4 stays **PARTIAL** on purpose: the workflow is not on the default branch, so no scheduled or
+dispatched run exists yet. It becomes `MET` when one green dispatched run is recorded, and not
+before — an author's claim about a cron is not evidence.
+
+Signing policy is now stated rather than implied: cosign is optional and off by default, it
+signs the image digest plus an SBOM attestation and **not** the wheel or release assets, and no
+artifact may be described as signed without a recorded signature for that digest. As of
+`17b9832` every artifact is unsigned, and the plan says so.
+
+**Contracts (10 new).** Gates frozen once each with a binary rule and a signer; the status line
+cannot claim a release while a gate is unmet or unsigned; a `MET` gate must cite evidence; the
+plan may not move Phase 3 or the Phase 3 status line; every linked document exists; the plan is
+reachable from the README and from `PHASE3_ACCEPTANCE.md`; the scheduled job is scheduled,
+on-demand dispatchable, audits both pinned locks, holds read-only permissions and cannot
+publish/sign; cosign steps are conditional on `inputs.sign`; and an anti-vapour contract that
+**every command named in `README.md` or `USAGE.md` is a registered command** (40 registered).
+
+**Gates.** 1742 passed, 7 skipped; coverage 91.88 %; `ruff check src tests examples` clean;
+`mypy` 144 files clean; all three workflows parse.
+
+**Not claimed.** No release, no tag, no wheel, no image, no signature, no pilot. Phase 3 is
+untouched: P3-1…P3-6 as recorded, P3-7 `MET` unsigned, **NOT ACCEPTED**.
+
+**Next.** Push, then dispatch the dependency job once and record the run so P4-4 can move to
+`MET`; then P4-3's documentation pointer, then P4-5's supported-versus-experimental matrix.
+P4-6 needs three teams and cannot be started by code.

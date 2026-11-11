@@ -38,6 +38,7 @@ and compliance controls so defenders can fix what actually breaks.
 | Documentation | |
 |---|---|
 | **[Operator's Guide (USAGE.md)](USAGE.md)** | End-to-end walkthroughs, every command, kill chains, troubleshooting |
+| **[Phase 4 plan](docs/implementation/PHASE4_PLAN.md)** | Release/pilot gate definition and current state — **NOT RELEASED** |
 | **[Threat model](docs/threat_model.md)** | What the tool assumes, what it does not |
 | **[Security policy](SECURITY.md)** | Responsible disclosure |
 | **[Changelog](CHANGELOG.md)** | Releases and notable changes |
@@ -55,6 +56,10 @@ label/prediction comparison is documented in
 [PHASE3_EFFICACY.md](docs/implementation/PHASE3_EFFICACY.md), and the binary gates
 by which Phase 3 will be judged — with their current status, which is **not
 accepted** — are in [PHASE3_ACCEPTANCE.md](docs/implementation/PHASE3_ACCEPTANCE.md).
+The release phase's own gates — artifact binding, signing policy, scheduled dependency
+health, pilot-facing documentation, platform claims and the pilot itself — are defined, with
+their current state, in [PHASE4_PLAN.md](docs/implementation/PHASE4_PLAN.md); that phase is
+**NOT RELEASED** and nothing in this repository is signed.
 
 ## Overview
 

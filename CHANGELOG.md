@@ -6,6 +6,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Phase 4 started — release/pilot gates defined, scheduled dependency health, 2026-11-10)
+- `docs/implementation/PHASE4_PLAN.md` — Phase 4 had no gate document, only prose in the master
+  plan. Seven binary gates with a state column about evidence and a separate `Signed` column:
+  command spine, artifact binding, signing policy, scheduled dependency health, pilot-facing
+  docs, pilot evidence, platform claims. Every gate is unsigned; status is **NOT RELEASED**.
+- `.github/workflows/dependency-check.yml` — audits both pinned hashed locks weekly (Mondays
+  06:17 UTC) and on demand, writes JSON records, uploads them with `if: always()`, holds
+  `contents: read`, and publishes/tags/signs nothing. Findings fail the job: silence is what this
+  fixes. The advisory count is not a vulnerability count — reachability triage stays in
+  `DEPENDENCY_REVIEW.md`.
+- `tests/test_phase4_plan.py` — ten contracts: gates frozen once with binary rules and signers,
+  no release claim while a gate is unmet or unsigned, `MET` requires cited evidence, Phase 3
+  cannot be moved by this document, every linked document exists, the plan is reachable from the
+  README and from `PHASE3_ACCEPTANCE.md`, the scheduled job is scheduled and read-only, cosign
+  remains conditional, and **no document may name a command that is not registered** (40
+  registered commands; README and USAGE checked).
+- `README.md` — Phase 4 plan row and an evidence-status paragraph stating the phase is
+  **NOT RELEASED** and that nothing in the repository is signed.
+- Signing policy stated: cosign is optional and off by default, signs the image digest and an
+  SBOM attestation only, and no artifact may be called signed without a recorded signature for
+  that digest. As of `17b9832` every artifact is unsigned.
+
 ### Added (AgentDojo banking — declared model registry and model replication, 2026-11-10)
 - `examples/agentdojo_banking/profile.py` — single source for the frozen banking pins (values
   unchanged; the digest literal is byte-identical, only relocated) and the declared model
