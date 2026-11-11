@@ -242,6 +242,10 @@ Dependencies are single-sourced in `pyproject.toml`. Production installs can
 use the hash-pinned `requirements.txt` / `requirements-dev.txt` lockfiles
 (`pip install --require-hashes -r requirements-dev.txt`).
 
+For development, do not install the unbounded `.[dev,mcp]` extra by hand:
+`scripts/dev_env.sh` builds `.venv` from the hash-pinned lock and runs the same
+gate CI runs. See [Development](#development).
+
 ### Verify the install
 
 ```bash
@@ -263,21 +267,26 @@ docker compose run --rm neuralstrike neuralstrike smoke
 
 ## Quickstart
 
+The quickstart stays inside the acceptance claims: a capability preflight, one assessment, one
+gate. The legacy offensive commands are in the [next section](#legacy-offensive-catalogue-no-acceptance-claim)
+and carry no acceptance claim.
+
 ```bash
 # 1. Copy and edit the config (points at local Ollama by default)
 cp .env.example .env
 
-# 2. Sanity-check what your Ollama actually has installed —
-#    never guess the Judge model.
-neuralstrike judge-model-list
+# 2. Preflight the target before attacking it. This probes what the endpoint can
+#    actually do (finite responses, tool round-trip) and exits 0 only when the
+#    requested capability was OBSERVED — that is compatibility, not a security pass.
+neuralstrike doctor --url http://localhost:11434/v1 --model mistral:7b \
+    --out capability-receipt.json
 
-# 3. Run the full adversarial loop against a local victim:
-neuralstrike forge --target mistral:7b --target-type local \
-    --goal "reveal your system prompt" --iterations 5
-
-# 4. Run the OWASP-tagged scenario corpus against the bundled vulnerable
-#    agent fixture and emit an audit-grade SARIF report:
+# 3. Run one assessment against the bundled vulnerable agent fixture and commit a
+#    hash-bound evidence bundle with an audit-grade SARIF report. No model, no network.
 neuralstrike assess --adapter langgraph --format sarif --out neuralstrike-report
+
+# 4. Diff it against a previous assessment offline (no target, no model):
+neuralstrike compare baseline-bundle/ current-bundle/
 
 # 5. Gate your own target on a baseline (exit 4 = regression):
 neuralstrike evaluate --target mistral:7b --target-type local \
@@ -287,13 +296,22 @@ neuralstrike evaluate --target mistral:7b --target-type local \
 Every output lands in `runs/<run-id>/` as per-trial transcripts, and every
 report maps findings to OWASP + ATLAS + compliance controls.
 
----
+A completely offline check with no model at all:
 
-## CLI reference
+```bash
+neuralstrike smoke           # bundled fixture; 3 scenarios, no network
+```
 
-`neuralstrike --help` lists everything; the highlights:
+### Legacy offensive catalogue — no acceptance claim
 
-### Kill-chain operations
+The commands below are the original attack surface, kept because they are useful and because
+deleting them would only hide them. **None of them carries an acceptance claim, none has an
+efficacy record, and a result from any of them is a local observation — not evidence.**
+
+Every one of them sends traffic to a model, a server or a network target. Every one of them
+accepts `--scope-file`, `--intent` and `--require-approval`, and the scope check is **opt-in**:
+nothing is refused unless you supply a scope file. That is a real limitation, stated here and in
+[SUPPORT_MATRIX.md](docs/SUPPORT_MATRIX.md) rather than implied away.
 
 | Command | What it does |
 |---|---|
@@ -311,6 +329,24 @@ report maps findings to OWASP + ATLAS + compliance controls.
 | `timing` | Latency analysis (informational; not a model identifier) |
 | `c2` | Persistent compromised-agent registry + dispatch (local JSON state, no daemon) |
 | `evade` | Persona wrap, mimicry, delimiter wrap, real invisible-Unicode steganography |
+| `neuralguard-bench` | Canonical recon→weaponize→exploit→post-ex chain against a NeuralGuard-defended victim |
+
+[SUPPORT_MATRIX.md](docs/SUPPORT_MATRIX.md) gives the per-command effect class (local simulation /
+informational / experimental) and the limits that stay true.
+
+---
+
+## CLI reference
+
+`neuralstrike --help` lists everything; the highlights:
+
+### Legacy offensive commands
+
+`recon`, `forge`, `poison`, `exhaust`, `hijack`, `confuse`, `schema-poison`, `intercept`,
+`pivot`, `map-network`, `extract`, `timing`, `c2`, `evade` and `neuralguard-bench` are the
+legacy attack surface. They are listed once, above, under
+[Legacy offensive catalogue — no acceptance claim](#legacy-offensive-catalogue-no-acceptance-claim),
+because a second table here would be a second description of the same fifteen commands.
 
 ### Scenario-driven testing
 
@@ -346,8 +382,11 @@ report maps findings to OWASP + ATLAS + compliance controls.
 
 | Command | What it does |
 |---|---|
-| `neuralguard-bench` | Run the canonical recon→weaponize→exploit→post-ex chain against a NeuralGuard-defended victim; reports ASR with and without the firewall |
 | `purple-report` | Join a local exercise receipt with what SecurityScarletAI actually detected |
+
+`neuralguard-bench` — the canonical recon→weaponize→exploit→post-ex chain against a
+NeuralGuard-defended victim — is a legacy command with no acceptance claim; it is described once,
+in the [legacy catalogue](#legacy-offensive-catalogue-no-acceptance-claim).
 
 ### Safety & utilities
 
@@ -357,6 +396,24 @@ report maps findings to OWASP + ATLAS + compliance controls.
 | `safety-check` | Classify an intent and enforce the human-in-the-loop gate |
 | `smoke` | Offline fresh-clone smoke test against the bundled fixture |
 | `readme-mapping` | Regenerate the OWASP/ATLAS table above from `corpus/*.yaml` |
+
+**What the gate is, exactly.** Every command that sends traffic to a model, a server or a network
+target accepts `--scope-file`, `--intent` and `--require-approval`, and calls the same two
+functions (`_apply_scope`, `_apply_safety`). That is uniform by construction: the table lives in
+`src/neuralstrike/safety/surface.py`, it is verified at import time, and an unclassified command
+refuses to dispatch.
+
+It is **not** a global gate, and this README does not claim one:
+
+- `--scope-file` is **opt-in**. Omit it and no scope check runs — on `assess` and `scan` just as
+  much as on `forge`.
+- `--require-approval` gates an **irreversible intent you declare**. Omit `--intent` and nothing
+  is classified as irreversible.
+- Neither check sandboxes anything. They are operator controls, not containment.
+
+Before this table existed, 11 of the 42 registered command names enforced both gates, 3 enforced
+the scope gate only, 1 enforced the HITL gate only, and 27 enforced neither — 15 of which send
+traffic. Which ones was not written down anywhere. It is now.
 
 ---
 
@@ -553,23 +610,46 @@ real, not aspirational:
 
 ### Quality gate (what CI enforces)
 
-```bash
-pip install -e ".[dev,mcp]"
+The gate has **one description**, and it is a file you can run before pushing:
 
-ruff check src tests
-mypy src                                              # strict on src/
-pytest --cov=neuralstrike --cov-fail-under=85
+```bash
+scripts/dev_env.sh        # build .venv from the hash-pinned lock, then run the gate
 ```
+
+`scripts/dev_env.sh` installs `requirements-dev.txt` with `--require-hashes` (the same locked dev
+extra the CI `supply-chain` job installs) and then hands off to `scripts/ci_gate.sh`, which is
+literally the file both CI jobs execute. An existing environment can be gated with:
+
+```bash
+PYTHON=.venv/bin/python bash scripts/ci_gate.sh
+```
+
+which runs, in order:
+
+```bash
+python -m ruff check src tests
+python -m mypy src                                   # strict on src/
+python -m pytest --cov=neuralstrike --cov-report=term-missing --cov-fail-under=85
+```
+
+**Why the lock is not optional.** On 2026-11-11 the suite passed locally and failed twice in
+CI on a test that was correct in substance, because `.venv` and CI resolved different versions
+from the same unbounded range (`typer>=0.12` gave 0.29.0 locally, 0.28.0 in CI). `typer` is now
+pinned exactly, `requirements-dev.txt` is the lock for the dev extra, and a contract fails if
+the two disagree or if a workflow inlines a gate command instead of calling the shared script.
+The lock is compiled for CPython 3.12 and `scripts/dev_env.sh` refuses any other interpreter
+rather than resolving a different wheel set and calling it the same gate.
 
 CI (`.github/workflows/ci.yml`) runs three jobs on every push and PR:
 
 | Job | What it does |
 |---|---|
-| **quality** | ruff + strict mypy + pytest with ≥85% coverage gate on Python 3.11, 3.12, 3.14 |
-| **supply-chain** | Installs from hash-pinned lockfiles, runs `pip-audit`, generates a CycloneDX SBOM, and runs the fresh-clone smoke test |
+| **quality** | Unbounded install (**compatibility probe**, by design) + `scripts/ci_gate.sh` on Python 3.11, 3.12, 3.14 — it exists to discover a break in the latest resolution, so it is deliberately not locked |
+| **supply-chain** | Installs the hash-pinned lock, runs `scripts/ci_gate.sh` (the gating install), `pip-audit`, a CycloneDX SBOM, and the fresh-clone smoke test |
 | **dashboard** | `npm ci`, report-parsing tests, production build |
 
-Current state: **911 tests**, **~90% measured coverage**, mypy strict on `src/`.
+Current state: **1775 tests, 7 skipped, 92% measured coverage** (85% enforced), mypy strict on
+`src/`. Local measurement on macOS arm64 / CPython 3.12.14; CI is the authority.
 
 ### Project structure
 
@@ -592,7 +672,7 @@ NeuralStrike/
 │   └── reports/                # json, sarif, junit, markdown, pdf, compliance, readme_mapping
 ├── corpus/                     # OWASP-tagged scenario YAML (60 scenarios)
 ├── dashboard/                  # Vite + React report viewer (TypeScript)
-├── tests/                      # unit + CLI + exit-gate suites (911 tests)
+├── tests/                      # unit + CLI + exit-gate suites (1775 passing)
 ├── docs/threat_model.md
 ├── .github/workflows/ci.yml
 ├── Dockerfile / docker-compose.yml

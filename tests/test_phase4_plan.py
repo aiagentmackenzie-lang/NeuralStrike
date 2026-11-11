@@ -97,22 +97,18 @@ def test_every_document_the_plan_links_to_exists() -> None:
 
 
 def registered_commands() -> set[str]:
-    """Command names as Typer registers them: explicit ``name=`` else the function name.
+    """Command names as Typer builds them, read from the command graph the CLI dispatches.
 
-    Read from the app rather than by parsing decorators, because the command spine
-    registers one callback under two names (``assess`` and its legacy alias
-    ``corpus``); a decorator-only parser would miss both and let a document name a
-    command the CLI does not have.
+    Not from `app.registered_commands` and not from decorator text: the command spine registers
+    one callback under two names (`assess` and its legacy alias `corpus`), and a decorator-only
+    parser is a second description of the CLI that can drift. `registered_names` is the same
+    function the import-time surface verifier uses, so there is exactly one reading of "the
+    commands this CLI has".
     """
     from neuralstrike.main import app
+    from neuralstrike.safety.surface import registered_names
 
-    names: set[str] = set()
-    for info in app.registered_commands:
-        if info.name is not None:
-            names.add(info.name)
-        elif info.callback is not None:
-            names.add(info.callback.__name__.replace("_", "-"))
-    return names
+    return registered_names(app)
 
 
 SUPPORT_MATRIX = ROOT / "docs/SUPPORT_MATRIX.md"

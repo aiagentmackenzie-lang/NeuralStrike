@@ -13,6 +13,7 @@ from rich.panel import Panel
 from neuralstrike import __version__
 from neuralstrike.core.exceptions import ValidationError
 from neuralstrike.safety import HITLGate, classify_intent
+from neuralstrike.safety.surface import verify_surface
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
     from neuralstrike.integrations.neuralguard import NeuralGuardScreen
     from neuralstrike.integrations.scarletai import ExerciseTelemetry
     from neuralstrike.oracles.base import Oracle
+from neuralstrike.reports.paths import report_destination
 from neuralstrike.scope import load_scope
 from neuralstrike.utils.artifacts import write_private_artifact
 from neuralstrike.utils.logging import configure_logging, get_logger
@@ -162,8 +164,23 @@ def forge(
     goal: str = typer.Option(..., help="The adversarial goal."),
     target_type: str = typer.Option("remote", help="Target type: 'local' or 'remote'."),
     iterations: int = typer.Option(10, help="Max iterations (1-100)."),
+    scope_file: str | None = typer.Option(
+        None,
+        "--scope-file",
+        help="Rules-of-engagement YAML/JSON. Enforced only when supplied — see SUPPORT_MATRIX.md.",
+    ),
+    intent: str | None = typer.Option(
+        None,
+        "--intent",
+        help="Declared intent. An irreversible one requires --require-approval (HITL, fail-closed).",
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for an irreversible intent."
+    ),
 ) -> None:
     """Automated iterative jailbreak generation via JailbreakForge."""
+    _apply_scope(scope_file, target, intent)
+    _apply_safety(intent, require_approval)
     validate_target_model(target)
     validate_iteration_bounds(iterations)
     if target_type not in {"local", "remote"}:
@@ -198,8 +215,23 @@ def poison(
     payload: str | None = typer.Option(None, help="Persistence payload to inject."),
     extract: bool = typer.Option(False, help="Extract system prompt."),
     target_type: str = typer.Option("remote", help="Target type: 'local' or 'remote'."),
+    scope_file: str | None = typer.Option(
+        None,
+        "--scope-file",
+        help="Rules-of-engagement YAML/JSON. Enforced only when supplied — see SUPPORT_MATRIX.md.",
+    ),
+    intent: str | None = typer.Option(
+        None,
+        "--intent",
+        help="Declared intent. An irreversible one requires --require-approval (HITL, fail-closed).",
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for an irreversible intent."
+    ),
 ) -> None:
     """Manipulate agent context and extract system prompts."""
+    _apply_scope(scope_file, target, intent)
+    _apply_safety(intent, require_approval)
     validate_target_model(target)
     if not payload and not extract:
         console.print("[red]Specify either --payload or --extract[/red]")
@@ -229,8 +261,23 @@ def exhaust(
     tokens: int = typer.Option(50_000, help="Approximate tokens to generate (max 100000)."),
     force: bool = typer.Option(False, help="Required when --tokens exceeds 10000."),
     target_type: str = typer.Option("remote", help="Target type: 'local' or 'remote'."),
+    scope_file: str | None = typer.Option(
+        None,
+        "--scope-file",
+        help="Rules-of-engagement YAML/JSON. Enforced only when supplied — see SUPPORT_MATRIX.md.",
+    ),
+    intent: str | None = typer.Option(
+        None,
+        "--intent",
+        help="Declared intent. An irreversible one requires --require-approval (HITL, fail-closed).",
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for an irreversible intent."
+    ),
 ) -> None:
     """DoS via context-window exhaustion. Use responsibly on authorized targets."""
+    _apply_scope(scope_file, target, intent)
+    _apply_safety(intent, require_approval)
     validate_target_model(target)
     if target_type not in {"local", "remote"}:
         raise ValidationError("target_type must be 'local' or 'remote'")
@@ -255,8 +302,23 @@ def recon(
     target: str = typer.Option(..., help="Target URL (e.g. http://localhost:11434)."),
     full: bool = typer.Option(False, help="Perform full capabilities mapping."),
     target_type: str = typer.Option("remote", help="Target type for tool enumeration."),
+    scope_file: str | None = typer.Option(
+        None,
+        "--scope-file",
+        help="Rules-of-engagement YAML/JSON. Enforced only when supplied — see SUPPORT_MATRIX.md.",
+    ),
+    intent: str | None = typer.Option(
+        None,
+        "--intent",
+        help="Declared intent. An irreversible one requires --require-approval (HITL, fail-closed).",
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for an irreversible intent."
+    ),
 ) -> None:
     """Scan for LLM endpoints and enumerate capabilities."""
+    _apply_scope(scope_file, target, intent)
+    _apply_safety(intent, require_approval)
     validate_url(target, field="target")
     if target_type not in {"local", "remote"}:
         raise ValidationError("target_type must be 'local' or 'remote'")
@@ -298,8 +360,23 @@ def hijack(
     tool: str = typer.Option(..., help="Tool name to hijack."),
     payload: str = typer.Option(..., help="Malicious parameter/payload."),
     target_type: str = typer.Option("remote", help="Target type: 'local' or 'remote'."),
+    scope_file: str | None = typer.Option(
+        None,
+        "--scope-file",
+        help="Rules-of-engagement YAML/JSON. Enforced only when supplied — see SUPPORT_MATRIX.md.",
+    ),
+    intent: str | None = typer.Option(
+        None,
+        "--intent",
+        help="Declared intent. An irreversible one requires --require-approval (HITL, fail-closed).",
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for an irreversible intent."
+    ),
 ) -> None:
     """Exploit tool-use via FunctionHijack parameter injection."""
+    _apply_scope(scope_file, target, intent)
+    _apply_safety(intent, require_approval)
     validate_target_model(target)
     if target_type not in {"local", "remote"}:
         raise ValidationError("target_type must be 'local' or 'remote'")
@@ -322,8 +399,23 @@ def confuse(
     target_tool: str = typer.Option(..., help="Sensitive tool to redirect from."),
     decoy_tool: str = typer.Option(..., help="Decoy tool to redirect to."),
     target_type: str = typer.Option("remote", help="Target type: 'local' or 'remote'."),
+    scope_file: str | None = typer.Option(
+        None,
+        "--scope-file",
+        help="Rules-of-engagement YAML/JSON. Enforced only when supplied — see SUPPORT_MATRIX.md.",
+    ),
+    intent: str | None = typer.Option(
+        None,
+        "--intent",
+        help="Declared intent. An irreversible one requires --require-approval (HITL, fail-closed).",
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for an irreversible intent."
+    ),
 ) -> None:
     """Run a tool-confusion attack (redirect to a decoy tool)."""
+    _apply_scope(scope_file, target, intent)
+    _apply_safety(intent, require_approval)
     validate_target_model(target)
     if target_type not in {"local", "remote"}:
         raise ValidationError("target_type must be 'local' or 'remote'")
@@ -346,8 +438,23 @@ def schema_poison(
     tool: str = typer.Option(..., help="Tool name to redefine."),
     description: str = typer.Option(..., help="New malicious description/purpose."),
     target_type: str = typer.Option("remote", help="Target type: 'local' or 'remote'."),
+    scope_file: str | None = typer.Option(
+        None,
+        "--scope-file",
+        help="Rules-of-engagement YAML/JSON. Enforced only when supplied — see SUPPORT_MATRIX.md.",
+    ),
+    intent: str | None = typer.Option(
+        None,
+        "--intent",
+        help="Declared intent. An irreversible one requires --require-approval (HITL, fail-closed).",
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for an irreversible intent."
+    ),
 ) -> None:
     """Run a schema-poisoning attack (redefine a tool's purpose)."""
+    _apply_scope(scope_file, target, intent)
+    _apply_safety(intent, require_approval)
     validate_target_model(target)
     if target_type not in {"local", "remote"}:
         raise ValidationError("target_type must be 'local' or 'remote'")
@@ -376,8 +483,23 @@ def intercept(
         None, help="Capability to inject into tools/list responses (e.g. exec_shell)."
     ),
     inject_schema: str | None = typer.Option(None, help="JSON schema string for the injected capability."),
+    scope_file: str | None = typer.Option(
+        None,
+        "--scope-file",
+        help="Rules-of-engagement YAML/JSON. Enforced only when supplied — see SUPPORT_MATRIX.md.",
+    ),
+    intent: str | None = typer.Option(
+        None,
+        "--intent",
+        help="Declared intent. An irreversible one requires --require-approval (HITL, fail-closed).",
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for an irreversible intent."
+    ),
 ) -> None:
     """Start the MCP Interceptor proxy to manipulate tool traffic."""
+    _apply_scope(scope_file, url, intent)
+    _apply_safety(intent, require_approval)
     validate_url(url, field="url")
     validate_port(port)
     if bind_host not in {"127.0.0.1", "0.0.0.0", "localhost"}:
@@ -426,8 +548,23 @@ def pivot(
     to_agent: str = typer.Option(..., help="High-privilege agent name."),
     instruction: str = typer.Option(..., help="Malicious instruction to delegate."),
     target_type: str = typer.Option("remote", help="Target type: 'local' or 'remote'."),
+    scope_file: str | None = typer.Option(
+        None,
+        "--scope-file",
+        help="Rules-of-engagement YAML/JSON. Enforced only when supplied — see SUPPORT_MATRIX.md.",
+    ),
+    intent: str | None = typer.Option(
+        None,
+        "--intent",
+        help="Declared intent. An irreversible one requires --require-approval (HITL, fail-closed).",
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for an irreversible intent."
+    ),
 ) -> None:
     """Perform lateral movement in a multi-agent system via AgentPivot."""
+    _apply_scope(scope_file, target_model, intent)
+    _apply_safety(intent, require_approval)
     validate_target_model(target_model, field="target-model")
     if target_type not in {"local", "remote"}:
         raise ValidationError("target_type must be 'local' or 'remote'")
@@ -449,8 +586,23 @@ def map_network(
     framework: str = typer.Option(..., help="Framework (crewai, autogen, langchain)."),
     target_model: str = typer.Option(..., help="LLM to query for agent discovery."),
     target_type: str = typer.Option("remote", help="Target type: 'local' or 'remote'."),
+    scope_file: str | None = typer.Option(
+        None,
+        "--scope-file",
+        help="Rules-of-engagement YAML/JSON. Enforced only when supplied — see SUPPORT_MATRIX.md.",
+    ),
+    intent: str | None = typer.Option(
+        None,
+        "--intent",
+        help="Declared intent. An irreversible one requires --require-approval (HITL, fail-closed).",
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for an irreversible intent."
+    ),
 ) -> None:
     """Discover agents and trust levels in a multi-agent system."""
+    _apply_scope(scope_file, target_model, intent)
+    _apply_safety(intent, require_approval)
     validate_target_model(target_model, field="target-model")
     if target_type not in {"local", "remote"}:
         raise ValidationError("target_type must be 'local' or 'remote'")
@@ -471,8 +623,23 @@ def map_network(
 def extract(
     target: str = typer.Option(..., help="Target model for fingerprinting."),
     target_type: str = typer.Option("remote", help="Target type: 'local' or 'remote'."),
+    scope_file: str | None = typer.Option(
+        None,
+        "--scope-file",
+        help="Rules-of-engagement YAML/JSON. Enforced only when supplied — see SUPPORT_MATRIX.md.",
+    ),
+    intent: str | None = typer.Option(
+        None,
+        "--intent",
+        help="Declared intent. An irreversible one requires --require-approval (HITL, fail-closed).",
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for an irreversible intent."
+    ),
 ) -> None:
     """Run inference/fingerprinting prompts against a target model."""
+    _apply_scope(scope_file, target, intent)
+    _apply_safety(intent, require_approval)
     validate_target_model(target)
     if target_type not in {"local", "remote"}:
         raise ValidationError("target_type must be 'local' or 'remote'")
@@ -495,8 +662,23 @@ def timing(
     prompt: str = typer.Option("hello", help="Prompt to time."),
     iterations: int = typer.Option(5, help="Number of timed calls (1-100)."),
     target_type: str = typer.Option("remote", help="Target type: 'local' or 'remote'."),
+    scope_file: str | None = typer.Option(
+        None,
+        "--scope-file",
+        help="Rules-of-engagement YAML/JSON. Enforced only when supplied — see SUPPORT_MATRIX.md.",
+    ),
+    intent: str | None = typer.Option(
+        None,
+        "--intent",
+        help="Declared intent. An irreversible one requires --require-approval (HITL, fail-closed).",
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for an irreversible intent."
+    ),
 ) -> None:
     """Measure average response latency (informational; not a model identifier)."""
+    _apply_scope(scope_file, target, intent)
+    _apply_safety(intent, require_approval)
     validate_target_model(target)
     validate_iteration_bounds(iterations)
     if target_type not in {"local", "remote"}:
@@ -546,8 +728,23 @@ def c2(
     list_agents: bool = typer.Option(False, help="List registered agents and exit."),
     deregister: str | None = typer.Option(None, help="Deregister an agent by ID."),
     registry_file: str | None = typer.Option(None, help="Path to the agent registry JSON."),
+    scope_file: str | None = typer.Option(
+        None,
+        "--scope-file",
+        help="Rules-of-engagement YAML/JSON. Enforced only when supplied — see SUPPORT_MATRIX.md.",
+    ),
+    intent: str | None = typer.Option(
+        None,
+        "--intent",
+        help="Declared intent. An irreversible one requires --require-approval (HITL, fail-closed).",
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for an irreversible intent."
+    ),
 ) -> None:
     """Orchestrate compromised agents via a persistent AgentC2 registry."""
+    _apply_scope(scope_file, agent_id or "agent-registry", intent)
+    _apply_safety(intent, require_approval)
     from neuralstrike.modules.post_ex.agent_c2 import AgentC2
 
     engine = AgentC2(registry_file=registry_file)
@@ -620,8 +817,23 @@ def evade(
         "persona",
         help="Technique: persona | mimicry | delimiter_wrap | steganography | steganographic (deprecated).",
     ),
+    scope_file: str | None = typer.Option(
+        None,
+        "--scope-file",
+        help="Rules-of-engagement YAML/JSON. Enforced only when supplied — see SUPPORT_MATRIX.md.",
+    ),
+    intent: str | None = typer.Option(
+        None,
+        "--intent",
+        help="Declared intent. An irreversible one requires --require-approval (HITL, fail-closed).",
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for an irreversible intent."
+    ),
 ) -> None:
     """Apply stealth techniques to bypass anomaly detectors."""
+    _apply_scope(scope_file, "local-attacker-model", intent)
+    _apply_safety(intent, require_approval)
     valid = {"persona", "mimicry", "delimiter_wrap", "steganography", "steganographic"}
     if technique not in valid:
         raise ValidationError(f"--technique must be one of {sorted(valid)}")
@@ -698,8 +910,23 @@ def judge_model_list(
         "http://localhost:11434",
         help="Ollama base URL to list installed models from.",
     ),
+    scope_file: str | None = typer.Option(
+        None,
+        "--scope-file",
+        help="Rules-of-engagement YAML/JSON. Enforced only when supplied — see SUPPORT_MATRIX.md.",
+    ),
+    intent: str | None = typer.Option(
+        None,
+        "--intent",
+        help="Declared intent. An irreversible one requires --require-approval (HITL, fail-closed).",
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for an irreversible intent."
+    ),
 ) -> None:
     """List installed Ollama models (Decision D1 — never guess the Judge model)."""
+    _apply_scope(scope_file, target, intent)
+    _apply_safety(intent, require_approval)
     validate_url(target, field="target")
     from neuralstrike.core.llm_manager import LLMManager
 
@@ -1113,8 +1340,6 @@ def smoke(
     if format not in {"sarif", "json"}:
         raise ValidationError("--format must be sarif|json")
     _apply_verbosity(quiet, verbose)
-    from pathlib import Path
-
     from neuralstrike.adapters.base import TargetAdapter
     from neuralstrike.adapters.langgraph import LangGraphAdapter
     from neuralstrike.attacks.indirect import IndirectHarness
@@ -1150,8 +1375,7 @@ def smoke(
             adapter="langgraph",
             target="bundled-vulnerable-fixture",
         )
-        ext = ".sarif" if format == "sarif" else ".json"
-        path = Path(out + ext)
+        path = report_destination(out, format)
         content = to_sarif(corpus_run) if format == "sarif" else to_json(corpus_run)
         write_private_artifact(path, content)
         overall = corpus_run.to_dict()["overall"]
@@ -1358,6 +1582,19 @@ def neuralguard_bench(
     ),
     quiet: bool = typer.Option(False, "--quiet", help="Reduce logging to WARNING and above."),
     verbose: bool = typer.Option(False, "--verbose", help="Increase logging to DEBUG."),
+    scope_file: str | None = typer.Option(
+        None,
+        "--scope-file",
+        help="Rules-of-engagement YAML/JSON. Enforced only when supplied — see SUPPORT_MATRIX.md.",
+    ),
+    intent: str | None = typer.Option(
+        None,
+        "--intent",
+        help="Declared intent. An irreversible one requires --require-approval (HITL, fail-closed).",
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for an irreversible intent."
+    ),
 ) -> None:
     """Run the canonical attack chain against a NeuralGuard-defended victim.
 
@@ -1372,6 +1609,8 @@ def neuralguard_bench(
     against the neuralguard package, or --neuralguard-url for a live
     deployment.
     """
+    _apply_scope(scope_file, target_url or neuralguard_url or "bundled-victim", intent)
+    _apply_safety(intent, require_approval)
     _apply_verbosity(quiet, verbose)
     from neuralstrike.integrations import (
         BundledNeuralGuardFixture,
@@ -1631,6 +1870,19 @@ def purple_report(
     ),
     quiet: bool = typer.Option(False, "--quiet", help="Reduce logging to WARNING and above."),
     verbose: bool = typer.Option(False, "--verbose", help="Increase logging to DEBUG."),
+    scope_file: str | None = typer.Option(
+        None,
+        "--scope-file",
+        help="Rules-of-engagement YAML/JSON. Enforced only when supplied — see SUPPORT_MATRIX.md.",
+    ),
+    intent: str | None = typer.Option(
+        None,
+        "--intent",
+        help="Declared intent. An irreversible one requires --require-approval (HITL, fail-closed).",
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for an irreversible intent."
+    ),
 ) -> None:
     """Build the detection-coverage report for a telemetry-on exercise.
 
@@ -1642,6 +1894,8 @@ def purple_report(
     token; queries FAIL LOUD (a report must never be silently partial — the
     opposite of the telemetry pipe's fail-soft).
     """
+    _apply_scope(scope_file, scarlet_base_url or "scarletai", intent)
+    _apply_safety(intent, require_approval)
     _apply_verbosity(quiet, verbose)
     import json as _json
     from datetime import datetime, timezone
@@ -1854,12 +2108,21 @@ def doctor(
     max_response_bytes: int = typer.Option(16 * 1024 * 1024, min=1, help="Maximum decoded response bytes."),
     out: str | None = typer.Option(None, help="Optional private capability receipt JSON path."),
     scope_file: str | None = typer.Option(None, help="Rules-of-engagement file for target validation."),
+    intent: str | None = typer.Option(
+        None,
+        "--intent",
+        help="Declared intent. An irreversible one requires --require-approval (HITL, fail-closed).",
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for an irreversible intent."
+    ),
 ) -> None:
     """Probe OpenAI protocol capabilities; this may incur provider inference cost.
 
     Exit 0 means the requested capability was observed, not a security pass.
     Exit 3 means preflight is incomplete. No consequential tool handlers run.
     """
+    _apply_safety(intent, require_approval)
     import json
     from pathlib import Path
 
@@ -2160,14 +2423,10 @@ def assess(
             raise
         corpus_run = recorder.finish()
         console.print(f"Assessment bundle → {recorder.path}")
-        ext = {"sarif": ".sarif", "json": ".json", "junit": ".xml", "markdown": ".md", "pdf": ".pdf"}[format]
-        path = out + ext
+        out_path = report_destination(out, format)
         content = render_report(corpus_run, format)
-        from pathlib import Path
-
-        out_path = Path(path)
         write_private_artifact(out_path, content)
-        console.print(Panel(corpus_run_summary(corpus_run), title=f"Corpus run → {path}"))
+        console.print(Panel(corpus_run_summary(corpus_run), title=f"Corpus run → {out_path}"))
         console.print(
             f"{len(scenarios)} scenarios · {corpus_run.overall_total} trials · "
             f"ASR {corpus_run.asr_display} · coverage {corpus_run.coverage:.2%}"
@@ -3166,6 +3425,14 @@ def mcp_inspect(
     requests_per_minute: float | None = typer.Option(None, min=0.001, help="Shared RPC rate limit."),
     run_dir: str = typer.Option("runs", help="Private immutable MCP inspection receipt root."),
     scope_file: str | None = typer.Option(None, help="Rules-of-engagement target scope file."),
+    intent: str | None = typer.Option(
+        None,
+        "--intent",
+        help="Declared intent. An irreversible one requires --require-approval (HITL, fail-closed).",
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for an irreversible intent."
+    ),
 ) -> None:
     """Read-only pinned MCP discovery over HTTP or stdio; no security verdict.
 
@@ -3173,6 +3440,7 @@ def mcp_inspect(
     dispatched once, without retries or input-required continuation. Starting a
     stdio server executes trusted local code; this is not a process sandbox.
     """
+    _apply_safety(intent, require_approval)
     from importlib.metadata import PackageNotFoundError, version
     from pathlib import Path
 
@@ -3578,6 +3846,19 @@ def judge_audit(
     json_output: bool = typer.Option(False, "--json", help="Emit raw JSON report to stdout."),
     quiet: bool = typer.Option(False, "--quiet", help="Reduce logging to WARNING and above."),
     verbose: bool = typer.Option(False, "--verbose", help="Increase logging to DEBUG."),
+    scope_file: str | None = typer.Option(
+        None,
+        "--scope-file",
+        help="Rules-of-engagement YAML/JSON. Enforced only when supplied — see SUPPORT_MATRIX.md.",
+    ),
+    intent: str | None = typer.Option(
+        None,
+        "--intent",
+        help="Declared intent. An irreversible one requires --require-approval (HITL, fail-closed).",
+    ),
+    require_approval: bool = typer.Option(
+        False, "--require-approval", help="Explicit operator approval for an irreversible intent."
+    ),
 ) -> None:
     """Audit the Judge as configured: bias battery + manipulation family + ensemble disagreement.
 
@@ -3593,6 +3874,8 @@ def judge_audit(
 
     Exit codes: 0 (audit complete, informational) · 1 validation · 3 runtime/config error.
     """
+    _apply_scope(scope_file, target or "configured-judge", intent)
+    _apply_safety(intent, require_approval)
     if target_type not in {"local", "remote"}:
         raise ValidationError("target_type must be 'local' or 'remote'")
     if judge_prompt not in {"framed", "blind"}:
@@ -3929,7 +4212,7 @@ def replay(
 
             content = json.dumps(report.to_dict(), indent=2, sort_keys=True)
         if out:
-            write_private_artifact(Path(out), content)
+            write_private_artifact(report_destination(out, format), content)
     except (BundleError, OSError) as exc:
         console.print(f"[red]Bundle error:[/red] {exc}")
         raise typer.Exit(3) from exc
@@ -4037,6 +4320,13 @@ def efficacy(
     console.print(
         "Offline efficacy report exported; not a security gate. Independent validation not established."
     )
+
+
+# The declared command surface (src/neuralstrike/safety/surface.py) must cover every registered
+# command, and every command that sends traffic must enforce the scope and HITL gates. This runs
+# at import time on purpose: an unclassified command refuses to dispatch rather than defaulting to
+# the permissive answer, which also means `--help` cannot advertise a command nobody classified.
+verify_surface(app)
 
 
 if __name__ == "__main__":

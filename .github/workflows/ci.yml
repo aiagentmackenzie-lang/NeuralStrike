@@ -26,19 +26,18 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      - name: Install
+      - name: Install (compatibility probe — unbounded resolution, by design)
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev,mcp]"
 
-      - name: Ruff
-        run: ruff check src tests
-
-      - name: Mypy
-        run: mypy src
-
-      - name: Pytest with coverage
-        run: pytest --cov=neuralstrike --cov-report=term-missing --cov-fail-under=85
+      # This job exists to find out whether the *latest* resolution still works on each
+      # supported Python. It is deliberately not locked: locking it would make it a duplicate of
+      # `supply-chain` and would stop it discovering a break. The locked, gate-bearing install is
+      # `supply-chain` (and `scripts/dev_env.sh` locally), and both run the same gate script.
+      - name: Gate (scripts/ci_gate.sh)
+        run: |
+          PYTHON=python bash scripts/ci_gate.sh
 
   supply-chain:
     runs-on: ubuntu-latest
@@ -58,14 +57,11 @@ jobs:
           pip install --require-hashes -r requirements-dev.txt
           pip install --no-deps -e .
 
-      - name: Ruff
-        run: ruff check src tests
-
-      - name: Mypy
-        run: mypy src
-
-      - name: Pytest
-        run: pytest -q
+      # The same file contributors run (`scripts/dev_env.sh` installs this exact lock, then calls
+      # this exact script), so a green local gate means the locked gate is green.
+      - name: Gate (scripts/ci_gate.sh)
+        run: |
+          PYTHON=python bash scripts/ci_gate.sh
 
       - name: pip-audit
         run: |

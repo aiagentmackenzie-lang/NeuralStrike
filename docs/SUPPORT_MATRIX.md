@@ -31,6 +31,62 @@ is a local observation, not evidence.
 | Legacy MCP revisions | Only 2026-07-28 is declared; older lifecycle behaviour is untested and must not be assumed |
 | LangGraph Server HTTP/SSE (`--adapter langgraph-server`) | Not the compiled local graph path that Phase 2 accepted |
 | `attack-memory`, judge hardening (`judge-audit`) | Measured locally, no independent labels or review |
+| Adaptive attacks (`adaptive`: PAIR, TAP beam=1, Crescendo, trajectory-conditioned trace) | Iterative strategies against a real adapter; no acceptance record, and every result is a local observation |
+| `evaluate` | k-trial canary-extraction probe. Its baseline gate is implemented and tested, but the probe's accuracy has no independent labels |
+| `exec-context` | Execution-context and skill attack pack (poisoned skills, rules-file backdoors, triggered injection). No acceptance record |
+| `minja`, `rag-poison` | Memory-injection and retrieval-corpus poisoning. Measured locally on declared profiles; corroborated nowhere outside this repository |
+| `pack` | Benchmark packs (HarmBench / JailbreakBench / CyberSecEval). Correctness is bounded by the third-party corpus and its licence, not by this repository |
+| `judge-model-list` | Operator utility: lists the models an Ollama endpoint has. Sends a request and attacks nothing |
+| `purple-report` | Detection-coverage join against a live SecurityScarletAI deployment. Read-only there, but it needs that deployment to exist; a report without one is not a result |
+
+## Legacy offensive commands — no acceptance claim
+
+These fifteen commands are in the CLI, they are not in any acceptance record, and they are named
+here so that "it isn't excluded, so it must work" is not the only available reading. Every row
+below sends traffic to a model, a server or a network target. **None of them carries a Phase 2
+acceptance claim**, none has an efficacy record, and a result from any of them is a local
+observation — not evidence, and never a statement about a customer system.
+
+The table is not prose: it is generated from `COMMAND_SURFACE` and `LEGACY_EFFECT` in
+`src/neuralstrike/safety/surface.py`, and `tests/test_command_surface.py` fails if a legacy
+command appears in the CLI without appearing here, or if either table is edited alone.
+
+| Command | What it is | Effect class | Gate |
+|---|---|---|---|
+| `forge` | Iterative jailbreak loop (attacker → victim → judge) | local simulation | `--scope-file` / `--intent` / `--require-approval` |
+| `poison` | Context manipulation and system-prompt extraction | local simulation | same |
+| `exhaust` | Context-window exhaustion (DoS class) | local simulation | same |
+| `recon` | Scans LLM endpoints and enumerates capabilities | informational | same |
+| `hijack` | Tool-use parameter injection | local simulation | same |
+| `confuse` | Tool-confusion attack (redirect to a decoy tool) | local simulation | same |
+| `schema-poison` | Redefines a tool's purpose through its schema | local simulation | same |
+| `intercept` | MCP interception proxy — forwards and can rewrite tool traffic | local simulation | same |
+| `pivot` | Lateral movement across agent trust boundaries | experimental | same |
+| `map-network` | Discovers agents and trust levels in a multi-agent system | informational | same |
+| `extract` | Fingerprinting prompts against a model | informational | same |
+| `timing` | Average response latency; **not** a model identifier | informational | same |
+| `c2` | Persistent compromised-agent registry and dispatch (local JSON state, no daemon) | experimental | same |
+| `evade` | Persona wrap, mimicry, delimiter wrap, invisible-Unicode steganography | local simulation | same |
+| `neuralguard-bench` | Canonical attack chain against a NeuralGuard-defended victim | experimental | same |
+
+Effect classes: **local simulation** drives a real model but has no independent acceptance record ·
+**informational** reports an observation and asserts no vulnerability · **experimental** is an
+attack technique with no efficacy record at all.
+
+### What the gate on these commands does and does not do
+
+It is the same gate the supported commands use — `_apply_scope` then `_apply_safety` — and it is
+**opt-in**: `--scope-file` is enforced only when you supply one, exactly as on `scan` and
+`assess`. This table does not create a global gate, and no document in this repository may claim
+one. What it does create is uniformity: before this table existed, **11 of the 42 registered
+command names** enforced both gates, **3** enforced the scope gate only (`doctor`, `mcp-inspect`,
+`scope-check`), **1** enforced the HITL gate only (`safety-check`), and **27** enforced neither —
+15 of which send traffic. Nothing in the repository said which was which.
+
+Given a scope file, an out-of-scope target is refused before the attack code is constructed — a
+contract proves this with a poisoned implementation that fails the test if it is ever reached.
+Given `--intent`, an irreversible intent is refused without `--require-approval`. Neither check
+sandboxes anything: they are operator controls, not containment.
 
 ## Excluded
 
