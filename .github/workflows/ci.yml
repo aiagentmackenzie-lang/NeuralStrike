@@ -86,6 +86,89 @@ jobs:
           neuralstrike smoke
           test -f neuralstrike-smoke.json
 
+
+  artifact:
+    # Phase 4 gate P4-2, wheel half: the package must work when it is NOT the checkout.
+    # The editable install the other jobs use can never catch missing package data, a stale
+    # version or a dependency the wheel forgot to declare, so this job installs the built wheel
+    # into a clean environment outside the repository and runs the offline smoke from there.
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade pip build
+          # Build from outside the repository: the checkout contains a gitignored `build/`
+          # directory that shadows the `build` module when cwd is the repo root.
+          cd "$RUNNER_TEMP"
+          python -m build "$GITHUB_WORKSPACE" --outdir "$RUNNER_TEMP/dist"
+
+      - name: Install the wheel into a clean environment outside the checkout
+        run: |
+          python -m venv "$RUNNER_TEMP/wheel-venv"
+          "$RUNNER_TEMP/wheel-venv/bin/python" -m pip install --upgrade pip
+          "$RUNNER_TEMP/wheel-venv/bin/python" -m pip install "$RUNNER_TEMP"/dist/*.whl
+
+      - name: The installed package must not resolve to the checkout
+        run: |
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/wheel-venv/bin/python" - <<'PY'
+          import pathlib, sys
+          import neuralstrike
+          location = pathlib.Path(neuralstrike.__file__).resolve()
+          print(location)
+          if "site-packages" not in str(location):
+              sys.exit(f"imported from {location}, not site-packages")
+          if "GITHUB_WORKSPACE" in str(location) or "/work/NeuralStrike/" in str(location):
+              sys.exit(f"the checkout leaked into the import path: {location}")
+          PY
+
+      - name: Offline smoke from the installed wheel
+        run: |
+          mkdir -p "$RUNNER_TEMP/wheel-smoke" && cd "$RUNNER_TEMP/wheel-smoke"
+          "$RUNNER_TEMP/wheel-venv/bin/neuralstrike" smoke --out smoke
+          test -f smoke.json
+
+      - name: SBOM of the installed wheel environment
+        run: |
+          python -m pip install --upgrade pip cyclonedx-bom
+          cyclonedx-py environment "$RUNNER_TEMP/wheel-venv/bin/python" \
+            --output-reproducible -o "$RUNNER_TEMP/dist/sbom.json"
+
+      - name: Bind the artifacts into one release manifest
+        run: |
+          VERSION=$(python - <<'PY'
+          import pathlib, os
+          wheel = next(pathlib.Path(os.environ["RUNNER_TEMP"], "dist").glob("*.whl"))
+          print(wheel.name.split("-")[1])
+          PY
+          )
+          python scripts/release_manifest.py \
+            --version "$VERSION" \
+            --commit "$GITHUB_SHA" \
+            --tag "sha-$GITHUB_SHA" \
+            --wheel "$RUNNER_TEMP"/dist/*.whl \
+            --sdist "$RUNNER_TEMP"/dist/*.tar.gz \
+            --sbom "$RUNNER_TEMP/dist/sbom.json" \
+            --out "$RUNNER_TEMP/dist/release-manifest.json"
+          cat "$RUNNER_TEMP/dist/release-manifest.json"
+
+      - name: Upload the wheel, sdist, SBOM and manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-candidate-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/dist/*
+            ${{ runner.temp }}/wheel-smoke/smoke.json
+          if-no-files-found: error
+
   dashboard:
     runs-on: ubuntu-latest
     needs: quality

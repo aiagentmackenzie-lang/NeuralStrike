@@ -121,6 +121,24 @@ jobs:
             --type cyclonedx \
             "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${IMAGE_DIGEST}"
 
+      - name: Bind the release into one manifest
+        if: inputs.publish
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE_REPO: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        run: |
+          python scripts/release_manifest.py \
+            --version "${{ inputs.version }}" \
+            --commit "$GITHUB_SHA" \
+            --tag "v${{ inputs.version }}" \
+            --wheel dist/*.whl \
+            --sdist dist/*.tar.gz \
+            --sbom neuralstrike-sbom.json \
+            --image-repository "$IMAGE_REPO" \
+            --image-digest "$IMAGE_DIGEST" \
+            --out release-manifest.json
+          cat release-manifest.json
+
       - name: Create GitHub release
         if: inputs.publish
         uses: softprops/action-gh-release@v2
@@ -130,4 +148,5 @@ jobs:
           files: |
             dist/*
             neuralstrike-sbom.json
+            release-manifest.json
           generate_release_notes: true
