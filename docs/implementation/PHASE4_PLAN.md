@@ -12,8 +12,7 @@ measured against this repository.
 
 Phase 3 remains **NOT ACCEPTED** and is unaffected by anything in this file.
 
-Date: 2026-11-11. Source revision at this assessment: `9824c7a` (P4-1 landed after it; the revision is
-updated on the commit that closes the gate).
+Date: 2026-11-11. Source revision at this assessment: `2b104d8`.
 
 ## The acceptance rule
 

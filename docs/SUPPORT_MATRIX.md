@@ -53,7 +53,7 @@ Numbers here come from the acceptance record, not from aspiration.
   are on **macOS arm64, Python 3.12.14**. Nothing else is claimed.
 - Container: `linux/amd64` image built and smoke-tested in CI, runs as uid 1000, artifact written
   mode 600. `linux/arm64` image built and started under emulation (import + `--help`) only.
-- Coverage gate: **85 %** enforced, **91.88 %** measured at `41670a7`.
+- Coverage gate: **85 %** enforced, **92 %** measured at `2b104d8` (1775 passed, 7 skipped).
 - Bundled offline smoke: 3 scenarios, 3 trials, ASR 33.3 %, coverage 100 % — a fixture check, not
   an efficacy result.
 - Response bodies are bounded (default 16 MiB decoded, `--max-response-bytes`); provider-reported
