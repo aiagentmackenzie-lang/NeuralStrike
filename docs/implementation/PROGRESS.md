@@ -2886,3 +2886,210 @@ old decorator parser could not see a callback registered under two names.
 **P4-1 is `MET`.** Phase 4 remains **NOT RELEASED**: P4-2 is `PARTIAL` for one reason only (no
 dispatched release, so the image-digest binding is unproven) and P4-6 is `OPEN` (three pilot teams
 — people). Phase 3 is untouched and still **NOT ACCEPTED**.
+
+### 2026-11-12 — E-12: the gate is one file, and the dev extra is locked
+
+Two separate faults produced the two red CI runs on 2026-11-11 and only one of them was the
+dependency. `.venv` had been rebuilt from an unbounded install, and the gate itself existed only as
+three inline workflow steps that no local command could reproduce. Both are fixed:
+`typer==0.28.0` is pinned; `scripts/dev_env.sh` installs `requirements-dev.txt` with
+`--require-hashes` (the same lock the CI `supply-chain` job installs) and then installs the project
+`--no-deps -e .`; and `scripts/ci_gate.sh` is now the single description of the gate, executed by
+both gating jobs and by any contributor.
+
+**What did not work, and why the obvious fix was refused.** The tempting change was to lock the
+`quality` matrix job too. The lock is compiled for CPython 3.12, and offline installs into fresh
+3.11 and 3.14 venvs fail on this machine because the uv cache holds only the 3.12 wheels
+(`aiohttp==3.14.5 needs to be downloaded from a registry`). Converting that job blind is the exact
+class of change that produced the red runs, so the matrix job stays unbounded and its step name now
+says it is a compatibility probe. The locked, gate-bearing install is `supply-chain`, and
+`scripts/dev_env.sh` mirrors it. `dev_env.sh` refuses a non-3.12 interpreter rather than resolving
+a different wheel set and calling it the same gate.
+
+**Contracts (10).** No workflow may inline `ruff`/`mypy`/`pytest` (the gate is one file); both
+gating jobs run the shared script; the script and the CI install issue the same three commands; the
+script refuses a mismatched interpreter; the lock's `typer` pin satisfies `pyproject.toml`; the
+README points at both scripts; both scripts are executable and parse as shell.
+
+One test failed first and was right to: `'pip install -e ".[dev,mcp]"' not in script` tripped on
+the explanatory *comment* that says why the unbounded install was removed. The assertion now reads
+executable lines only.
+
+### 2026-11-12 — E-1: the wheel no longer claims a stability its own gates deny
+
+`Development Status :: 5 - Production/Stable` → `4 - Beta`, because `PHASE4_PLAN.md` says
+**NOT RELEASED** and `PHASE3_ACCEPTANCE.md` says **NOT ACCEPTED**. The classifier ships on the
+package page and inside the wheel; it was the only place in the repository making that claim, and
+it was the first one a buyer would read.
+
+**Fail-before-fix.** `tests/test_release_stability.py` was written and run against the *unfixed*
+classifier first: two failures, recorded in the sprint packet
+(`e1-red-classifier.txt`). A second, weaker test in the same file was deleted before the fix — it
+asserted a subset of what the first one already asserted, and a redundant contract is a place for
+a future reader to think the stronger one was removed.
+
+### 2026-11-12 — E-3: one declared command surface, and every traffic-sending command gated
+
+Measured before changing anything, from the Typer command graph and `main.py`'s AST: 42 registered
+names (40 callbacks — `corpus` is the same callback as `assess`), of which **11 enforced both
+gates, 3 enforced scope only, 1 enforced the HITL gate only, and 27 enforced neither** — 15 of
+which send traffic. The backlog's "13 of 40" is wrong and the code wins; the corrected counts are
+in the backlog row, the support matrix and the README.
+
+`src/neuralstrike/safety/surface.py` declares every registered name once (command → sends-traffic →
+gate → kind → effect class). `verify_surface(app)` runs at **import time**, so an unclassified
+command refuses to dispatch — `--help` included. The 15 legacy commands plus `doctor`,
+`mcp-inspect`, `judge-audit`, `judge-model-list` and `purple-report` now accept `--scope-file`,
+`--intent` and `--require-approval` and call `_apply_scope` then `_apply_safety` before touching
+anything.
+
+**The limit is written down, not implied.** The scope file remains **opt-in** on every command,
+exactly as it was on `scan` and `assess`. This makes the gate uniform; it does not create a global
+gate, and the README no longer implies one.
+
+**What did not work.** The first insertion pass miscounted list elements as lines and dropped the
+gate calls 11 lines past the end of each docstring — two commands ended up validating an intent that
+did not exist in their signature. Reverted with `git checkout` and redone with correct arithmetic.
+That is why the contract asserts object identity of the *call site* rather than trusting a diff.
+
+**Contracts (86).** Table covers exactly the registered names; every row that sends traffic calls
+both gates and exposes both flags; a non-traffic row may not call them (except the two commands
+that *are* the gate); the legacy set is frozen; an unclassified new command refuses to dispatch
+(demonstrated on a fabricated app); a removed command leaves a stale row that also refuses. Plus
+behaviour: an out-of-scope target must not reach the code that would send traffic (poisoned
+implementation), and an in-scope approved run must reach it — otherwise a command that always
+exits 1 would pass every refusal test.
+
+### 2026-11-12 — E-2: the support matrix stops being silent about fifteen commands
+
+New section naming all fifteen legacy commands with their effect class (local simulation /
+informational / experimental), drawn from the package tables, plus a plain statement of what the
+gate does and does not do.
+
+**The contract found more than the backlog listed.** Eight further traffic-sending commands were
+absent from the matrix — `adaptive`, `evaluate`, `exec-context`, `minja`, `pack`, `rag-poison`,
+`judge-model-list`, `purple-report` — and are now classified under Experimental. That is the check
+working as intended on its first run.
+
+### 2026-11-12 — E-4: the quickstart starts inside the acceptance claims
+
+It opened with `judge-model-list` and then `forge`, an ungated legacy command, and reached the
+accepted path at step four. It now runs `doctor` → `assess` → `compare` → `evaluate`, with `smoke`
+offered as the no-model check. The fifteen legacy commands are one headed section with an explicit
+no-acceptance-claim warning and the opt-in scope limitation spelled out; the second table of the
+same fifteen commands is gone, and a contract fails if one reappears outside that section.
+
+### 2026-11-12 — E-5: `--out report.json` no longer writes `report.json.json`
+
+Reproduced first: `smoke --out "$D/report.json"` wrote `report.json.json` (recorded in
+`e5-red-extension.txt`). `neuralstrike.reports.paths.report_destination` appends the format's
+extension **only when the path has none**, and never replaces a suffix the operator typed — a path
+they named is not a suggestion. Applied to `smoke`, `assess` and `replay`; `--out smoke` →
+`smoke.json` is unchanged, because the offline example documents it.
+
+**The clause a naive fix gets wrong** is the third one: `--out report.txt --format json` must write
+`report.txt`, not `report.json`. Ten path cases cover it, plus an end-to-end CLI run over all three
+commands.
+
+### 2026-11-12 — E-9: the durable root is declared, and `/tmp` is no longer a citation
+
+This repository has lost `/tmp` evidence twice — the two exploratory AgentDojo trials and the whole
+Phase 0 acceptance directory — and one document still said the AgentDojo packet "is preserved at
+`/tmp/...`" long after a note recorded it as gone. `EVIDENCE.md` now declares the durable root
+(`~/Documents/Codex/2026-11-08/neuralstrike-phase3`), states the rule (a `/tmp` path is an
+instruction inside a code fence, never a citation), and keeps an inventory of what was lost.
+
+Thirteen stale citations across nine documents became tombstones. The contract strips fenced code
+blocks, exempts `PROGRESS.md` by name as dated history, and fails on any surviving `/tmp` citation
+that does not say the data is gone. It also asserts that **every durable path a document cites
+exists** — a declared root with dead citations is `/tmp` with a longer path.
+
+**What did not work.** The first version read line by line, and `PHASE3_MEASUREMENT_BOUNDARIES.md`
+says "were no\nlonger present": the loss marker and the path were on different lines, so the check
+flagged a sentence that was already honest. The document was reflowed to keep them together rather
+than the check being loosened.
+
+**What cannot be fixed.** Both lost artefacts are unrecoverable, and `evidence/deep_probe.py` —
+named and hashed by `PHASE0_ACCEPTANCE.md` — is not in this repository at all, so the Phase 0
+reproduction cannot be re-run from what is committed. A new finding, not in the backlog, recorded
+in `EVIDENCE.md` as a stated limit.
+
+### 2026-11-12 — E-11: both release variants written, no decision taken
+
+`PHASE4_PLAN.md` §P4-2 variants spells out Variant A (GitHub release + GHCR: permissions and a
+version string, no PyPI account) and Variant B (the same plus a PyPI account, a `PYPI_API_TOKEN`
+secret that does not exist, and a name availability check nobody has run), with the prerequisites
+as a table. Neither is chosen, nothing is published, and P4-2 stays `PARTIAL`.
+
+Reading `release.yml` without running it surfaced two candidate defects, recorded as
+**unconfirmed** because a reading is not a run: a multi-platform `docker/build-push-action` with
+`push: false` and `sbom`/`provenance` attestations, which buildx commonly refuses; and
+`python -m build` running from the repo root, the same `build/`-shadowing trap that already cost a
+red run once.
+
+### 2026-11-12 — E-10: BLOCKED, and the reason is a click somebody else has to make
+
+Dispatching `release.yml` is an external action and was not taken. It is blocked on two things, in
+order: approval to push (a dispatch runs the workflow definition on the default branch, which is
+still `a2e3b6a`, so dispatching now would test the old tree), and approval to dispatch. The
+workflow has still never run with `publish: false`; P4-2 stays `PARTIAL` for exactly that reason.
+
+### 2026-11-12 — E-7: a second seed for the write-first matrix, and the result is a null
+
+Pre-declared on disk before the run: own plan kind
+`native-tau-bench-retail-write-first-seed-replication-plan-v1`, `replicates` the write-first plan,
+**seed 11**, model `qwen3.5:2b`, payloads and expectations shared **by identity**. 12/12
+observations, 0 errors, exit 3 declared and observed.
+
+All four verdicts are identical to seed 7. The unguarded address payload mutated 3/3 again; under
+the binding the model again read twice (`get_user_details`, refused `cross_principal`, 6 refusals
+across 3 episodes), answered, and never offered `modify_user_address`, so the row is
+`not_exercised` again. The cancel payload again offered nothing but `respond` and is falsified
+again. A null is the result: the cancel payload is consistently weak rather than seed-unlucky, the
+"payload is strong" half of the write-first record is not a seed artefact, and the standing
+sentence is unchanged — the only class live-withheld under inference is the scoped read.
+
+**What did not work.** The first attempt was refused before the plan was written: `plan declares
+seed 7; refusing 11`. The seed is a declared constant, not a CLI knob — which is the right design
+and which meant the sprint had to add `seed_for(hypothesis)` and a declared
+`WRITE_FIRST_SEED_REPLICATION_SEED` instead of passing a flag. Then the reconciliation test failed
+because `exit-status.txt` held `OBSERVED_EXIT=3` rather than the bare observed code; the file was
+corrected to `3`, not the test.
+
+Two seeds are two seeds. No rate, no interval, nothing pooled, `paired_with` null on every row.
+
+### 2026-11-12 — E-8: the two Phase 3 residues, restated as permanent limits
+
+The backlog allowed two honest outcomes and this sprint took the second. A reproduced destructive
+effect needs an application this project did not author with a destructive tool at the boundary and
+external ground truth; none of the five declared applications has one (AgentDojo's deletion is
+native-simulated inside a profile we drive, tau-bench retail has no destructive tool). The
+persistent-memory *persistent* effect is falsified — 0 state violations across 72 observations —
+and what survives is recall contamination, where the one-stage 2/3 is recorded as non-determinism
+because the identical configuration returned 0/3.
+
+Both are stated as **permanent limits of the declared profiles**, with the reason, and P3-6 stays
+`PARTIAL` with exactly the shortfall the acceptance record names. The only route left is a new
+payload or a new profile; the first is forbidden by the master plan's non-goals and the second is a
+new declared plan, not a fix.
+
+**What did not work.** The first contract banned the phrase "reproduced destructive effect"
+anywhere in the section — including the sentence explaining what such an effect *would* require.
+A substring ban is not a claim detector; the check now targets completed claims.
+
+### 2026-11-12 — E-6: the tool-axis comparator is declared, not executed
+
+`TOOL_AXIS_COMPARATOR_PLAN.md` fixes the target, model, budgets (15 attempts, 20 minutes, seed 7,
+temperature 0.0), the row set and a single scorer applied to all three tools. Its core is the table
+written before any run: PyRIT and garak **cannot express** object authority, destructive action or
+persistent memory, because neither has environment state — so those rows are `unsupported` for
+them, never zero. The decision rule includes publishing a result that flatters another tool.
+
+It is not executed. `garak` is not installed and PyRIT's 2026-11-10 scratch environment is gone;
+installing either is a network fetch and needs approval. The plan says so in its own prerequisites
+table, and the contract fails if the document ever grows a result table without the run behind it.
+
+**Gates.** 2013 passed, 7 skipped; coverage 91.96 % (85 % enforced); `ruff` and `mypy` clean (147
+files). Phase 3 is still **NOT ACCEPTED** and Phase 4 still **NOT RELEASED**: P4-2 is `PARTIAL` on
+purpose (no dispatched release) and P4-6 is `OPEN` (people). Nothing was pushed; every commit is
+local.

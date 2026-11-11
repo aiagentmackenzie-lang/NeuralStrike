@@ -6,6 +6,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (engineering backlog E-1…E-12, 2026-11-12)
+- **The package no longer claims a stability its gates deny** (E-1). `Development Status :: 5 -
+  Production/Stable` → `4 - Beta`, because Phase 4 is NOT RELEASED and Phase 3 is NOT ACCEPTED.
+  `tests/test_release_stability.py` fails if the classifier and either status line ever disagree.
+- **One declared command surface** (E-3). `src/neuralstrike/safety/surface.py` declares every
+  registered command once — does it send traffic, which gate does it enforce, what kind is it — and
+  `verify_surface(app)` runs at import time, so an unclassified command refuses to dispatch. The 15
+  legacy commands plus `doctor`, `mcp-inspect`, `judge-audit`, `judge-model-list` and
+  `purple-report` now accept `--scope-file`, `--intent` and `--require-approval` and call
+  `_apply_scope`/`_apply_safety`. Measured before the change: 11 of 42 registered names enforced
+  both gates, 3 scope only, 1 HITL only, 27 neither. **The scope gate is still opt-in on every
+  command**; this makes the gate uniform, it does not create a global one.
+- **`--out report.json` no longer writes `report.json.json`** (E-5). `report_destination` appends
+  the format extension only when the path has none and never replaces a suffix the operator typed.
+  Applies to `smoke`, `assess` and `replay`.
+- **README** (E-4): the quickstart now runs `doctor` → `assess` → `compare` → `evaluate`; the
+  fifteen legacy commands live in one headed section that states they carry no acceptance claim and
+  that the scope check only runs when you supply a scope file. `docs/SUPPORT_MATRIX.md` (E-2) gains
+  the per-command legacy table and eight further classified rows.
+- **Development environment** (E-12): `typer==0.28.0` pinned; `scripts/dev_env.sh` installs the
+  hash-pinned dev lock and refuses a non-3.12 interpreter; `scripts/ci_gate.sh` is the single
+  description of the gate and both gating CI jobs execute it.
+- **Evidence durability** (E-9): `docs/implementation/EVIDENCE.md` declares the durable root and
+  the rule that `/tmp` is never a citation. Thirteen stale citations became tombstones, and
+  `tests/test_evidence_paths.py` asserts every durable path a document cites exists.
+- **Phase 3 residues restated as permanent limits** (E-8): destructive action stays
+  measured-not-reproduced and the persistent-memory persistent effect stays falsified; P3-6 stays
+  `PARTIAL`. **Released artifacts are unchanged — nothing was released.**
+
+### Added (Phase 3 measurement, 2026-11-12)
+- **Second declared seed** for the write-first matrix (E-7): plan kind
+  `native-tau-bench-retail-write-first-seed-replication-plan-v1`, seed 11, own pre-registered plan,
+  payloads and expectations shared by identity. Result: all four verdicts identical to seed 7 — a
+  null, recorded as one. The declared seed is a code constant and the runner refuses any other
+  `--seed`.
+- **Tool-axis comparator plan** (E-6): `docs/implementation/TOOL_AXIS_COMPARATOR_PLAN.md` declares
+  the target, budgets, row set and single scorer, and declares — before any run — the rows PyRIT
+  and garak cannot express as `unsupported`, never as zero. **Declared, not executed**: installing
+  either tool needs approval.
+
+### Added (contracts, 2026-11-12)
+- `tests/test_command_surface.py` (86), `tests/test_dev_environment.py` (10),
+  `tests/test_release_stability.py` (4), `tests/test_support_matrix.py` (65),
+  `tests/test_quickstart.py` (20), `tests/test_report_destination.py` (21),
+  `tests/test_evidence_paths.py` (8), `tests/test_phase3_residue_limits.py` (5),
+  `tests/test_tool_axis_plan.py` (7), `tests/test_engineering_backlog.py` (6). Suite: 1775 → 2013
+  passing, 7 skipped, coverage 91.96 %.
+
+
 ### Added (Phase 4 — the command spine: `assess`, `compare`, and an authenticated `scan`, 2026-11-11)
 - `assess` is the single assessment command (Phase 4 gate P4-1). It is the existing assessment
   implementation registered under a new name; `corpus` is the **same callback** registered under
