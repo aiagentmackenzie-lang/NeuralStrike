@@ -207,12 +207,10 @@ jobs:
       - name: Build linux/arm64 and verify startup under emulation
         run: |
           docker buildx build --platform linux/arm64 --load -t neuralstrike:arm64 .
-          docker run --rm --platform linux/arm64 --entrypoint sh neuralstrike:arm64 -c '
-            set -e
-            python -c "import platform, neuralstrike; print("arch:", platform.machine())"
-            neuralstrike --help > /dev/null
-            echo "arm64 startup and import ok (full smoke is not exercised on this architecture)"
-          '
+          docker run --rm --platform linux/arm64 --entrypoint python neuralstrike:arm64 \
+            -c "import platform; print('arch:', platform.machine())"
+          docker run --rm --platform linux/arm64 --entrypoint neuralstrike neuralstrike:arm64 --help > /dev/null
+          echo "arm64 startup and import ok (full smoke is not exercised on this architecture)"
 
   dashboard:
     runs-on: ubuntu-latest
