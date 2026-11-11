@@ -39,8 +39,10 @@ Not supported, not claimed, and not to be inferred from a passing run:
 - Customer tool execution, remote reset/rollback, hard cancellation, and any absolute spend
   ceiling: token thresholds can overshoot on a request that was already dispatched.
 - Cloud inference in the bundled examples. Those run against local or synthetic targets only.
-- Multi-architecture container behaviour: images are built for `linux/amd64` and `linux/arm64`,
-  but neither is pulled and smoked (Phase 4 gate P4-7).
+- Container depth is declared per architecture, not assumed: `linux/amd64` runs the full offline
+  `smoke` in CI, while `linux/arm64` is built and exercised for startup and import only — a full
+  langgraph smoke under QEMU would be a slow, flaky gate rather than a meaningful one. A full
+  smoke on `arm64` is **not exercised** and must not be claimed.
 - **Authenticated `scan` for OpenAI-compatible targets**: `scan --adapter openai` takes a scope
   file but has **no** `--target-api-key-env`, so an authenticated endpoint is reachable through
   `doctor` and `corpus` today. This is a real gap, tracked as work on the command spine (P4-1).
@@ -51,6 +53,8 @@ Numbers here come from the acceptance record, not from aspiration.
 
 - Python: CI runs 3.11, 3.12 and 3.14 on `ubuntu-latest`; development and all Phase 3 local runs
   are on **macOS arm64, Python 3.12.14**. Nothing else is claimed.
+- Container: `linux/amd64` image built and smoke-tested in CI, runs as uid 1000, artifact written
+  mode 600. `linux/arm64` image built and started under emulation (import + `--help`) only.
 - Coverage gate: **85 %** enforced, **91.88 %** measured at `41670a7`.
 - Bundled offline smoke: 3 scenarios, 3 trials, ASR 33.3 %, coverage 100 % — a fixture check, not
   an efficacy result.

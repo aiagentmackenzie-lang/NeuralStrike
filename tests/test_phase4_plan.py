@@ -20,6 +20,7 @@ PHASE3 = ROOT / "docs/implementation/PHASE3_ACCEPTANCE.md"
 README = ROOT / "README.md"
 USAGE = ROOT / "USAGE.md"
 MAIN = ROOT / "src/neuralstrike/main.py"
+CI = ROOT / ".github/workflows/ci.yml"
 DEPENDENCY_WORKFLOW = ROOT / ".github/workflows/dependency-check.yml"
 RELEASE_WORKFLOW = ROOT / ".github/workflows/release.yml"
 
@@ -185,3 +186,27 @@ def test_the_offline_example_matches_the_command_it_documents() -> None:
     # It must not claim efficacy from a fixture run.
     lowered = example.lower()
     assert "not an efficacy result" in lowered
+
+
+def test_the_container_job_runs_the_image_it_builds() -> None:
+    """The release workflow built and pushed an image that nothing ever executed."""
+    text = CI.read_text()
+    assert "  container:" in text
+    job = text.split("  container:")[1].split("  dashboard:")[0]
+    assert "docker build" in job
+    assert "neuralstrike smoke" in job, "the container is never actually run"
+    assert 'test "$(docker run --rm --entrypoint id neuralstrike:ci -u)" = "1000"' in job
+    assert 'test "$(stat -c %a smoke.json)" = "600"' in job, "artifact permissions are not checked"
+    # The second architecture must be built and started, and its depth must be explicit.
+    assert "linux/arm64" in job
+    assert "setup-qemu-action" in job
+    assert "full smoke is not exercised on this architecture" in job
+
+
+def test_the_platform_claim_matches_the_depth_actually_exercised() -> None:
+    matrix = SUPPORT_MATRIX.read_text()
+    assert "linux/amd64" in matrix and "linux/arm64" in matrix
+    # The document may not claim a full smoke on the emulated architecture.
+    arm64 = [line for line in matrix.splitlines() if "arm64" in line and "smoke" in line]
+    assert arm64, "the arm64 container depth is not documented"
+    assert all("not exercised" in line or "startup" in line for line in arm64), arm64
