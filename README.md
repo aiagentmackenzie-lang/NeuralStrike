@@ -38,6 +38,9 @@ and compliance controls so defenders can fix what actually breaks.
 | Documentation | |
 |---|---|
 | **[Operator's Guide (USAGE.md)](USAGE.md)** | End-to-end walkthroughs, every command, kill chains, troubleshooting |
+| **[Support matrix](docs/SUPPORT_MATRIX.md)** | What is supported, experimental or excluded, with measured limits |
+| **[Live target guide](docs/LIVE_TARGET_GUIDE.md)** | Authenticated OpenAI-compatible target: credential by reference, scope, budgets |
+| **[Offline example](docs/OFFLINE_EXAMPLE.md)** | Bundled fixture run with no model and no network |
 | **[Phase 4 plan](docs/implementation/PHASE4_PLAN.md)** | Release/pilot gate definition and current state — **NOT RELEASED** |
 | **[Threat model](docs/threat_model.md)** | What the tool assumes, what it does not |
 | **[Security policy](SECURITY.md)** | Responsible disclosure |

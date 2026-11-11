@@ -12,7 +12,7 @@ measured against this repository.
 
 Phase 3 remains **NOT ACCEPTED** and is unaffected by anything in this file.
 
-Date: 2026-11-10. Source revision at this assessment: `17b9832`.
+Date: 2026-11-10. Source revision at this assessment: `41670a7`.
 
 ## The acceptance rule
 
@@ -35,9 +35,9 @@ A tag, a wheel or a green workflow is not a release.
 |---|---|---|---|---|---|---|
 | P4-1 | Command spine | one assessment command, one compare command and one replay command exist, and every command a document names resolves to a registered command | **OPEN** — 40 commands are registered and `scan`, `replay`, `efficacy`, `rescore` exist, but there is no `assess` and no `compare` command; the single deprecation alias is `steganographic` → `delimiter_wrap` | `src/neuralstrike/main.py`, `tests/test_phase4_plan.py` | release engineer | — |
 | P4-2 | Artifact binding | one release binds version, tag, source commit, wheel, image digest, SBOM and provenance; the wheel and the container are installed and exercised **independently of the editable checkout** | **PARTIAL** — `release.yml` builds multi-arch GHCR images with `sbom: true` and `provenance: true`, publishes to PyPI and creates a GitHub release; but CI installs editable (`pip install -e`), there is no wheel-install test, no container smoke, and no step that binds tag ↔ commit ↔ image digest ↔ SBOM digest into one manifest | `.github/workflows/release.yml`, `.github/workflows/ci.yml` | release engineer | — |
-| P4-3 | Signing policy explicit | the documentation states whether signing is performed, on which artifacts, and that unsigned artifacts are not claimed as signed | **PARTIAL** — cosign signing is an optional workflow input (`publish && sign`) and the README makes no signing claim; the policy itself is written nowhere, which is how optional signing becomes universal by assumption | `.github/workflows/release.yml`, this document §Signing policy | release engineer | — |
-| P4-4 | Scheduled dependency health | a scheduled job audits the pinned locks on a fixed cadence, independently of commits, and its result is readable as an artifact | **PARTIAL** — `.github/workflows/dependency-check.yml` audits both hashed locks weekly and on demand and uploads JSON; the mechanism is the same `pip-audit` invocation that is green on `17b9832`, but **no scheduled or dispatched run exists yet**, because the workflow is not on the default branch | `.github/workflows/dependency-check.yml` | release engineer | — |
-| P4-5 | Pilot-facing docs | an offline example, an authenticated live-target guide, and a supported-versus-experimental matrix with measured limits | **PARTIAL** — `README.md` and `USAGE.md` are operator documentation with a Docker walkthrough; there is no pilot guide, no authenticated live-target guide, and no single supported-versus-experimental matrix | `README.md`, `USAGE.md` | release engineer | — |
+| P4-3 | Signing policy explicit | the documentation states whether signing is performed, on which artifacts, and that unsigned artifacts are not claimed as signed | **MET** — §Signing policy below states optional-and-off-by-default, names the image digest and SBOM attestation as the only signed objects, and forbids calling any artifact signed without a recorded signature; the README repeats that nothing is signed, and a contract asserts the cosign steps stay conditional on `inputs.sign` | `.github/workflows/release.yml`, this document §Signing policy, `README.md`, `tests/test_phase4_plan.py` | release engineer | — |
+| P4-4 | Scheduled dependency health | a scheduled job audits the pinned locks on a fixed cadence, independently of commits, and its result is readable as an artifact | **MET** — `.github/workflows/dependency-check.yml` runs Mondays 06:17 UTC and on demand, audits both hashed locks, uploads JSON with `if: always()`, and holds `contents: read`; dispatched run `42931775244` at `41670a7` completed **success** with the audit artifact attached. The cron trigger itself has not yet fired on a Monday; the scheduled *mechanism* is what this gate claims | `.github/workflows/dependency-check.yml`, run `42931775244` | release engineer | — |
+| P4-5 | Pilot-facing docs | an offline example, an authenticated live-target guide, and a supported-versus-experimental matrix with measured limits | **MET** — [SUPPORT_MATRIX.md](../SUPPORT_MATRIX.md) partitions supported / experimental / excluded from the Phase 2 acceptance record and states measured limits; [LIVE_TARGET_GUIDE.md](../LIVE_TARGET_GUIDE.md) documents the credentialed path and names the `scan` authentication gap; [OFFLINE_EXAMPLE.md](../OFFLINE_EXAMPLE.md) is a verified no-model, no-network run. Contracts assert the documents exist, are linked, and name only registered commands | `docs/SUPPORT_MATRIX.md`, `docs/LIVE_TARGET_GUIDE.md`, `docs/OFFLINE_EXAMPLE.md` | release engineer | — |
 | P4-6 | Pilot evidence | three independent teams complete install → compatible scan → review → fix → rerun, at least two without implementation-author assistance, with time to first useful result, setup failures, cost, usefulness and willingness to pay recorded | **OPEN** — no team, no consent, no recorded result, no commercial signal | — | pilot owner | — |
 | P4-7 | Platform claims | platform and container claims are limited to combinations actually exercised, with container runtime and multi-arch validation as a gate rather than an assumption | **PARTIAL** — the release workflow builds `linux/amd64` and `linux/arm64` images, but neither is pulled and smoked anywhere; the Docker documentation is exercised only by hand on this machine | `.github/workflows/release.yml`, `README.md` §Docker | release engineer | — |
 
@@ -66,11 +66,10 @@ Stated rather than implied, because "we have cosign in the workflow" is not a po
 
 Ordered by what unblocks what, not by size:
 
-1. **P4-4** — the scheduled check. Smallest gate, entirely mechanical, and it is the one the
-   master plan explicitly calls out as protecting a green badge from lying.
-2. **P4-3** — the signing policy above, plus the documentation pointer. Free once written.
-3. **P4-5** — the offline example and the supported-versus-experimental matrix, written from the
-   declared profiles rather than from ambition.
+1. ~~**P4-4** — the scheduled check.~~ **Done 2026-11-10**, dispatched run `42931775244`.
+2. ~~**P4-3** — the signing policy.~~ **Done 2026-11-10**, stated in §Signing policy.
+3. ~~**P4-5** — the offline example and the supported-versus-experimental matrix.~~ **Done
+   2026-11-10**, three documents written from the declared profiles rather than from ambition.
 4. **P4-2**, then **P4-7** — wheel and container exercised outside the editable checkout, then
    the same for the second architecture. Each needs its own declared plan and its own packet.
 5. **P4-1** — the command spine last, because renaming a surface is the change most likely to

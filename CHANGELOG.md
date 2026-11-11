@@ -6,6 +6,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Phase 4 — scheduled dependency health verified, signing policy, pilot-facing docs, 2026-11-10)
+- P4-4 **MET**: the scheduled dependency job was dispatched once (`workflow_dispatch`, run
+  `42931775244` at `41670a7`) and completed success with both audit records uploaded. The gate
+  row states that the cron has not yet fired on a Monday and that the scheduled mechanism is what
+  it claims.
+- P4-3 **MET**: signing policy stated in `PHASE4_PLAN.md` §Signing policy — optional and off by
+  default, signs the image digest and an SBOM attestation only, never the wheel or release
+  assets, and no artifact may be described as signed without a recorded signature. A contract
+  fails if the cosign steps stop being conditional on `inputs.sign`.
+- P4-5 **MET**: `docs/SUPPORT_MATRIX.md` (supported / experimental / excluded plus measured
+  limits, derived from the Phase 2 acceptance record), `docs/LIVE_TARGET_GUIDE.md` (credential by
+  environment reference, scope file, explicit budgets, no absolute spend ceiling) and
+  `docs/OFFLINE_EXAMPLE.md` (verified `neuralstrike smoke` run with real output).
+- Recorded a real gap found while writing the guide: `scan --adapter openai` has no
+  `--target-api-key-env`, so authenticated targets are reachable through `doctor` and `corpus`
+  only. Tracked as command-spine work (P4-1) instead of being papered over.
+- `tests/test_phase4_plan.py` — six more contracts: pilot docs exist, are linked and carry the
+  required sections; the live guide never inlines a credential and never documents an
+  authenticated `scan`; the offline example matches its documented command and refuses to present
+  a fixture run as efficacy. The registered-command contract now covers all three documents.
+
 ### Added (Phase 4 started — release/pilot gates defined, scheduled dependency health, 2026-11-10)
 - `docs/implementation/PHASE4_PLAN.md` — Phase 4 had no gate document, only prose in the master
   plan. Seven binary gates with a state column about evidence and a separate `Signed` column:

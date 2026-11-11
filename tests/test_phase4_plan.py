@@ -108,7 +108,13 @@ def registered_commands() -> set[str]:
     return names
 
 
-@pytest.mark.parametrize("document", [README, USAGE])
+SUPPORT_MATRIX = ROOT / "docs/SUPPORT_MATRIX.md"
+LIVE_TARGET_GUIDE = ROOT / "docs/LIVE_TARGET_GUIDE.md"
+OFFLINE_EXAMPLE = ROOT / "docs/OFFLINE_EXAMPLE.md"
+PILOT_DOCS = (SUPPORT_MATRIX, LIVE_TARGET_GUIDE, OFFLINE_EXAMPLE)
+
+
+@pytest.mark.parametrize("document", [README, USAGE, SUPPORT_MATRIX, LIVE_TARGET_GUIDE, OFFLINE_EXAMPLE])
 def test_no_document_names_a_command_that_is_not_registered(document: Path) -> None:
     """Anti-vapour: documentation may not describe a CLI surface the code does not have."""
     commands = registered_commands()
@@ -146,3 +152,36 @@ def test_signing_is_declared_optional_and_no_artifact_is_claimed_signed() -> Non
 def test_the_plan_is_discoverable_from_the_readme_and_the_phase3_document() -> None:
     assert "PHASE4_PLAN.md" in README.read_text()
     assert "PHASE4_PLAN.md" in PHASE3.read_text()
+
+
+def test_the_pilot_documents_exist_are_linked_and_are_accurate_in_shape() -> None:
+    readme = README.read_text()
+    for document in PILOT_DOCS:
+        assert document.is_file(), document.name
+        assert f"docs/{document.name}" in readme, f"{document.name} is not discoverable"
+    matrix = SUPPORT_MATRIX.read_text()
+    for heading in ("## Supported", "## Experimental", "## Excluded", "## Measured limits"):
+        assert heading in matrix, heading
+    # The three accepted profiles must be the supported ones; a fourth would be a claim.
+    for profile in ("OpenAI-compatible", "LangGraph", "MCP"):
+        assert profile in matrix, profile
+    assert "NOT RELEASED" in matrix
+
+
+def test_the_live_target_guide_never_inlines_a_credential_or_invents_a_flag() -> None:
+    guide = LIVE_TARGET_GUIDE.read_text()
+    assert "--target-api-key-env" in guide
+    # Credentials by reference only: no bearer literal on a command line.
+    assert not re.search(r"--(?:api-key|token|bearer)\s+['\"]?\S{8,}", guide), "inline credential"
+    # The documented authenticated path is doctor/corpus, never scan.
+    scan_lines = [line for line in guide.splitlines() if "scan" in line and "--url" in line]
+    assert not scan_lines, f"guide documents authenticated scan, which has no bearer option: {scan_lines}"
+    assert "no** `--target-api-key-env`" in guide or "has **no**" in guide
+
+
+def test_the_offline_example_matches_the_command_it_documents() -> None:
+    example = OFFLINE_EXAMPLE.read_text()
+    assert "neuralstrike smoke" in example
+    # It must not claim efficacy from a fixture run.
+    lowered = example.lower()
+    assert "not an efficacy result" in lowered

@@ -2766,3 +2766,36 @@ untouched: P3-1…P3-6 as recorded, P3-7 `MET` unsigned, **NOT ACCEPTED**.
 **Next.** Push, then dispatch the dependency job once and record the run so P4-4 can move to
 `MET`; then P4-3's documentation pointer, then P4-5's supported-versus-experimental matrix.
 P4-6 needs three teams and cannot be started by code.
+
+### 2026-11-10 — Phase 4 gates moving on evidence: P4-4, P4-3 and P4-5 to MET
+
+`41670a7` pushed. The scheduled dependency job was dispatched once (`workflow_dispatch`, run
+`42931775244` at `41670a7`) and completed **success** with both audit records uploaded, so P4-4
+moved from `PARTIAL` to `MET` on a run rather than on my description of a cron. The Monday
+trigger itself has not fired yet, and the gate row says exactly that: the scheduled mechanism is
+what it claims.
+
+P4-3 is `MET` because the signing policy is now stated in one place — optional and off by
+default, image digest plus SBOM attestation only, never the wheel or release assets, and no
+artifact may be called signed without a recorded signature for that digest — with a contract
+that fails if the cosign steps stop being conditional.
+
+P4-5 is `MET` with three documents written from the declared profiles, not from ambition:
+`docs/SUPPORT_MATRIX.md` (supported / experimental / excluded, plus measured limits, derived
+from `PHASE2_ACCEPTANCE.md`), `docs/LIVE_TARGET_GUIDE.md` (credential by environment reference,
+scope file, budgets, and the explicit statement that no absolute spend ceiling exists) and
+`docs/OFFLINE_EXAMPLE.md` (a run of `neuralstrike smoke` with its real output). Writing the live
+guide surfaced a real gap and it is recorded rather than hidden: **`scan --adapter openai` has no
+`--target-api-key-env`**, so an authenticated endpoint is reachable through `doctor` and `corpus`
+only — that asymmetry is now work on the command spine (P4-1).
+
+**Contracts (6 new).** The pilot documents exist, are linked from the README and carry the
+required sections; the live guide never inlines a credential and never documents an
+authenticated `scan`; the offline example matches the command it documents and refuses to call a
+fixture run an efficacy result. The registered-command contract now covers all three documents,
+so a doc cannot name a command the CLI does not have.
+
+**Gates.** 1748 passed, 7 skipped (also with the model daemon blocked); coverage 91.88 %; ruff and
+mypy clean. Phase 4 status is still **NOT RELEASED**: P4-1 `OPEN`, P4-2 and P4-7 `PARTIAL`, P4-6
+`OPEN` (people). Phase 3 untouched.
+
