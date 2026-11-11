@@ -71,8 +71,8 @@ selector hash/code are supplied so a reviewer can separately recompute it.
 
 ## Fresh local-model evidence
 
-The old `/tmp/neuralstrike-*` environments, observations and review zip were no
-longer present at session start. The committed 2026-11-07 index remains a historical
+The old `/tmp/neuralstrike-*` environments, observations and review zip are gone (they were no longer
+present at session start). The committed 2026-11-07 index remains a historical
 summary; its original private raw bytes cannot currently be independently rechecked.
 Do not describe the old zip as available or silently substitute new observations
 for it. Fresh results below are a distinct run with distinct identifiers.

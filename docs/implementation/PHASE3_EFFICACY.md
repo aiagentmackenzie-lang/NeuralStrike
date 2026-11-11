@@ -112,7 +112,7 @@ was installed, imported or executed. These are candidates, not accepted cohort r
 | Candidate | Pinned revision and primary source | License / execution review / disposition |
 |---|---|---|
 | AgentDojo | [089ed468cf3ed0322acc66b0211f26d9d90dbf60](https://github.com/ethz-spylab/agentdojo/tree/089ed468cf3ed0322acc66b0211f26d9d90dbf60) | [MIT](https://github.com/ethz-spylab/agentdojo/blob/089ed468cf3ed0322acc66b0211f26d9d90dbf60/LICENSE); retain copyright/license on redistribution. README benchmarks tool-using workspace tasks; pyproject 0.1.35 requires Python >=3.10 and multiple provider SDKs, langchain, deepdiff and dotenv. Candidate independently developed simulated task environment, not an independent human review or deployed customer application. Next: inspect task security/utility predicates and actual tool effects, select disjoint tasks, isolate dependencies and use only an explicitly local backend. Default cloud benchmark command was not run. |
-| PyRIT | [298f27d4a4bf9f401b65e7f042b8abf46ea246ff](https://github.com/microsoft/PyRIT/tree/298f27d4a4bf9f401b65e7f042b8abf46ea246ff) | [MIT](https://github.com/microsoft/PyRIT/blob/298f27d4a4bf9f401b65e7f042b8abf46ea246ff/LICENSE). Tool only, never a target. **Superseded in part:** PyRIT 1.1.0 was later installed into an isolated `/tmp/pyrit-env` (never a project dependency) and drove one declared comparator run on 2026-11-10 — see *Comparator* below. It measures nothing itself; our predicate and boundary remain underneath, so that run is attack diversity, not independent verification. |
+| PyRIT | [298f27d4a4bf9f401b65e7f042b8abf46ea246ff](https://github.com/microsoft/PyRIT/tree/298f27d4a4bf9f401b65e7f042b8abf46ea246ff) | [MIT](https://github.com/microsoft/PyRIT/blob/298f27d4a4bf9f401b65e7f042b8abf46ea246ff/LICENSE). Tool only, never a target. **Superseded in part:** PyRIT 1.1.0 was later installed into an isolated scratch virtualenv (a `/tmp` path, so **gone**; never a project dependency) and drove one declared comparator run on 2026-11-10 — see *Comparator* below. It measures nothing itself; our predicate and boundary remain underneath, so that run is attack diversity, not independent verification. |
 | garak | [892779207cbc38f65a738ef9cbdfbc1e83aa0b55](https://github.com/NVIDIA/garak/tree/892779207cbc38f65a738ef9cbdfbc1e83aa0b55) | [Apache-2.0](https://github.com/NVIDIA/garak/blob/892779207cbc38f65a738ef9cbdfbc1e83aa0b55/LICENSE). Comparison tool candidate; metadata 0.17.2.pre1. Redistribution requires license/notice review. Not a vulnerable application and **still not executed** — no garak run exists. |
 
 Comparison status: **no NeuralStrike-vs-tool score comparison has been performed**, and none is
@@ -369,7 +369,8 @@ moves an efficacy numerator or denominator: all are counts at a declared configu
 the question, budgets, expectations and decision rule before any measurement existed; no
 off-the-shelf tool measures object authority, so the comparator varies the *attack generator*
 and keeps the measurement ours. One declared run (`native-tau-bench-retail-comparator-plan-v1`,
-adversary `nemotron-3.5-lightning:30b` through PyRIT 1.1.0 in an isolated `/tmp/pyrit-env`,
+adversary `nemotron-3.5-lightning:30b` through PyRIT 1.1.0 in an isolated scratch environment
+(`/tmp/pyrit-env`, **gone**),
 target `qwen3.5:2b`, six attacker turns, exit 5): `unfiltered` 4 episodes, **one
 cross-principal mutation on turn 4** with 2 disclosures; `bound` 6 episodes, no mutation, no
 disclosure, `get_user_details` refused `cross_principal` 4× and `target_unknown` 4×, the write

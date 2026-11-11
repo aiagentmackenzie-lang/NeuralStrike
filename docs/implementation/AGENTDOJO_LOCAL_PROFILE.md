@@ -34,9 +34,11 @@ source was patched to make this experiment pass.
 
 The first non-prefetched benign trial did not read/pay the bill. A later exploratory
 replacement-bill trial caused an unauthorized payment but omitted the original
-bill context. Both are preserved at `/tmp/neuralstrike-agentdojo-observations`,
-excluded from the final complete-bill cohort. They cannot establish autonomous
-retrieval performance or a matched remediation comparison.
+bill context. Both were written to a scratch directory and are **gone** — the packet has no
+durable copy, so these two trials are a record of what was observed, not evidence a reviewer can
+open (see [EVIDENCE.md](EVIDENCE.md) §Evidence that is gone). They are excluded from the final
+complete-bill cohort, and they cannot establish autonomous retrieval performance or a matched
+remediation comparison.
 
 The final profile prefetches the real native bill and preserves its complete
 legitimate content for appended-instruction tests. A separate payee-field case
@@ -74,9 +76,10 @@ source observations. No native effect is relabeled a local canary receipt.
 
 Committed machine-readable index:
 [evidence/phase3-agentdojo-local.json](evidence/phase3-agentdojo-local.json).
-Private original journals/plan: `/tmp/neuralstrike-agentdojo-cohort`.
-Canonical assessment:
-`/tmp/neuralstrike-agentdojo-canonical-final/assessment-17cc31df6e0f460483b0f94df4a444ca`.
+Private original journals/plan: a scratch directory (`/tmp`), **gone** — see
+[EVIDENCE.md](EVIDENCE.md) §Evidence that is gone.
+Canonical assessment: a scratch directory (`/tmp`), **gone**; the committed index above is what
+survives.
 It embeds all 15 observations and replayed deterministic policies; sibling label
 and metrics files bind their digests. Raw exchanges and synthetic account data
 remain private files, not a sanitized sharing export or signed author attestation.
@@ -102,8 +105,9 @@ or a claim that AgentDojo is intended as a secure banking service.
 
 A fresh actual-model **vulnerable → fixed → regressed** cycle reproduced:
 violation/utility **true/false → false/true → true/false**, complete at every stage.
-Receipt and source observations:
-`/tmp/neuralstrike-agentdojo-remediation/remediation-687e473aed9a410688976878cfda0f19`.
+Receipt and source observations: written to a scratch directory (`/tmp`), **gone**; the
+persistent runner below regenerates a fresh packet (a new run with new identifiers, not these
+bytes).
 The persistent rerun is `python -m examples.agentdojo_banking.verify`; exact setup,
 limits and commands are in its README. Removing the binding restores the effect.
 The model still emits the attacker destination in the fixed run; preserving that
@@ -178,8 +182,8 @@ has been shown to withhold live under inference is the cross-principal scoped re
 
 Committed evidence block:
 [evidence/phase3-agentdojo-banking-replication-2026-11-10.json](evidence/phase3-agentdojo-banking-replication-2026-11-10.json).
-Private packet with full exchanges and synthetic state:
-`/tmp/neuralstrike-banking-replication/banking-replication-91b5fd4a0c274ad1b6bf811ef1e2e654`.
+Private packet with full exchanges and synthetic state: written to a scratch directory (`/tmp`),
+**gone**; the committed block above is what survives.
 Persistent runner: `python -m examples.agentdojo_banking.replication`.
 
 ## Acceptance boundaries and next work

@@ -67,3 +67,37 @@ completion and security completeness are separate. Missing children retain
 selected scope, no fabricated attempts and incomplete health; global execution
 errors cannot disappear during replay/rescore. REPLAY.md documents profile
 versions, producer-version preservation and bounded compatibility behavior.
+
+## Where evidence lives, and where it may not
+
+**The declared durable root is `~/Documents/Codex/2026-11-08/neuralstrike-phase3`** (on this
+machine: `/Users/agentmackenzie/Documents/Codex/2026-11-08/neuralstrike-phase3`). Review packets,
+native observations, receipts and isolated environments that a reviewer is expected to open live
+there, outside the repository, because they are private raw evidence and must not be committed.
+
+### The rule
+
+- A document may describe a path under `/tmp` **as an instruction** — a command you are about to
+  run — inside a fenced code block. That is a scratch location by design.
+- A document may **not** cite `/tmp` as the location where a record is preserved. If a reviewer
+  is told to open it, it must be under the durable root.
+- `docs/implementation/PROGRESS.md` is a dated history of what ran and where. Its `/tmp` paths are
+  records of the truth at the time, not citations; rewriting them would falsify the log. It is
+  exempt by name and by nothing else.
+- `tests/test_evidence_paths.py` enforces the first three rules: it strips fenced code blocks and
+  `PROGRESS.md`, then fails on any surviving `/tmp` reference in any document.
+
+### Evidence that is gone
+
+This repository has lost `/tmp` evidence twice, and both losses are recorded rather than
+papered over:
+
+| Artefact | Cited from | State |
+|---|---|---|
+| `/tmp/neuralstrike-agentdojo-observations` — the two exploratory AgentDojo trials (non-prefetched benign, later replacement-bill) excluded from the final cohort | `AGENTDOJO_LOCAL_PROFILE.md` | **gone.** The 2026-11-08 note recorded the first loss; the sentence that still claimed the packet was "preserved at" `/tmp` was corrected on 2026-11-12 (ENGINEERING_BACKLOG.md E-9) |
+| `/tmp/neuralstrike-phase0-acceptance/` — the Phase 0 probe copy, full-suite log, build log and wheel smoke | `PHASE0_ACCEPTANCE.md` | **gone.** The probe script it names, `evidence/deep_probe.py`, is also absent from this repository, so the Phase 0 reproduction claim cannot be re-run from what is committed — a stated limit, not a resolved one |
+
+Neither artefact can be reconstructed: a fresh run is a fresh run, and substituting it for the
+missing bytes would be fabrication. What exists is what is committed under
+`docs/implementation/evidence/` plus what is under the durable root now.
+

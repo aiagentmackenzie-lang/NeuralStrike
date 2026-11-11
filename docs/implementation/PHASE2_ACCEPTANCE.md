@@ -57,16 +57,16 @@ fixture handlers; emitted intent alone is not production execution.
 ## Verification
 
 - Frozen Python 3.12.14 source suite: **1445 passed, 2 skipped, 91.79% coverage**
-  (49.41s). Log: `/tmp/neuralstrike-phase2-accepted-full.log`.
+  (49.41s). Log: written to `/tmp`, **lost**; the counts are a record of that run.
 - Ruff (`src tests examples/langgraph_account_support`), strict mypy (143 source
   files) and `git diff --check`: passed. Existing optional base58/real NeuralGuard
   skips remain unverified integrations. Coverage is not security efficacy.
-- Wheel and sdist rebuilt at `/tmp/neuralstrike-phase2-acceptance-dist`; all 147
+- Wheel and sdist rebuilt in a scratch directory (**gone**); all 147
   checked packaged Python/JSON/YAML files match source. Separate hash-lock wheel
   environment, outside checkout: **133 Phase 2 checks passed** (10.88s).
-  Log: `/tmp/neuralstrike-phase2-acceptance-wheel-tests.log`.
-- Installed-wheel separate application cycle:
-  `/tmp/neuralstrike-phase2-acceptance-cycle/validation-5e0df61fe7544321bdd375223b236c3d/validation.json`.
+  Log: written to `/tmp`, **lost**.
+- Installed-wheel separate application cycle: validation packet written to a scratch directory
+  (`/tmp`), **gone**; rerun `python -m examples.langgraph_account_support.verify` to regenerate one.
   Roles admin/reader/admin, task completion all three stages, reset completed,
   original-oracle replay agrees, fix exit 0 and regression exit 4. Installed CLI
   offline smoke also passes (three scenarios/trials).

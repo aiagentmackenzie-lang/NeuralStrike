@@ -44,7 +44,8 @@ Earlier progress entries recording open Phase 1 work are historical checkpoints.
 
 - Refreshed Python 3.12.14: `python -m pytest --cov=neuralstrike
   --cov-fail-under=85` → **1295 passed, 2 skipped, 91.62% coverage**.
-  Local log: `/tmp/neuralstrike-phase1-final-acceptance.log`.
+  Local log: written to `/tmp`, **gone** — the counts are a record of that run, not a file a
+  reviewer can open.
 - `ruff check src tests`: pass. `mypy src`: pass, **136 source files**.
 - Dashboard: **19 tests pass**; TypeScript/production build pass.
 - Wheel and sdist rebuilt; installed rebuilt wheel with `--no-deps --reinstall`

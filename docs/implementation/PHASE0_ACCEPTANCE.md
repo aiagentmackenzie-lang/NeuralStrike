@@ -24,11 +24,17 @@ configuration with exit 3 before execution and preserve reference bytes.
 
 ## Reproduction and verification record
 
-The supplied `evidence/deep_probe.py` was copied unchanged to
-`/tmp/neuralstrike-phase0-acceptance/deep_probe.py` and run with the refreshed
-Python 3.12 environment. Script SHA-256:
+The supplied probe script was copied unchanged to a scratch directory and run with the
+refreshed Python 3.12 environment. Script SHA-256:
 `f9d0a2ff9924810d8149e693c12a523b270475fc9439fda7c11e2677ca5c31a9`.
-Original handoff evidence was not modified. New raw outputs remain outside git.
+Original handoff evidence was not modified. New raw outputs were never committed.
+
+**Availability (2026-11-12):** that scratch directory no longer exists, and the probe script it
+names is not in this repository — `evidence/` is absent from the tree, so the hash above cannot be
+checked against a committed artifact. The phase-0 reproduction is therefore a record of an
+execution, not a reproduction a reviewer can re-run from what is committed. This is a stated
+limit; [EVIDENCE.md](EVIDENCE.md) §Evidence that is gone keeps the inventory. Regenerating a
+phase-0 packet under the declared durable root is open work, not a claim.
 
 Observed: Succeeded→Inconclusive is not comparable (exit 3, no fixed label);
 omitted scenario is not comparable (exit 3); Resisted→Succeeded under `vuln`
@@ -40,16 +46,18 @@ also reports permissive empty scope: this is an unresolved authorization-policy
 limitation, not an assertion that arbitrary external testing is authorized.
 Mandatory target/scope preflight belongs to the next canonical-plan work.
 
-Commands and local outputs:
+Commands and local outputs at the time (the scratch directory holding them is gone; the commands
+are reproducible, the logs are not):
 
-- `python -m pytest --cov=neuralstrike --cov-fail-under=85` →
-  `/tmp/neuralstrike-phase0-acceptance/full-suite.log`.
+- `python -m pytest --cov=neuralstrike --cov-fail-under=85` → full-suite log (lost).
 - `ruff check src tests`; `mypy src`; `git diff --check` → pass.
-- `uv build --out-dir /tmp/neuralstrike-phase0-acceptance/dist` → build.log.
+- `uv build --out-dir <scratch>/dist` → build log (lost).
 - Runtime-lock environment: reinstall the rebuilt wheel with `--no-deps
-  --reinstall`; run from `/tmp`: `neuralstrike smoke --out
-  /tmp/neuralstrike-phase0-acceptance/wheel-smoke --format json` → three
-  scenarios/trials, including the intentionally vulnerable control.
+  --reinstall`; run from outside the checkout: `neuralstrike smoke --out
+  <scratch>/wheel-smoke --format json` → three scenarios/trials, including the
+  intentionally vulnerable control.
+
+Run the gates today with `scripts/ci_gate.sh`; it is the same gate and it is reproducible.
 
 The two skipped tests require optional base58 and real NeuralGuard packages.
 Their absence does not count as successful validation of those optional paths.

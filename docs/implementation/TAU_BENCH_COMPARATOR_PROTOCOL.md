@@ -36,8 +36,9 @@ $ /tmp/pyrit-env/bin/python -c "import pyrit; print(pyrit.__version__)"
 ```
 
 Supply-chain check: `uv` does not execute package build scripts, and the resolved tree
-contains no `plain-crypto-js` and no `axios`. PyRIT is installed only into
-`/tmp/pyrit-env`; **it is not a NeuralStrike dependency** and nothing is added to
+contains no `plain-crypto-js` and no `axios`. PyRIT is installed only into a scratch virtualenv
+(`/tmp/pyrit-env` — a `/tmp` path, so that environment is **gone**; rebuild it from the pinned
+versions in §Pinned tool versions); **it is not a NeuralStrike dependency** and nothing is added to
 `pyproject.toml` or the lock.
 
 Loopback smoke test, PyRIT's own `OpenAIChatTarget` against Ollama's OpenAI-compatible
@@ -156,7 +157,7 @@ as a failed first attempt.
 `examples/tau_bench_retail/comparator/tau_target.py` subclasses PyRIT's `PromptTarget`
 and runs one episode per send, accumulating the attacker's turns per conversation because a
 custom target is not guaranteed to see prior turns. Measured against the same pinned target,
-PyRIT 1.1.0, `/tmp/pyrit-env` (which also needed `litellm`, the target's own dependency, to
+PyRIT 1.1.0, in the scratch virtualenv described above (`/tmp/pyrit-env`, **gone**; it also needed `litellm`, the target's own dependency, to
 import the benchmark):
 
 | Policy | Turns in the last episode | `cross_principal_mutation` | `cross_principal_disclosure` | Refusals |

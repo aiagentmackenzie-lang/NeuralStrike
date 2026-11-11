@@ -69,8 +69,8 @@ runtime **80 audited distributions / 0 vulnerability entries**, development
 **140 / 0**. No ignores were added. This is a current advisory-database result,
 not proof of code security or absence of undisclosed vulnerabilities.
 
-A CycloneDX environment SBOM was generated at
-`/tmp/neuralstrike-phase2-mcp-sbom.json`; all five additions were verified using
+A CycloneDX environment SBOM was generated into a scratch directory (that file is **gone**;
+regenerate one with `cyclonedx-py environment`); all five additions were verified using
 normalized distribution names (the SBOM spells PyJWT with capitals). Reinstalled
 the new dev lock with hashes into the isolated wheel environment, then installed
 the rebuilt wheel with `--no-deps --reinstall`. Installed-wheel local stdio/HTTP,
