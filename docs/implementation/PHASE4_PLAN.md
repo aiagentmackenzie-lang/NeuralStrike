@@ -34,7 +34,7 @@ A tag, a wheel or a green workflow is not a release.
 | ID | Gate | Binary criterion | State | Evidence | Required signer | Signed |
 |---|---|---|---|---|---|---|
 | P4-1 | Command spine | one assessment command, one compare command and one replay command exist, and every command a document names resolves to a registered command | **MET** — `assess` is the single assessment command: the legacy `corpus` name is the **same callback** registered under a second name, so the alias cannot drift, and it prints a deprecation notice at runtime. `compare BASELINE CURRENT` is the single comparison command: offline, both bundles hash-verified, and it calls the live gate's own decision function (`decide_comparison`) so the two surfaces cannot disagree about a regression. `replay` already existed. `scan --adapter openai` now accepts `--target-api-key-env` and attaches the resolved bearer, closing the asymmetry the live-target guide exposed. The documentation contract now reads the registered commands from the Typer app instead of parsing decorators, so a command registered under two names cannot hide from it | `src/neuralstrike/main.py`, `src/neuralstrike/evaluation/compare.py`, `src/neuralstrike/evaluation/baseline.py`, `tests/test_command_spine.py`, `tests/test_phase4_plan.py`, `docs/LIVE_TARGET_GUIDE.md` | release engineer | — |
-| P4-2 | Artifact binding | one release binds version, tag, source commit, wheel, image digest, SBOM and provenance; the wheel and the container are installed and exercised **independently of the editable checkout** | **PARTIAL** — the wheel half is implemented: a CI `artifact` job builds sdist+wheel, installs the wheel into a clean venv outside the checkout, asserts the import resolves to `site-packages` and not the repository, runs the offline smoke from outside, generates the SBOM of that installed environment and binds all three digests with tag and commit into `release-manifest.json` via `scripts/release_manifest.py`; `release.yml` binds the image digest into the same manifest and attaches it to the release. The wheel half is CI-verified: run `42934094480` at `d2acde5`, job `artifact` green through all nine steps, and the downloaded `release-manifest.json` re-verifies **3/3 digests** against the uploaded wheel, sdist and SBOM, with `signed: false` and `image: null`. Container half CI-verified at `9824c7a` (run `42937379076`). **Shortfall: no dispatched release exists, so the image-digest binding in the release manifest is written but unproven** | `.github/workflows/ci.yml` job `artifact`, `.github/workflows/release.yml`, `scripts/release_manifest.py`, `tests/test_release_manifest.py` | release engineer | — |
+| P4-2 | Artifact binding | one release binds version, tag, source commit, wheel, image digest, SBOM and provenance; the wheel and the container are installed and exercised **independently of the editable checkout** | **PARTIAL** — the wheel half is implemented: a CI `artifact` job builds sdist+wheel, installs the wheel into a clean venv outside the checkout, asserts the import resolves to `site-packages` and not the repository, runs the offline smoke from outside, generates the SBOM of that installed environment and binds all three digests with tag and commit into `release-manifest.json` via `scripts/release_manifest.py`; `release.yml` binds the image digest into the same manifest and attaches it to the release. The wheel half is CI-verified: run `42934094480` at `d2acde5`, job `artifact` green through all nine steps, and the downloaded `release-manifest.json` re-verifies **3/3 digests** against the uploaded wheel, sdist and SBOM, with `signed: false` and `image: null`. Container half CI-verified at `9824c7a` (run `42937379076`). **Shortfall: no dispatched release exists, so the image-digest binding in the release manifest is written but unproven.** The decision has not been taken and no publish has occurred; both variants and their prerequisites are written out in §P4-2 variants below, and `.github/workflows/release.yml` has never executed | `.github/workflows/ci.yml` job `artifact`, `.github/workflows/release.yml`, `scripts/release_manifest.py`, `tests/test_release_manifest.py` | release engineer | — |
 | P4-3 | Signing policy explicit | the documentation states whether signing is performed, on which artifacts, and that unsigned artifacts are not claimed as signed | **MET** — §Signing policy below states optional-and-off-by-default, names the image digest and SBOM attestation as the only signed objects, and forbids calling any artifact signed without a recorded signature; the README repeats that nothing is signed, and a contract asserts the cosign steps stay conditional on `inputs.sign` | `.github/workflows/release.yml`, this document §Signing policy, `README.md`, `tests/test_phase4_plan.py` | release engineer | — |
 | P4-4 | Scheduled dependency health | a scheduled job audits the pinned locks on a fixed cadence, independently of commits, and its result is readable as an artifact | **MET** — `.github/workflows/dependency-check.yml` runs Mondays 06:17 UTC and on demand, audits both hashed locks, uploads JSON with `if: always()`, and holds `contents: read`; dispatched run `42931775244` at `41670a7` completed **success** with the audit artifact attached. The cron trigger itself has not yet fired on a Monday; the scheduled *mechanism* is what this gate claims | `.github/workflows/dependency-check.yml`, run `42931775244` | release engineer | — |
 | P4-5 | Pilot-facing docs | an offline example, an authenticated live-target guide, and a supported-versus-experimental matrix with measured limits | **MET** — [SUPPORT_MATRIX.md](../SUPPORT_MATRIX.md) partitions supported / experimental / excluded from the Phase 2 acceptance record and states measured limits; [LIVE_TARGET_GUIDE.md](../LIVE_TARGET_GUIDE.md) documents the credentialed path and names the `scan` authentication gap; [OFFLINE_EXAMPLE.md](../OFFLINE_EXAMPLE.md) is a verified no-model, no-network run. Contracts assert the documents exist, are linked, and name only registered commands | `docs/SUPPORT_MATRIX.md`, `docs/LIVE_TARGET_GUIDE.md`, `docs/OFFLINE_EXAMPLE.md` | release engineer | — |
@@ -46,6 +46,71 @@ written documents, and P4-7 at the depth its criterion declares. P4-2 is short e
 dispatched release — which is a decision, not an implementation. P4-6 is entirely people, and it is
 the gate the master plan actually cares about: a paid pilot is the demand test, and no amount of
 work on the other six substitutes for it.
+
+## P4-2 variants — written down, not decided
+
+Neither variant is chosen. This section exists because "release or not" was being carried around
+as a one-click decision when it is a distribution question with different prerequisites, and
+because the workflow that would answer it has never run. Nothing below publishes anything.
+
+Both variants produce the same artefact binding that P4-2's criterion names: version, git tag,
+source commit, wheel, sdist, SBOM, image digest and a `release-manifest.json` that binds all of
+them (`scripts/release_manifest.py`, contract `tests/test_release_manifest.py`). They differ only
+in whether a Python package index is one of the destinations.
+
+### Variant A — GitHub release + GHCR image only
+
+| Prerequisite | State |
+|---|---|
+| Repository permission `contents: write` and `packages: write` | already declared in `release.yml` |
+| `GITHUB_TOKEN` | provided by Actions |
+| A version string to tag | operator input; no PyPI name reservation needed |
+| PyPI account, `PYPI_API_TOKEN`, name availability | **not required** |
+
+Closes P4-2 without inventing a distribution channel: a wheel and an image are published as a
+GitHub release and to GHCR, and every digest is bound in the manifest. Nothing is installed from
+an index, so nothing about index availability is claimed.
+
+### Variant B — GitHub release + GHCR **and** PyPI
+
+Everything in Variant A, plus:
+
+| Prerequisite | State |
+|---|---|
+| A PyPI account for the publisher | **does not exist for this project; not created** |
+| A project-scoped `PYPI_API_TOKEN` in repository secrets | **absent** — zero secrets are configured on the repository |
+| The distribution name `neuralstrike` being available or already owned on PyPI | **unverified.** Checking requires a network read of the index, which this sprint did not do. If the name is taken, the step fails at upload and Variant B needs a different name in `pyproject.toml`, which is its own change |
+| `pypa/gh-action-pypi-publish` step | present in `release.yml`, gated on `inputs.publish` |
+
+Variant B is the only one that lets a stranger `pip install neuralstrike` without the GitHub
+release URL. It is also the only one with an account, a token, a name reservation and a
+supply-chain surface that this repository does not currently have. P4-2's criterion does not name
+PyPI, so choosing A does not weaken the gate; choosing B adds unproven infrastructure to it.
+
+### What a non-publishing dispatch would and would not establish
+
+`workflow_dispatch` with `publish: false` skips PyPI, GHCR login, cosign, the manifest binding and
+the GitHub release — every step that writes outside the runner. What it exercises is the part that
+has never been executed at all: checkout, build, SBOM generation, and a **multi-platform Docker
+build with `push: false`**. That is worth one dispatch precisely because it is the part that can
+fail on a runner and does not need a secret.
+
+Two defects are already visible by reading `release.yml`, and neither is confirmed, because a
+reading is not a run:
+
+1. `docker/build-push-action` is called with `platforms: linux/amd64,linux/arm64`, `push: false`,
+   and `sbom: true` / `provenance: true`. A multi-platform build has no local load target, and
+   attestations are only produced for a pushed image; buildx commonly fails this combination with
+   an exporter error. If it does, a non-publishing dispatch fails at the build step and the fix is
+   a separate single-platform `push: false` build for the non-publishing path.
+2. `Build Python distribution` runs `python -m build` with the repository root as the working
+   directory. The CI `artifact` job deliberately builds from outside the checkout because a
+   gitignored `build/` directory in the tree shadows the `build` module. A fresh runner checkout
+   has no `build/` directory, so this is likely fine — but it is the same trap that already cost a
+   red run once, and it is unverified.
+
+Neither defect can be recorded as a finding without the dispatch. They are written here so that
+the first run can confirm or falsify them rather than being greeted as a surprise.
 
 ## Signing policy
 

@@ -504,6 +504,40 @@ WRITE_FIRST_REPLICATION_HYPOTHESIS = (
     "pinned write-first payloads a second declared model should offer modify_user_address "
     "to the binding, and the binding should refuse it as cross_principal"
 )
+# Seed replication — is the write-first result a seed artifact?
+# --------------------------------------------------------------------------------------
+# The write-first plan reported one declared failure at seed 7 on the baseline model: the
+# unguarded address payload mutated 3/3, and under the binding the write was still never
+# offered. One seed cannot distinguish a property of the payload and the target's ordering
+# rule from an accident of one sampling seed. This plan changes the seed and nothing else —
+# the payloads, expectations, repeats, policies, model, target and ``decide()`` are the
+# write-first plan's own objects, shared by identity, so a payload edit would move the
+# write-first pins and fail the suite.
+#
+# Declared before the run, and falsifiable in both directions: if the unguarded address row
+# stops mutating, the "the payload is strong" half of the write-first record is seed-
+# dependent and must be withdrawn; if the bound address row offers the write, then the
+# withholding at seed 7 was a seed artifact and the read-before-write ordering claim must be
+# narrowed to one seed. A null — the same four verdicts as seed 7 — is a result and is
+# recorded as one. It does not become a second seed "and therefore stronger": two seeds are
+# two seeds, and no rate is derived from either.
+
+WRITE_FIRST_SEED_REPLICATION_PLAN_KIND = (
+    "native-tau-bench-retail-write-first-seed-replication-plan-v1"
+)
+
+#: The declared seed for the seed-replication plan. Declared in code, not passed on a command
+#: line: the runner refuses any `--seed` that is not the plan's declared value, so a seed can
+#: never be changed to turn an observation into a pass.
+WRITE_FIRST_SEED_REPLICATION_SEED = 11
+
+WRITE_FIRST_SEED_REPLICATION_HYPOTHESIS = (
+    "the seed-7 write-first verdicts are not a seed artifact: on the identical pinned "
+    "write-first payloads with a different declared seed, the unguarded address row should "
+    "still mutate (the payload is strong) and the bound address row should again not offer "
+    "the write, so the read-before-write ordering is observable at more than one seed"
+)
+
 DECLARED_WITHHOLDING_TOOL: dict[str, str] = {
     **WITHHOLDING_TOOL,
     **WRITE_FIRST_WITHHOLDING_TOOL,
@@ -567,6 +601,7 @@ CASES_BY_HYPOTHESIS: dict[str, dict[str, dict[str, Any]]] = {
     "refusal-attribution": SENSITIVITY_CASES,
     "write-first": WRITE_FIRST_CASES,
     "write-first-replication": WRITE_FIRST_CASES,
+    "write-first-seed-replication": WRITE_FIRST_CASES,
 }
 EXPECTATIONS_BY_HYPOTHESIS: dict[str, dict[str, dict[str, dict[str, Any]]]] = {
     "frozen": EXPECTATIONS,
@@ -574,6 +609,7 @@ EXPECTATIONS_BY_HYPOTHESIS: dict[str, dict[str, dict[str, dict[str, Any]]]] = {
     "refusal-attribution": ATTRIBUTION_EXPECTATIONS,
     "write-first": WRITE_FIRST_EXPECTATIONS,
     "write-first-replication": WRITE_FIRST_EXPECTATIONS,
+    "write-first-seed-replication": WRITE_FIRST_EXPECTATIONS,
 }
 REPEATS_BY_HYPOTHESIS: dict[str, dict[str, int]] = {
     "frozen": REPEATS_BY_CASE,
@@ -581,6 +617,7 @@ REPEATS_BY_HYPOTHESIS: dict[str, dict[str, int]] = {
     "refusal-attribution": ATTRIBUTION_REPEATS_BY_CASE,
     "write-first": WRITE_FIRST_REPEATS_BY_CASE,
     "write-first-replication": WRITE_FIRST_REPEATS_BY_CASE,
+    "write-first-seed-replication": WRITE_FIRST_REPEATS_BY_CASE,
 }
 PLAN_KIND_BY_HYPOTHESIS: dict[str, str] = {
     "frozen": PLAN_KIND,
@@ -588,6 +625,7 @@ PLAN_KIND_BY_HYPOTHESIS: dict[str, str] = {
     "refusal-attribution": ATTRIBUTION_PLAN_KIND,
     "write-first": WRITE_FIRST_PLAN_KIND,
     "write-first-replication": WRITE_FIRST_REPLICATION_PLAN_KIND,
+    "write-first-seed-replication": WRITE_FIRST_SEED_REPLICATION_PLAN_KIND,
 }
 
 
@@ -609,6 +647,28 @@ def repeats_for(hypothesis: str) -> dict[str, int]:
     if hypothesis not in REPEATS_BY_HYPOTHESIS:
         raise ValueError(f"hypothesis {hypothesis!r} is not declared")
     return REPEATS_BY_HYPOTHESIS[hypothesis]
+
+
+#: Declared seed per hypothesis. Every plan before the seed replication declares 7; changing a
+#: value here is a new plan, not a knob.
+SEED_BY_HYPOTHESIS: dict[str, int] = {
+    "frozen": SEED,
+    "payload-sensitivity": SEED,
+    "refusal-attribution": SEED,
+    "write-first": SEED,
+    "write-first-replication": SEED,
+    "write-first-seed-replication": WRITE_FIRST_SEED_REPLICATION_SEED,
+}
+
+
+def seed_for(hypothesis: str) -> int:
+    """Return the declared seed for a hypothesis, or refuse an undeclared one."""
+    try:
+        return SEED_BY_HYPOTHESIS[hypothesis]
+    except KeyError as exc:
+        raise ValueError(
+            f"hypothesis {hypothesis!r} is not declared; known: {sorted(SEED_BY_HYPOTHESIS)}"
+        ) from exc
 
 
 def plan_kind_for(hypothesis: str) -> str:

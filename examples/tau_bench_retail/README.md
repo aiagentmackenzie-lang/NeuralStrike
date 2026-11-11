@@ -107,6 +107,11 @@ $ENV/bin/python -m examples.tau_bench_retail.verify --source "$SRC" \
   --python "$ENV/bin/python" --out /tmp/ns-tau-write-first-replication --seed 7 \
   --hypothesis write-first-replication --model gemma4:31b
 
+# one-variable SEED replication of that matrix (the seed is the only change; seed 11)
+$ENV/bin/python -m examples.tau_bench_retail.verify --source "$SRC" \
+  --python "$ENV/bin/python" --out /tmp/ns-tau-write-first-seed --seed 11 \
+  --hypothesis write-first-seed-replication
+
 # contracts (pure ones run everywhere; 5 integration ones need the checkout)
 $V/bin/python -m pytest tests/test_tau_bench.py --no-cov
 NEURALSTRIKE_TAU_BENCH_SOURCE="$SRC" $V/bin/python -m pytest tests/test_tau_bench.py --no-cov
@@ -133,7 +138,10 @@ dispatch. `--hypothesis write-first` runs the declared write-first payloads unde
 `withheld_for_declared_class: true`, and a declared withholding that does not fire is
 `not_exercised` — never a pass. `--hypothesis write-first-replication` runs the identical
 payloads on a second declared model (`--model gemma4:31b`) under its own plan kind, with
-`replicates` naming the write-first plan. The mappings share no case name with the frozen
+`replicates` naming the write-first plan. `--hypothesis write-first-seed-replication` holds model,
+payloads, expectations and repeats fixed and changes the seed (declared in code as
+`WRITE_FIRST_SEED_REPLICATION_SEED` = 11; the runner refuses any other value), under its own plan
+kind with `replicates` naming the write-first plan. The mappings share no case name with the frozen
 matrix, the frozen constants are pinned to their `a8b02ca` SHA-256, and each declaration's
 payloads are pinned to the values they had when they were declared. A result from one plan
 is never merged with, summed with or compared row-for-row against the other.

@@ -30,7 +30,6 @@ from examples.tau_bench_retail.profile import (
     PLAN_KIND,
     POLICIES,
     REVISION,
-    SEED,
     SENSITIVITY_HYPOTHESIS,
     SENSITIVITY_PLAN_KIND,
     UPSTREAM,
@@ -38,6 +37,7 @@ from examples.tau_bench_retail.profile import (
     WRITE_FIRST_HYPOTHESIS,
     WRITE_FIRST_PLAN_KIND,
     WRITE_FIRST_REPLICATION_HYPOTHESIS,
+    WRITE_FIRST_SEED_REPLICATION_HYPOTHESIS,
     atomic,
     cases_for,
     digest,
@@ -45,6 +45,7 @@ from examples.tau_bench_retail.profile import (
     plan_kind_for,
     repeats_for,
     resolve_model,
+    seed_for,
     verify_model_pin,
 )
 
@@ -113,6 +114,7 @@ def hypothesis_block(hypothesis: str) -> dict[str, Any]:
         "refusal-attribution": ATTRIBUTION_HYPOTHESIS,
         "write-first": WRITE_FIRST_HYPOTHESIS,
         "write-first-replication": WRITE_FIRST_REPLICATION_HYPOTHESIS,
+        "write-first-seed-replication": WRITE_FIRST_SEED_REPLICATION_HYPOTHESIS,
     }
     if hypothesis not in statements:
         raise ValueError(f"hypothesis {hypothesis!r} is not declared")
@@ -139,6 +141,12 @@ def hypothesis_block(hypothesis: str) -> dict[str, Any]:
             "because the model read first, so the open question is whether that ordering "
             "belongs to the model or to the target's prompt; one variable changes here (the "
             "model) and every payload byte is held"
+        ),
+        "write-first-seed-replication": (
+            "the write-first cycle reported one failure at one seed, and one seed cannot "
+            "separate a property of the payload and the target's ordering rule from an "
+            "accident of sampling; one variable changes here (the seed) and every payload "
+            "byte, policy, model and repeat count is held"
         ),
     }
     return {
@@ -182,6 +190,11 @@ def plan_relationship(name: str, hypothesis: str = "frozen") -> dict[str, Any]:
         # plan's own objects, so a payload edit would move the write-first pins and fail the
         # suite rather than become an unexplained difference between two runs.
         return {"replicates": WRITE_FIRST_PLAN_KIND, "supersedes": None}
+    if hypothesis == "write-first-seed-replication":
+        # One variable: the seed. Payloads, expectations, repeats, model and policies are the
+        # write-first plan's own objects. It replicates that plan's rows at a different seed
+        # and supersedes nothing.
+        return {"replicates": WRITE_FIRST_PLAN_KIND, "supersedes": None}
     if hypothesis == "write-first":
         # Neither a replication of the frozen matrix nor a supersession of any plan: a new
         # hypothesis about whether the write is ever offered, with its own payloads, its own
@@ -218,7 +231,7 @@ def build_plan(
         "model": model_block(model),
         "model_pin_check": dict(pin),
         "budgets": {
-            "seed": SEED,
+            "seed": seed_for(hypothesis),
             "repeats_per_row": sorted({row["repeats"] for row in rows}),
             "max_num_steps": MAX_STEPS,
             "scripted_user_turns": USER_MAX_TURNS,
@@ -441,8 +454,9 @@ def one(
     model: str,
     hypothesis: str = "frozen",
 ) -> dict[str, Any]:
-    path = out / "observations" / f"{row['case']}--{row['policy']}--{SEED}--{index}.json"
-    log = out / "logs" / f"{row['case']}--{row['policy']}--{SEED}--{index}.log"
+    seed = seed_for(hypothesis)
+    path = out / "observations" / f"{row['case']}--{row['policy']}--{seed}--{index}.json"
+    log = out / "logs" / f"{row['case']}--{row['policy']}--{seed}--{index}.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     environment = {
         **os.environ,
@@ -453,7 +467,7 @@ def one(
         str(python), "-m", "examples.tau_bench_retail.collect",
         "--source", str(source), "--out", str(path),
         "--case", row["case"], "--policy", row["policy"],
-        "--seed", str(SEED), "--repeat-index", str(index), "--model", model,
+        "--seed", str(seed), "--repeat-index", str(index), "--model", model,
         "--hypothesis", hypothesis,
     ]
     try:
@@ -528,7 +542,8 @@ def main() -> int:
     parser.add_argument("--source", required=True, type=Path)
     parser.add_argument("--python", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path)
-    parser.add_argument("--seed", type=int, default=SEED)
+    # Declared per plan; a plan that declares a different seed is a different plan.
+    parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--repeats", type=int, default=None,
                         help="no-op only; a value other than the declared k is refused")
     parser.add_argument("--timeout", type=int, default=900)
@@ -537,8 +552,13 @@ def main() -> int:
     parser.add_argument("--hypothesis", default="frozen", choices=sorted(CASES_BY_HYPOTHESIS),
                         help="declared payload hypothesis; the default is the frozen matrix")
     arguments = parser.parse_args()
-    if arguments.seed != SEED:
-        raise SystemExit(f"plan declares seed {SEED}; refusing {arguments.seed}")
+    declared_seed = seed_for(arguments.hypothesis)
+    if arguments.seed is not None and arguments.seed != declared_seed:
+        raise SystemExit(
+            f"plan kind {plan_kind_for(arguments.hypothesis)} declares seed {declared_seed}; "
+            f"refusing {arguments.seed}"
+        )
+    arguments.seed = declared_seed
     declared_repeats = sorted(set(repeats_for(arguments.hypothesis).values()))
     if arguments.repeats is not None and arguments.repeats not in declared_repeats:
         # The k in the plan is not a knob. A lower k would silently weaken every row.

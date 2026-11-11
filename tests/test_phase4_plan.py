@@ -218,3 +218,46 @@ def test_the_platform_claim_matches_the_depth_actually_exercised() -> None:
     arm64 = [line for line in matrix.splitlines() if "arm64" in line and "smoke" in line]
     assert arm64, "the arm64 container depth is not documented"
     assert all("not exercised" in line or "startup" in line for line in arm64), arm64
+
+
+def test_both_release_variants_are_written_and_neither_is_chosen() -> None:
+    """ENGINEERING_BACKLOG.md E-11: the decision is described, not taken."""
+    plan = PLAN.read_text()
+    assert "## P4-2 variants — written down, not decided" in plan
+    section = plan[plan.index("## P4-2 variants") : plan.index("## Signing policy")]
+    assert "Variant A" in section and "Variant B" in section
+    assert "PYPI_API_TOKEN" in section, "the PyPI prerequisite must be named"
+    assert "Neither variant is chosen" in section
+    # No decision language: the gate may not be closed by prose.
+    for phrase in ("we will release to", "decided to release", "the release scope is chosen"):
+        assert phrase not in plan.lower(), phrase
+
+
+def test_release_dispatch_is_recorded_as_absent_until_a_run_exists() -> None:
+    """A dispatch is evidence; its absence must not be written up as a decision."""
+    for gate, cells in gate_rows().items():
+        if gate != "P4-2":
+            continue
+        joined = " ".join(cells)
+        if "PARTIAL" in joined:
+            assert "no dispatched release exists" in joined, (
+                "P4-2 is PARTIAL for one reason: no dispatched release. Say so in the row."
+            )
+        else:
+            pytest.fail("P4-2 changed state without a dispatch; see ENGINEERING_BACKLOG.md E-10")
+
+
+def test_the_release_workflow_defects_are_recorded_as_unconfirmed() -> None:
+    """Two defects are visible by reading release.yml; neither may be stated as a finding."""
+    section = PLAN.read_text()
+    section = section[section.index("## P4-2 variants") : section.index("## Signing policy")]
+    assert "neither is confirmed" in section
+    assert "push: false" in section
+    assert "shadowing" in section or "shadows the `build` module" in section
+
+
+def test_release_workflow_still_gates_publishing_on_the_input() -> None:
+    release = RELEASE_WORKFLOW.read_text()
+    for step in ("Publish to PyPI", "Log in to GHCR", "Bind the release into one manifest"):
+        body = release[release.index(step) :]
+        assert "inputs.publish" in body[:400], f"{step} is no longer gated on inputs.publish"

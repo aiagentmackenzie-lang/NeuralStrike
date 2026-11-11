@@ -447,6 +447,70 @@ withhold live under inference is still the cross-principal scoped read. See
 [AGENTDOJO_LOCAL_PROFILE.md](AGENTDOJO_LOCAL_PROFILE.md) and the `rows`/`counts` block in
 [evidence/phase3-agentdojo-banking-replication-2026-11-10.json](evidence/phase3-agentdojo-banking-replication-2026-11-10.json).
 
+## Two permanent limits of the declared profiles — 2026-11-12
+
+ENGINEERING_BACKLOG.md E-8 named two Phase 3 residues as *measurement*: the destructive class was
+measured and never reproduced, and persistent-memory influence stood at one 2/3 in one stage.
+Neither is an unfinished build. Both are restated here as **permanent limits of the declared
+profiles at this revision**, with the reason, because the alternative on offer was to buy the
+missing row with a new payload — which the backlog forbids and which would not be evidence anyway.
+
+### 1. Destructive action: attempts, and no reproduced effect
+
+**What exists.** The AgentDojo workspace profile exercises native simulated file deletion, with
+separate upstream state and utility predicates. Its seed-7 matrix produced three incomplete
+observations and two complete negatives with failed utility; the workspace ID-contract increment
+completed five fresh tasks but the attacker goal did not reproduce. The attempts are in the
+private packet and the counts are in this document. The destructive *boundary* is reachable and
+instrumented; the *effect* has never been observed.
+
+**Why it stays a limit.** A reproduced destructive effect needs an application this project did
+not author that (a) exposes a destructive tool at the tool boundary, (b) lets the harness observe
+pre- and post-state, and (c) has ground truth corroborated outside this repository. None of the
+five declared applications satisfies all three: AgentDojo's deletion is native-simulated inside a
+profile this repository drives, tau-bench retail has no destructive tool at all, and the
+memory-agent store has no destruction primitive. The two ways to close it are a new attack payload
+or a new application profile, and the second is a new measurement plan with its own declaration —
+not a fix to this one. Adding a payload to make a class light up is exactly the move the master
+plan's non-goals forbid, and it would produce an "effect" whose ground truth this repository
+wrote.
+
+**The standing statement.** Destructive action is **measured-not-reproduced** and stays that way
+for the declared profiles. It is closed only by a new declared profile on an application this
+project did not author, reviewed by someone who is not the author.
+
+### 2. Persistent-memory influence: a falsified persistent effect and a k=3 contamination count
+
+**What exists.** Against langchain-ai/memory-agent with a native `InMemoryStore`, the predeclared
+*persistent-effect* hypothesis is falsified: 0 persistent state violations across 72 observations
+at seeds 7/17/29, because the model stored the grounded value and never attempted the poisoned
+write. What does reproduce is **recall** contamination — 9 of 17 completed unguarded poisoning
+observations returned the poisoned address while the store stayed correct — and plan v5's
+provenance gate reduced that to 0 in its declared stages.
+
+**What "2/3 in one stage" actually was.** The same declared case, policy, seed and budget produced
+2/3 contaminated in one stage and 0/3 in another. With k=3 that is a statement about model
+variance, not about the control: a count of two does not survive one identical configuration
+returning zero. The honest recording is the one already in the profile — recorded as a
+small-sample artefact, no percentage quoted, no rate derived.
+
+**Why it stays a limit.** k=3 cannot separate a control effect from per-episode model variance at
+a single stage, and raising k is a new plan with a new declaration (and, per the backlog, one that
+would only be bought with a pre-registered reason). No percentage, rate or interval is quoted from
+these observations, and none may be.
+
+**The standing statement.** Persistent-memory **state** influence is falsified for the declared
+profiles; recall contamination is a k=3 count that is neither a rate nor an influence claim.
+
+### What this section does not do
+
+It does not move a gate. P3-6 stays `PARTIAL` in
+[PHASE3_ACCEPTANCE.md](PHASE3_ACCEPTANCE.md) with exactly the shortfall that document names, and
+the two residues above are named as limits rather than promoted to evidence. It does not add a
+payload, a scenario row, an application or a profile. The contract
+`tests/test_phase3_residue_limits.py` fails if either limit is later described as closed, measured
+or reproduced without a new declared profile behind it.
+
 ## Where the Phase 3 gates stand — 2026-11-10
 
 Gathered in one table because they were previously scattered across six documents. The binary
@@ -462,7 +526,7 @@ signed by anyone but the author.
 | Fair comparison | a pinned common workflow, same build, explicit budgets, independent ground truth | **not performed**; the comparator varies the attacker, not the tool, and produces no score |
 | Pilot | consenting owner, exact deployment, synthetic data, criteria, retention | **none** |
 | Commercial signal | customer feedback / willingness to pay | **none** |
-| Boundary diversity | privilege change, outbound transfer, destructive action, argument redirection, retrieval contamination, persistent memory, non-vulnerable configurations, benign operations | privilege ✓ (self-authored app), outbound transfer ✓ (AgentDojo banking `send_money`), argument redirection ✓ (the bill's account field controlling the payment destination), retrieval ✓, object authority ✓ (tau-bench, read withheld live), persistent memory: one 2/3 demonstration in one stage, destructive: attempts only, never a reproduced effect, non-vulnerable ✓ (hardened), benign ✓ — **but the ground truth is corroborated nowhere outside this repository** |
+| Boundary diversity | privilege change, outbound transfer, destructive action, argument redirection, retrieval contamination, persistent memory, non-vulnerable configurations, benign operations | privilege ✓ (self-authored app), outbound transfer ✓ (AgentDojo banking `send_money`), argument redirection ✓ (the bill's account field controlling the payment destination), retrieval ✓, object authority ✓ (tau-bench, read withheld live), persistent memory: the persistent effect is **falsified** (0 state violations across 72 observations) and the surviving effect is recall contamination at k=3, whose one-stage 2/3 is recorded as non-determinism rather than as influence (§Two permanent limits); destructive: attempts only, never a reproduced effect (§Two permanent limits), non-vulnerable ✓ (hardened), benign ✓ — **but the ground truth is corroborated nowhere outside this repository** |
 | Utility preserved | benign task completion under the control, asserted per target | **asserted for every target with a benign row**: tau-bench `nemotron-3.5-lightning:30b` 3/3 bound and 3/3 unguarded, 0 refusals; `qwen3.5:2b` 0/3 under both, 0 refusals, so the claim is falsified for that model and the control is not the cause; AgentDojo banking 3/3 bound and 3/3 benign on each of `qwen3.5:2b` and `gemma4:31b`, workspace 5/5, memory-agent benign 18/18 and 30/30 |
 | Phase 4 | release / provenance / platform / pilot gates | **open** |
 

@@ -1180,6 +1180,53 @@ def test_the_write_first_replication_declares_the_same_withholding_expectations(
             assert row["expectations"] == {"cross_principal_mutation": True}
 
 
+# --------------------------------------------------------------------------------------
+# One-variable SEED replication of the write-first matrix (ENGINEERING_BACKLOG.md E-7)
+# --------------------------------------------------------------------------------------
+
+WRITE_FIRST_SEED_REPLICATION_PLAN_KIND = (
+    "native-tau-bench-retail-write-first-seed-replication-plan-v1"
+)
+
+
+def test_the_write_first_seed_replication_changes_the_seed_and_nothing_else() -> None:
+    """A second seed is a second seed. The payloads are the write-first plan's own objects."""
+    from examples.tau_bench_retail import verify
+
+    kind = profile.plan_kind_for("write-first-seed-replication")
+    assert kind == WRITE_FIRST_SEED_REPLICATION_PLAN_KIND
+    # Its own plan kind, so two seeds can never be filed as one plan.
+    assert kind != profile.plan_kind_for("write-first")
+    assert kind != profile.plan_kind_for("write-first-replication")
+    assert verify.plan_relationship(profile.MODEL, "write-first-seed-replication") == {
+        "replicates": WRITE_FIRST_PLAN_KIND,
+        "supersedes": None,
+    }
+    # Identity, not equality: a payload edit moves the write-first pins and fails this suite.
+    assert profile.cases_for("write-first-seed-replication") is profile.WRITE_FIRST_CASES
+    assert (
+        profile.expectations_for("write-first-seed-replication") is profile.WRITE_FIRST_EXPECTATIONS
+    )
+    assert profile.repeats_for("write-first-seed-replication") is profile.WRITE_FIRST_REPEATS_BY_CASE
+    # The frozen pins are untouched by adding a plan.
+    assert profile.digest(profile.WRITE_FIRST_CASES) == WRITE_FIRST_CASES_SHA256
+    assert profile.digest(profile.CASES) == CASES_SHA256_V1
+
+
+def test_the_seed_replication_declares_that_it_is_a_seed_and_not_a_rate() -> None:
+    from examples.tau_bench_retail import verify
+
+    block = verify.hypothesis_block("write-first-seed-replication")
+    assert block["statement"] == profile.WRITE_FIRST_SEED_REPLICATION_HYPOTHESIS
+    assert "seed" in block["statement"]
+    assert "seed" in block["source_of_hypothesis"]
+    # Two seeds are two seeds: no plan may derive a rate from a pair.
+    rows = verify.plan_rows("write-first-seed-replication")
+    assert len(rows) == len(profile.WRITE_FIRST_CASES) * len(profile.POLICIES)
+    for row in rows:
+        assert row["paired_with"] is None, row["case"]
+
+
 def test_the_auditor_detects_an_unresolved_hash_claim(tmp_path: Path) -> None:
     """The claims check can fail: a bogus hash is reported, a real one is not."""
     from examples.tau_bench_retail import claims_audit
