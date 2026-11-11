@@ -18,6 +18,7 @@ These carry the Phase 2 acceptance claims.
 | Local compiled LangGraph text-message profile | `--adapter langgraph --module pkg.mod:attr` | Real `MessagesState` graphs, `ainvoke` or explicit values-mode `astream`, verified/excluded input prefix, newly emitted actions, final text | Explicit declared channel allowlist. Fresh thread configuration and async reset/cleanup are opt-in, and hook signatures are checked before graph resolution. Graph/store lifetime belongs to the caller. |
 | Modern MCP inspection | `mcp-scan`, `mcp-inspect`, `mcp-receipt` | SDK 2.3.0, protocol revision 2026-07-28, bounded stdio and exact-endpoint Streamable HTTP JSON/SSE, real discovery, version/server receipts, offline integrity check | Capability inspection, **not a security assessment**. Discovery is read-only; explicit whole-plan authorization is required to execute; no inferred dangerous-name execution, continuation or retry. |
 | Offline deterministic checks | `smoke`, `replay`, `rescore`, `efficacy` | Bundled-fixture scan, byte-verified bundle replay, deterministic-policy re-evaluation, label/prediction export | No model and no network participate. Replay proves the recorded evidence is intact; it does not re-run the target. |
+| One-command assessment and offline comparison | `assess` (legacy alias `corpus`), `compare` | Frozen selection, committed hash-bound bundle, gate decision; two committed assessments diffed offline with the same decision function | Comparison refuses a different target, seed, trial count or scenario payload, and refuses an incomplete current assessment; it never turns a missing or inconclusive result into a fix. `corpus` prints a deprecation notice. |
 
 ## Experimental
 
@@ -43,9 +44,6 @@ Not supported, not claimed, and not to be inferred from a passing run:
   `smoke` in CI, while `linux/arm64` is built and exercised for startup and import only — a full
   langgraph smoke under QEMU would be a slow, flaky gate rather than a meaningful one. A full
   smoke on `arm64` is **not exercised** and must not be claimed.
-- **Authenticated `scan` for OpenAI-compatible targets**: `scan --adapter openai` takes a scope
-  file but has **no** `--target-api-key-env`, so an authenticated endpoint is reachable through
-  `doctor` and `corpus` today. This is a real gap, tracked as work on the command spine (P4-1).
 
 ## Measured limits
 

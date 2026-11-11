@@ -277,7 +277,7 @@ neuralstrike forge --target mistral:7b --target-type local \
 
 # 4. Run the OWASP-tagged scenario corpus against the bundled vulnerable
 #    agent fixture and emit an audit-grade SARIF report:
-neuralstrike corpus --adapter langgraph --format sarif --out neuralstrike-report
+neuralstrike assess --adapter langgraph --format sarif --out neuralstrike-report
 
 # 5. Gate your own target on a baseline (exit 4 = regression):
 neuralstrike evaluate --target mistral:7b --target-type local \
@@ -317,7 +317,9 @@ report maps findings to OWASP + ATLAS + compliance controls.
 | Command | What it does |
 |---|---|
 | `scan` | Drive a real target through an adapter and observe behavior. Adapters: `openai`, `langgraph`, `langgraph-server`, `mcp`, `a2a` |
-| `corpus` | Run the OWASP ASI/LLM scenario corpus; emit SARIF / JSON / JUnit / Markdown / PDF |
+| `assess` | **One assessment command.** Freeze the selection, run the OWASP ASI/LLM corpus, commit a hash-bound evidence bundle, emit SARIF / JSON / JUnit / Markdown / PDF, apply the gate. `corpus` is the legacy name for the same command and prints a deprecation notice |
+| `compare` | **One compare command.** Diff two committed assessments offline (no target or model calls); exit 0 pass, 1 vuln, 3 not comparable, 4 regression |
+| `replay` | **One replay command.** Verify a bundle's hashes and recompute recorded outcomes without calling the target |
 | `evaluate` | k-trial canary-extraction probe; save/compare baselines |
 | `adaptive` | Adaptive attacks: PAIR, TAP (beam=1), Crescendo, trajectory-conditioned `trace`/`trace-pair`, seed diversity |
 | `exec-context` | Execution-context & skill attack pack: poisoned skills, rules-file backdoors, triggered injection, armed tool calls, worm-like propagation, resource exhaustion |

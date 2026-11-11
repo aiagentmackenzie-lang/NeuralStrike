@@ -938,6 +938,9 @@ def scan(
     adapter: str = typer.Option(..., help="Adapter: openai|mcp|langgraph|langgraph-server|a2a."),
     url: str = typer.Option(..., help="Target URL (endpoint / MCP URL / graph server / A2A base)."),
     model: str | None = typer.Option(None, help="Victim model (required for --adapter openai)."),
+    target_api_key_env: str | None = typer.Option(
+        None, "--target-api-key-env", help="Environment variable containing the target bearer credential."
+    ),
     tier: str = typer.Option(
         "instrumented",
         help="OpenAI SUT tier: text|function-calling|instrumented.",
@@ -1001,6 +1004,14 @@ def scan(
         raise ValidationError("--fail-on must be never|vuln|regression")
     if adapter == "openai" and not model:
         raise ValidationError("--adapter openai requires --model")
+    from neuralstrike.adapters.preflight import environment_credential
+
+    if target_api_key_env is not None and adapter != "openai":
+        raise typer.BadParameter("--target-api-key-env requires --adapter openai")
+    try:
+        target_api_key = environment_credential(target_api_key_env)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from None
 
     _apply_scope(scope_file, url, intent)
     _apply_safety(intent, require_approval)
@@ -1025,7 +1036,7 @@ def scan(
         oracle = ForbiddenToolOracle(ForbiddenToolSpec(forbidden_tools=canary_names), severity="critical")
         target_adapter: object
         if adapter == "openai":
-            target_adapter = OpenAIEndpointAdapter(url, model=model or "", tier=tier)
+            target_adapter = OpenAIEndpointAdapter(url, model=model or "", tier=tier, api_key=target_api_key)
         elif adapter == "langgraph":
             target_adapter = LangGraphAdapter(
                 spec=module, thread_mode=graph_thread_mode, reset=graph_reset, cleanup=graph_cleanup,
@@ -1870,8 +1881,8 @@ def doctor(
     raise typer.Exit(0 if receipt["ready"] else 3)
 
 
-@app.command()
-def corpus(
+def assess(
+    ctx: typer.Context,
     adapter: str = typer.Option(
         "langgraph",
         help="Adapter to drive: langgraph (bundled fixture) | openai.",
@@ -1947,12 +1958,22 @@ def corpus(
         False, "--require-approval", help="Explicit operator approval for irreversible actions."
     ),
 ) -> None:
-    """Run the OWASP ASI/LLM corpus against a target and emit an audit-grade report.
+    """Run one assessment against a target and commit an auditable evidence bundle.
+
+    This is the single assessment entry point (Phase 4 command spine). `corpus` is the
+    legacy name for the same function and prints a deprecation notice; both register
+    identical options and write identical bundles, so a script cannot get different
+    evidence from the old name.
 
     Every finding maps to an ASI/LLM ID + MITRE ATLAS technique + a compliance
     control (NIST AI RMF / EU AI Act / ISO 42001 / SOC 2 / CSA MAESTRO).
     Inconclusive probes are surfaced (SARIF note / JUnit skipped), never dropped.
     """
+    if ctx.info_name == "corpus":
+        console.print(
+            "[yellow]`neuralstrike corpus` is deprecated;[/yellow] use `neuralstrike assess` "
+            "(same assessment, same evidence bundle)."
+        )
     if fail_on not in {"never", "vuln", "regression"}:
         raise ValidationError("--fail-on must be never|vuln|regression")
     if adapter not in {"langgraph", "openai"}:
@@ -2155,6 +2176,13 @@ def corpus(
         _finish_assessment(reports, fail_on, selected=len(scenarios) * trials)
 
     _run(run())
+
+
+# Two registered names, one implementation: `assess` is the current surface and
+# `corpus` is the legacy alias kept for existing scripts (it prints a deprecation
+# notice at runtime). Registering the same callback means the alias cannot drift.
+app.command(name="assess")(assess)
+app.command(name="corpus")(assess)
 
 
 def load_corpus_dir_safe() -> Sequence[object]:
@@ -3812,6 +3840,53 @@ def judge_audit(
             raise typer.Exit(3) from exc
 
     _run(run())
+
+
+@app.command()
+def compare(
+    baseline: str = typer.Argument(..., help="Committed reference assessment bundle."),
+    current: str = typer.Argument(..., help="Committed assessment bundle to gate."),
+    fail_on: str = typer.Option("regression", help="Gate policy: never|vuln|regression."),
+    out: str | None = typer.Option(None, help="Optional private comparison-record JSON path."),
+) -> None:
+    """Compare two committed assessments offline and apply the gate.
+
+    Both bundles are hash-verified before any verdict is read, and no target, model
+    or oracle is called. Exit codes match the live baseline gate: 0 pass, 1 vuln,
+    3 not comparable, 4 regression. A fix requires complete current evidence, so
+    Succeeded -> Inconclusive is never reported as fixed.
+    """
+    import json
+    from pathlib import Path
+
+    from neuralstrike.evaluation.baseline import BaselineError
+    from neuralstrike.evaluation.bundle import BundleError
+    from neuralstrike.evaluation.compare import compare_with_record
+
+    if fail_on not in {"never", "vuln", "regression"}:
+        raise typer.BadParameter("--fail-on must be never|vuln|regression")
+    if out:
+        destination = Path(out).resolve()
+        sources = (Path(baseline).resolve(), Path(current).resolve())
+        if any(destination == source or source in destination.parents for source in sources):
+            console.print("[red]Comparison error:[/red] the record must be outside both bundles.")
+            raise typer.Exit(3)
+    try:
+        result, record = compare_with_record(baseline, current, fail_on=fail_on)
+    except (BaselineError, BundleError, OSError) as exc:
+        console.print(f"[red]Comparison error:[/red] {exc}")
+        raise typer.Exit(3) from exc
+    console.print(
+        Panel(
+            f"{result.decision.value} (exit {result.exit_code})\n{result.summary}",
+            title=f"Compare — fail-on={fail_on}",
+        )
+    )
+    console.print("Offline comparison: both bundles hash-verified; no target or oracle calls.")
+    if out:
+        write_private_artifact(Path(out), json.dumps(record, indent=2, sort_keys=True))
+        console.print(f"Comparison record → {out} (private; a digest is not a signature).")
+    raise typer.Exit(result.exit_code)
 
 
 @app.command()

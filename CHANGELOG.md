@@ -6,6 +6,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Phase 4 — the command spine: `assess`, `compare`, and an authenticated `scan`, 2026-11-11)
+- `assess` is the single assessment command (Phase 4 gate P4-1). It is the existing assessment
+  implementation registered under a new name; `corpus` is the **same callback** registered under
+  the legacy name, so the alias cannot drift, and it prints a deprecation notice when invoked.
+- `compare BASELINE CURRENT` is the single comparison command. It loads two committed assessment
+  bundles through `load_assessment` (every recorded byte hash-verified), diffs the per-scenario
+  verdicts and applies the gate offline: no target, model or oracle call. Exit codes are the
+  baseline gate's: 0 pass, 1 vuln, 3 not comparable, 4 regression.
+- `src/neuralstrike/evaluation/compare.py` — comparability is refused, not assumed: a different
+  adapter, target, seed, trial count, scenario selection or scenario payload produces
+  `not_comparable` and exit 3. An incomplete current assessment is never a pass, and
+  Succeeded → Inconclusive is never reported as fixed.
+- `decide_comparison` in `src/neuralstrike/evaluation/baseline.py` — the decision logic of
+  `scan --baseline-dir` extracted into one function that both the live gate and the offline
+  `compare` command call, so the two surfaces cannot disagree about what a regression is.
+- `scan --adapter openai` now accepts `--target-api-key-env` and attaches the resolved bearer,
+  closing the asymmetry the live-target guide had recorded and excluded. A missing, empty or
+  header-unsafe value is rejected before any request is sent; the flag is refused on adapters
+  that cannot use it.
+- `tests/test_command_spine.py` — 14 contracts: the three spine commands exist, the alias is
+  the same callback, the deprecation notice fires only on the legacy name, every comparison
+  outcome (pass / regression / vuln / not comparable / fixed / withheld fix / refused run /
+  non-assessment bundle / bound record), and the authenticated `scan` against a separate stdlib
+  loopback server (header asserted, missing credential refused before any request).
+- The documentation anti-vapour contract now reads registered commands from the Typer app
+  rather than parsing decorators, so a command registered under two names cannot hide from it.
+
 ### Added (Phase 4 — the container is run in CI, P4-7 MET, 2026-11-10)
 - `.github/workflows/ci.yml` job `container` — builds the image, asserts it runs as uid 1000,
   runs the full offline `smoke` inside `linux/amd64`, and checks the artifact is written mode 600.

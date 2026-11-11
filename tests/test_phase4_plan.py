@@ -97,15 +97,21 @@ def test_every_document_the_plan_links_to_exists() -> None:
 
 
 def registered_commands() -> set[str]:
-    """Command names as Typer registers them: explicit ``name=`` else the function name."""
-    source = MAIN.read_text()
-    decorators = re.findall(
-        r"@app\.command\((?P<args>[^)]*)\)\s*\n(?P<body>(?:@[^\n]*\n)*)def (?P<fn>\w+)", source
-    )
-    names = set()
-    for args, _body, fn in decorators:
-        explicit = re.search(r'name\s*=\s*"([^"]+)"', args)
-        names.add(explicit.group(1) if explicit else fn.replace("_", "-"))
+    """Command names as Typer registers them: explicit ``name=`` else the function name.
+
+    Read from the app rather than by parsing decorators, because the command spine
+    registers one callback under two names (``assess`` and its legacy alias
+    ``corpus``); a decorator-only parser would miss both and let a document name a
+    command the CLI does not have.
+    """
+    from neuralstrike.main import app
+
+    names: set[str] = set()
+    for info in app.registered_commands:
+        if info.name is not None:
+            names.add(info.name)
+        elif info.callback is not None:
+            names.add(info.callback.__name__.replace("_", "-"))
     return names
 
 
@@ -174,10 +180,16 @@ def test_the_live_target_guide_never_inlines_a_credential_or_invents_a_flag() ->
     assert "--target-api-key-env" in guide
     # Credentials by reference only: no bearer literal on a command line.
     assert not re.search(r"--(?:api-key|token|bearer)\s+['\"]?\S{8,}", guide), "inline credential"
-    # The documented authenticated path is doctor/corpus, never scan.
-    scan_lines = [line for line in guide.splitlines() if "scan" in line and "--url" in line]
-    assert not scan_lines, f"guide documents authenticated scan, which has no bearer option: {scan_lines}"
-    assert "no** `--target-api-key-env`" in guide or "has **no**" in guide
+    # The authenticated path is `assess` (with `compare` to verify a fix), and the guide
+    # documents scan authentication only because the flag now exists on that command.
+    assert "neuralstrike assess" in guide
+    assert "neuralstrike scan" in guide
+    assert "neuralstrike compare" in guide
+    assert "Known gap" not in guide, "a closed gap must not still be advertised"
+    source = MAIN.read_text()
+    scan = source.split("def scan(")[1].split("\n@app.command")[0]
+    assert "--target-api-key-env" in scan, "the guide may not document a flag scan lacks"
+    assert "api_key=target_api_key" in scan, "the resolved credential is never attached"
 
 
 def test_the_offline_example_matches_the_command_it_documents() -> None:

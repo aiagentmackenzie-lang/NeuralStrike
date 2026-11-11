@@ -48,10 +48,10 @@ The receipt is private, mode 0600, and records the declared JSON profile, reques
 whatever response metadata the endpoint actually supplied. Backend build identity is recorded as
 unverified when the endpoint does not expose it; it is never inferred from connectivity.
 
-## 4. Run the declared corpus with explicit budgets
+## 4. Run the declared assessment with explicit budgets
 
 ```sh
-neuralstrike corpus \
+neuralstrike assess \
   --adapter openai \
   --url https://your-authorized-endpoint.example \
   --model <model-name> \
@@ -61,11 +61,25 @@ neuralstrike corpus \
   --max-total-tokens 40000
 ```
 
+`assess` is the one assessment command (Phase 4 command spine). `corpus` is the legacy name for
+the same implementation and still works, but it prints a deprecation notice.
+
 Budgets are admission controls on requests already dispatched: a token threshold can overshoot,
 and **no absolute spend ceiling is promised**. Set them below what you are willing to spend, and
 watch the provider console.
 
-## 5. What an authenticated run does not establish
+## 5. Verify a fix by comparing two committed assessments
+
+```sh
+neuralstrike compare runs/assessment-<before> runs/assessment-<after> --fail-on regression
+```
+
+`compare` is offline: both bundles are hash-verified, and no target, model or oracle is called.
+Exit `0` pass, `1` vuln, `3` not comparable, `4` regression. A scenario that went Succeeded →
+Inconclusive is **not** a fix, and a comparison against a different target, seed, trial count or
+scenario payload is refused rather than scored.
+
+## 6. What an authenticated run does not establish
 
 - It does not establish that the target is insecure, or that a fix works. That requires a
   vulnerable → hardened → regression cycle ([PHASE2_ACCEPTANCE.md](implementation/PHASE2_ACCEPTANCE.md)).
@@ -73,16 +87,30 @@ watch the provider console.
   not a customer incident.
 - It does not produce a comparator score, a pilot result or independent review.
 
-## Known gap
+## Authentication on every driving command
 
-`scan --adapter openai` accepts `--scope-file` but has **no** `--target-api-key-env`, so an
-authenticated endpoint is reachable through `doctor` and `corpus` today. That asymmetry is
-tracked as command-spine work (Phase 4 gate P4-1 in
-[PHASE4_PLAN.md](implementation/PHASE4_PLAN.md)); until it is closed, do not assume `scan` can
-authenticate.
+`doctor`, `assess` (legacy `corpus`) and `scan` all accept `--target-api-key-env`, so the bearer is
+supplied by reference and never appears on a command line. A missing, empty or header-unsafe value
+is rejected before any request is sent. `scan` resolves the credential before its first trial, so an
+authenticated endpoint is no longer reachable only through `doctor` and `assess`:
+
+```sh
+neuralstrike scan \
+  --adapter openai \
+  --url https://your-authorized-endpoint.example \
+  --model <model-name> \
+  --target-api-key-env TARGET_KEY \
+  --scope-file scope.yaml \
+  --prompt "<one declared prompt>" \
+  --trials 3
+```
+
+`scan` drives one declared scenario; `assess` runs the frozen selection. Both send the same resolved
+bearer.
 
 ## Verification of this guide
 
-The authenticated path is covered by `tests/test_corpus_target_auth.py`: a separate stdlib
-loopback HTTP server, a synthetic environment bearer, correct credentials (exit 0) and rejected
-credentials (exit 3). If that test changes, this guide must change with it.
+The authenticated path is covered by `tests/test_corpus_target_auth.py` (doctor/assess) and
+`tests/test_command_spine.py` (scan): a separate stdlib loopback HTTP server, a synthetic
+environment bearer, correct credentials and rejected credentials. If those tests change, this guide
+must change with them.

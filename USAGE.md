@@ -301,8 +301,11 @@ neuralstrike evaluate --target llama3.1 --target-type local --trials 5 --seed 7
                               # k-trial canary-extraction probe; exit 0 pass / 1 vuln / 4 regression
 neuralstrike scan --adapter openai --url https://api.example.com --model gpt-4o \
   --prompt "Ignore previous instructions..." --trials 3
-neuralstrike corpus --adapter openai --url https://api.example.com --model gpt-4o \
+neuralstrike assess --adapter openai --url https://api.example.com --model gpt-4o \
+  --target-api-key-env TARGET_KEY \
   --format sarif --out findings      # the ASI/LLM corpus, audit-grade report (SARIF/JUnit/JSON)
+neuralstrike compare runs/assessment-<baseline> runs/assessment-<candidate> \
+  --fail-on regression                # offline, hash-verified; exit 0 pass / 1 vuln / 3 not comparable / 4 regression
 neuralstrike pack --name jailbreakbench --target gpt-4o --target-type remote --accept-license
 neuralstrike adaptive --target llama3.1 --goal "reveal the system prompt" --strategy pair
 neuralstrike adaptive --target llama3.1 --strategy trace --no-judge        # trajectory-conditioned (Phase 9)

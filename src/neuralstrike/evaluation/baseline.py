@@ -28,7 +28,7 @@ exits ``0`` (report-only). Invalid or unreadable baselines still raise errors.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -44,6 +44,7 @@ __all__ = [
     "CompareResult",
     "baseline_path",
     "compare_baseline",
+    "decide_comparison",
     "save_baseline",
 ]
 
@@ -288,34 +289,28 @@ def _compatibility_issue(baseline: Mapping[str, Any], report: RunReport) -> str 
     return None
 
 
-def compare_baseline(
-    directory: str | Path,
-    report: RunReport,
+def decide_comparison(
+    baseline_verdicts: Mapping[str, str],
+    current: Mapping[str, str],
     *,
     fail_on: str = "regression",
+    incomplete: bool = False,
+    missing: Sequence[str] = (),
+    unresolved: Sequence[str] = (),
 ) -> CompareResult:
-    """Compare ``report`` against the saved baseline for its scenario.
+    """Apply the gate policy to two scenario→verdict maps.
 
-    ``fail_on`` selects the gate policy (see module docstring).
+    Shared by the live baseline gate (:func:`compare_baseline`) and the offline
+    ``compare`` command, so two committed assessments and a scan-with-baseline
+    cannot disagree about what counts as a regression or a fix.
     """
     if fail_on not in {"never", "vuln", "regression"}:
         raise BaselineError(f"invalid fail_on={fail_on!r}; expected never|vuln|regression")
-
-    scenario = report.meta.scenario_id
-    path = baseline_path(directory, scenario)
-    baseline = _load_baseline(path)
-    baseline_verdicts: Mapping[str, str] = baseline["verdicts"]
-    current = _scenario_signatures(report)
-
-    issue = _compatibility_issue(baseline, report)
-    if issue:
-        return CompareResult(CompareDecision.NOT_COMPARABLE, 0 if fail_on == "never" else 3, issue)
 
     new_succ: list[str] = []
     pre_existing: list[str] = []
     regressions: list[str] = []
     fixed: list[str] = []
-    missing, unresolved, incomplete = _coverage_gaps(baseline, report, current)
 
     for sid, v in current.items():
         if v == Verdict.SUCCEEDED.value:
@@ -337,7 +332,7 @@ def compare_baseline(
         return CompareResult(
             decision=CompareDecision.NOT_COMPARABLE,
             exit_code=0 if fail_on == "never" else 3,
-            summary=f"incomplete assessment: missing={missing}, unresolved={unresolved}",
+            summary=f"incomplete assessment: missing={list(missing)}, unresolved={list(unresolved)}",
             new_succeeded=tuple(new_succ),
             pre_existing_succeeded=tuple(pre_existing),
             regressions=tuple(regressions),
@@ -383,4 +378,38 @@ def compare_baseline(
         pre_existing_succeeded=tuple(pre_existing),
         regressions=tuple(regressions),
         fixed=tuple(fixed),
+    )
+
+
+def compare_baseline(
+    directory: str | Path,
+    report: RunReport,
+    *,
+    fail_on: str = "regression",
+) -> CompareResult:
+    """Compare ``report`` against the saved baseline for its scenario.
+
+    ``fail_on`` selects the gate policy (see module docstring).
+    """
+    if fail_on not in {"never", "vuln", "regression"}:
+        raise BaselineError(f"invalid fail_on={fail_on!r}; expected never|vuln|regression")
+
+    scenario = report.meta.scenario_id
+    path = baseline_path(directory, scenario)
+    baseline = _load_baseline(path)
+    baseline_verdicts: Mapping[str, str] = baseline["verdicts"]
+    current = _scenario_signatures(report)
+
+    issue = _compatibility_issue(baseline, report)
+    if issue:
+        return CompareResult(CompareDecision.NOT_COMPARABLE, 0 if fail_on == "never" else 3, issue)
+
+    missing, unresolved, incomplete = _coverage_gaps(baseline, report, current)
+    return decide_comparison(
+        baseline_verdicts,
+        current,
+        fail_on=fail_on,
+        incomplete=incomplete,
+        missing=missing,
+        unresolved=unresolved,
     )

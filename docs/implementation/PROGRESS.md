@@ -2851,3 +2851,38 @@ Closing that needs a release decision — a tag, a PyPI push and a GHCR publish 
 **Gates.** 1760 passed, 7 skipped; coverage 91.88 %; ruff clean over `src tests examples
 scripts`; mypy 144 files; CI `42937379076` at `9824c7a` all seven jobs green.
 
+### 2026-11-11 — the command spine: P4-1 MET, and the last engineering gate closes
+
+**What the gate asked for and what now exists.** One assessment command, one compare command, one
+replay command, and no document naming a command the CLI does not have. `assess` is the single
+assessment surface; `corpus` is **the same callback** registered under the legacy name, so the alias
+cannot drift, and it prints a deprecation notice at runtime. `compare BASELINE CURRENT` is the single
+comparison surface: both bundles are loaded through `load_assessment`, so every recorded byte is
+hash-verified before a verdict is read, and no target, model or oracle is called.
+
+**The decision function was extracted, not duplicated.** `scan --baseline-dir` already had the gate
+semantics — regression outranks vuln, an incomplete assessment is `not_comparable`, a fix requires
+complete current evidence. That logic now lives in `decide_comparison`, called by both the live
+baseline gate and the offline `compare` command. Two surfaces, one policy.
+
+**Refusals are first class in `compare`.** A different adapter, target, seed, trial count, scenario
+selection or scenario payload is refused with exit 3 rather than scored. A fix verified on a
+different target is not a fix, and a same-named scenario with a changed payload is a different
+scenario. An omitted or inconclusive current scenario is never counted as fixed.
+
+**The gap the live guide exposed is closed.** `scan --adapter openai` now accepts
+`--target-api-key-env`, resolves it through `environment_credential` before the first trial, and
+attaches it to the adapter. The guide's "Known gap" section is now a documented authenticated path
+for `doctor`, `assess` and `scan`; the support matrix moved the exclusion into a supported row.
+
+**Contracts (14 new).** The three spine commands exist; the legacy alias is the same callback; the
+deprecation notice fires only on the legacy name; every comparison outcome is covered (pass,
+regression, vuln, not comparable, fixed, withheld fix, refused run, non-assessment bundle, bound
+record); and the authenticated `scan` is exercised against a separate stdlib loopback server with
+the `Authorization` header asserted and a missing credential refused before any request. The
+documentation anti-vapour contract now reads registered commands from the Typer app, because the
+old decorator parser could not see a callback registered under two names.
+
+**P4-1 is `MET`.** Phase 4 remains **NOT RELEASED**: P4-2 is `PARTIAL` for one reason only (no
+dispatched release, so the image-digest binding is unproven) and P4-6 is `OPEN` (three pilot teams
+— people). Phase 3 is untouched and still **NOT ACCEPTED**.

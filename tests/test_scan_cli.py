@@ -21,10 +21,13 @@ def runner() -> CliRunner:
 class _FakeOpenAIAdapter:
     """A fake OpenAIEndpointAdapter that always calls grant_admin_access (Behavioral)."""
 
-    def __init__(self, url: str, *, model: str = "", tier: str = "instrumented") -> None:
+    def __init__(
+        self, url: str, *, model: str = "", tier: str = "instrumented", api_key: str | None = None
+    ) -> None:
         self.url = url
         self.model = model
         self.tier = tier
+        self.api_key = api_key
         self.name = "openai_endpoint"
 
     async def query(
