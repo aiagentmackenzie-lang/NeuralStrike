@@ -6,6 +6,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Phase 4 — artifact binding: wheel exercised outside the checkout, 2026-11-10)
+- `.github/workflows/ci.yml` job `artifact` — builds sdist+wheel **from outside the repository**
+  (the checkout has a gitignored `build/` directory that shadows the `build` module), installs the
+  wheel into a clean venv, asserts the import resolves to `site-packages` rather than the checkout,
+  runs the offline smoke from outside the repo, generates the SBOM of the installed wheel
+  environment, and binds the release. The editable install used by the other jobs cannot catch
+  missing package data, a stale version or an undeclared dependency; this job does.
+- `scripts/release_manifest.py` — binds version, tag, commit, wheel, sdist, SBOM and optionally the
+  image digest into one deterministic manifest. Refuses a missing artifact, a wheel whose filename
+  disagrees with the declared version, an SBOM without the project component, and a non-digest image
+  reference. Never claims a signature: `signed: false`, `signatures: []` — a digest is not a
+  signature.
+- `.github/workflows/release.yml` — binds the image digest into the manifest and attaches it to the
+  GitHub release, so the binding is not merely local.
+- `tests/test_release_manifest.py` — ten contracts over the binder's refusals and the two workflow
+  steps, including "no artifact may be described as signed".
+- CI-verified at `d2acde5` (run `42934094480`): the downloaded manifest re-verifies **3/3 digests**
+  against the uploaded wheel, sdist and SBOM. P4-2 remains `PARTIAL`: the container is never pulled
+  and smoked, and no dispatched release proves the image-digest binding.
+
 ### Added (Phase 4 — scheduled dependency health verified, signing policy, pilot-facing docs, 2026-11-10)
 - P4-4 **MET**: the scheduled dependency job was dispatched once (`workflow_dispatch`, run
   `42931775244` at `41670a7`) and completed success with both audit records uploaded. The gate

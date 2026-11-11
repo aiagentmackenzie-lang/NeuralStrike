@@ -2799,3 +2799,30 @@ so a doc cannot name a command the CLI does not have.
 mypy clean. Phase 4 status is still **NOT RELEASED**: P4-1 `OPEN`, P4-2 and P4-7 `PARTIAL`, P4-6
 `OPEN` (people). Phase 3 untouched.
 
+### 2026-11-10 — P4-2 wheel half: built, installed outside the checkout, bound (CI-verified), container still open
+
+The editable install every job used could never catch missing package data, a stale version or an
+undeclared dependency, so a new CI `artifact` job builds sdist+wheel **from outside the repository**
+(the checkout carries a gitignored `build/` directory that shadows the `build` module), installs the
+wheel into a clean venv, asserts the import resolves to `site-packages` and not the checkout, runs the
+offline smoke from a directory outside the repo, generates the SBOM of that installed environment, and
+binds version, tag, commit, wheel, sdist and SBOM into `release-manifest.json`.
+
+`scripts/release_manifest.py` computes every digest itself and refuses a missing artifact, a wheel whose
+filename disagrees with the declared version, an SBOM that does not contain the project, and an image
+reference that is not a digest. It never claims a signature: `signed` is false with an empty list,
+because a digest is not a signature. `release.yml` binds the image digest into the same manifest and
+attaches it to the release.
+
+**Verified, not assumed.** Locally: wheel built, installed clean, imported from `site-packages`, smoke
+passed (3 scenarios, ASR 33.3 %, coverage 100 %). In CI: run `42934094480` at `d2acde5` green, and the
+downloaded artifact re-verified — `release-manifest.json` matches **3/3 digests** against the uploaded
+wheel, sdist and SBOM, `source_commit` is the run's SHA, `signed: false`, `image: null`.
+
+**P4-2 stays `PARTIAL`.** The criterion names the container as well, and no container is pulled and
+smoked anywhere; the image-digest binding also has no dispatched release behind it. That is the next
+piece, and it is the same work as P4-7's platform gate.
+
+**Gates.** 1758 passed, 7 skipped (also with the model daemon blocked); coverage 91.88 %; `ruff` clean
+over `src tests examples scripts`; `mypy` 144 files.
+
