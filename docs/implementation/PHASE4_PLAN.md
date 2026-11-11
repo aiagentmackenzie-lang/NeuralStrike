@@ -87,3 +87,7 @@ It does not release anything, and it does not claim that any artifact is signed,
 independently verified. It does not move Phase 3: P3-1 to P3-6 stay exactly as recorded in
 [PHASE3_ACCEPTANCE.md](PHASE3_ACCEPTANCE.md), and P3-7 stays `MET` and unsigned. It does not
 create a release, a tag, a wheel or an image, and nothing here is a pilot result.
+
+Engineering that is *not* one of these gates — integrity fixes, the tool-axis comparator,
+the never-dispatched release check, and local/CI environment drift — is tracked separately in
+[ENGINEERING_BACKLOG.md](ENGINEERING_BACKLOG.md). It changes no gate state by itself.
