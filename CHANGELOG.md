@@ -6,6 +6,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (README honesty pass — every claim re-derived from the tree, 2026-11-12)
+- **New §Breadth, measured.** 14 dimensions counted from the code by re-runnable commands: 42
+  command names / 41 distinct callbacks, 121 implementation modules in 26 packages (≈26.7k lines),
+  5 adapters, 5 deterministic oracle families, 60 scenarios across 20 categories and 5 delivery
+  vectors in 4 YAML files, 5 adaptive strategies, 18 transforms, 8 defenses + 2 checkers, 4 packs,
+  5 report formats, 8 compliance frameworks. `tests/test_readme_claims.py` re-derives each one.
+- **One evidence vocabulary.** The capability map's `Verified / Informational / Planned` legend is
+  replaced by the repository's three marks — ✅ CI-verified, ⚠️ local observation, ❌ not
+  implemented — and every capability row now carries one.
+- **Four overclaims corrected.** MCP bounded **stdio discovery** shipped and the map still said
+  "Planned" (stdout scanning is the real gap: `mcp-scan` requires `--url`). The 10 incident
+  scenarios are *modelled on* named incidents, not replays of their evidence, and the CVE
+  attributions are not verified here. Delegation-chain analysis is a tested **library** with no CLI.
+  TAP generates three judge-ranked candidates per turn and keeps one, which the old wording
+  described as "one payload per turn".
+- **New §What NeuralStrike is not** — not certified, not independently accepted, not a service,
+  not a sandbox, and a green run is not a safety guarantee.
+- **Test counts re-derived**: 2,707 collected (2,700 pass, 7 skip), 91.98 % locally; CI additionally
+  skips seven tests that need the private evidence root or the pinned tau-bench checkout.
+
+### Fixed (corpus labels, 2026-11-12)
+- **10 of 60 scenarios carried an `owasp_name` the compliance index disagrees with**, including two
+  that were another framework's name entirely (`ASI06` labelled "Insecure Output Handling" — that is
+  LLM05; `ASI02` labelled "Sensitive Information Disclosure" — that is LLM02). Reports print this
+  string, so a finding could name a category that does not exist. Relabelled to the canonical names;
+  `tests/test_corpus_labels.py` fails if any scenario drifts again. **Categorisation was not
+  changed**: moving a scenario between categories moves coverage counts and is a decision, not a
+  typo fix — `github-copilot-cve-2025-53773` and `gemini-memory-persistence` still look
+  mis-categorised and are recorded as open questions.
+- `corpus/phase10_execution_context.yaml` existed only in the shipped package data, so a reader
+  browsing `corpus/` counted 53 scenarios where the README said 60. The reader copy now has all four
+  files, and a contract asserts the two trees are byte-identical file-for-file.
+
+
 ### Changed (engineering backlog E-1…E-12, 2026-11-12)
 - **The package no longer claims a stability its gates deny** (E-1). `Development Status :: 5 -
   Production/Stable` → `4 - Beta`, because Phase 4 is NOT RELEASED and Phase 3 is NOT ACCEPTED.

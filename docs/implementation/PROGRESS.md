@@ -2931,7 +2931,7 @@ a future reader to think the stronger one was removed.
 ### 2026-11-12 — E-3: one declared command surface, and every traffic-sending command gated
 
 Measured before changing anything, from the Typer command graph and `main.py`'s AST: 42 registered
-names (40 callbacks — `corpus` is the same callback as `assess`), of which **11 enforced both
+names (41 distinct callbacks — `corpus` is the same callback as `assess`), of which **11 enforced both
 gates, 3 enforced scope only, 1 enforced the HITL gate only, and 27 enforced neither** — 15 of
 which send traffic. The backlog's "13 of 40" is wrong and the code wins; the corrected counts are
 in the backlog row, the support matrix and the README.
@@ -3134,3 +3134,68 @@ is the whole lesson.
 supply-chain, artifact, container incl. arm64, dashboard). `main == origin/main == 33ae8ff`, tree
 clean. The gate script now runs on the runner as the same file a contributor runs, which is the
 point of E-12 and the one thing this push actually proved.
+
+### 2026-11-12 — README honesty pass: what the tree actually contains, and four things it claimed wrong
+
+Asked to build a true breadth of the software and make the README honest. Every number and every
+capability claim in `README.md` was re-derived from the code, not read back.
+
+**Breadth, now stated and re-derived.** 42 command names / **41** distinct callbacks (`corpus` and
+`assess` are one callback — the audit called it "40 commands"; it is 42 names over 41 callbacks),
+**121** implementation modules in **26** packages, **≈26.7k** lines under `src/`, **5** adapters,
+**5** deterministic oracle families, **60** scenarios across **20** categories and **5** delivery
+vectors in **4** YAML files, **5** adaptive strategies, **18** transforms, **8** defenses + **2**
+checkers, **4** packs, **5** report formats, **8** compliance frameworks. New `## Breadth, measured`
+section; `tests/test_readme_claims.py` (22 contracts) re-derives each figure and fails when the tree
+moves out from under it.
+
+**Four overclaims corrected, one of them in the direction that made the tool look worse:**
+
+1. **MCP stdio was marked "Planned" and it shipped.** `bounded_stdio` in `mcp_transport.py` is
+   reachable through `mcp-inspect --stdio-command`. The real gap is stdio *scanning*: `mcp-scan`
+   requires `--url`, so a stdio server can be inspected and receipted but not scanned for poisoning.
+   That is now the row, and the roadmap item.
+2. **"Real-incident replays" was not a replay.** The 10 scenarios are synthetic test cases modelled
+   on named incidents (EchoLeak/CVE-2025-32711, MCPoison/CVE-2025-54136, Copilot CVE-2025-53773,
+   Amazon Q AWS-2025-015/-019, and others). No original evidence is reproduced, and the CVE
+   identifiers are cited as published names — this repository does not verify them. Relabelled
+   "incident-modelled", marked ⚠️, and said plainly in the limitations.
+3. **Delegation-chain analysis has no CLI.** `DelegationAnalyzer` is a tested library; nothing drives
+   it and it contacts nothing. Marked ⚠️ library only.
+4. **TAP was described wrongly, in the flattering direction for the limitation.** The old text said
+   "one payload per turn". The code generates **three** candidates per turn, has the judge rank them
+   and keeps the best — a beam of one, but not a single prompt. Now says exactly that.
+
+Also added `## What NeuralStrike is not` (not certified, not independently accepted, not a service,
+not a sandbox, a green run is not a safety guarantee) and replaced the capability map's
+`Verified / Informational / Planned` legend with the repository's three marks.
+
+**Two defects found while auditing, both now fixed:**
+
+- **10 of 60 scenarios carried an `owasp_name` the compliance index disagrees with.** Some were
+  synonyms; two were another framework's name outright — `ASI06` labelled "Insecure Output Handling
+  / Agent Tool Abuse" (that is **LLM05**) and `ASI02` labelled "Sensitive Information Disclosure"
+  (that is **LLM02**). Reports print this string, so a finding could name a category that does not
+  exist. Fail-before-fix: `tests/test_corpus_labels.py` ran red on 10 ids, then the labels were
+  rewritten to the canonical index. **Categorisation untouched** — `github-copilot-cve-2025-53773`
+  and `gemini-memory-persistence` still look mis-categorised (both sit under ASI02 while their
+  intents read as prompt leakage and memory persistence). Moving a scenario changes coverage counts
+  and is a decision, so those are recorded as open questions, not silently retaxonomised.
+- **`corpus/phase10_execution_context.yaml` existed only in the shipped package data.** The reader
+  browsing `corpus/` counted 53 scenarios where the README said 60. Copied into the reader tree and
+  pinned: the contract now asserts the two trees are byte-identical file-for-file, so the next
+  divergence fails instead of drifting.
+
+**My own table was dishonest for ten minutes.** The first draft of the breadth table marked the test
+counts ✅ CI-verified while quoting my local numbers — CI reported 2,609 pass / 14 skip at
+`f40168b` against 2,638 / 7 here, because seven tests need the private evidence root or the pinned
+tau-bench checkout. Caught it while checking CI's actual coverage. The table now has two rows, one
+⚠️ local and one ✅ CI, and states why the skip counts differ.
+
+**A count that cannot be read from inside a run.** The contract asks pytest itself
+(`--collect-only` in a subprocess) for the collected count, because "911 tests" survived in this
+README long after it was false and no in-process assertion could have caught it. It then caught *my*
+own drift twice as I added the contracts in this pass, which is the behaviour I wanted.
+
+**Gates.** 2,700 passed, 7 skipped of 2,707 collected; coverage 91.98 % (85 % enforced); `ruff` and
+`mypy` clean over 147 files. No gate moved: Phase 3 **NOT ACCEPTED**, Phase 4 **NOT RELEASED**.

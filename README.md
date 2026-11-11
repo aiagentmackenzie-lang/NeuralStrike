@@ -87,9 +87,9 @@ NeuralGuard validates the controls, and the two repos talk directly via the
 
 ### What makes it different
 
-1. **Deterministic oracles, not vibes.** Every probe is scored by a
+1. **Deterministic oracles, not vibes.** Every bundled corpus probe is scored by a
    deterministic oracle (canary extraction, forbidden-tool detection,
-   predicate matching, schema validation). Verdicts are **three-outcome and
+   predicate matching, schema validation). Imported benchmark-pack probes are the one exception: they ship no oracle, so they defer to the judge or stay `Inconclusive`. Verdicts are **three-outcome and
    conclusive-only**: `Resisted` | `Succeeded` | `Inconclusive`. Weak evidence
    is honestly `Inconclusive` — never a fabricated pass.
 2. **The Judge is advisory — and audited.** A separate, stronger LLM judge
@@ -158,6 +158,43 @@ and a control across NIST AI RMF / EU AI Act / ISO 42001 / SOC 2 / CSA MAESTRO.
 The loop is **fail-closed**: backend errors abort the run loudly instead of
 being fed back in as fake "responses". All LLM calls are genuinely async
 (`ollama.AsyncClient`, `litellm.acompletion`).
+
+---
+
+## Breadth, measured
+
+Everything in this section is counted from the tree by a command you can re-run, not estimated.
+`tests/test_readme_claims.py` re-derives each number and fails if this table drifts.
+
+| Dimension | Measured | Counted from | Evidence |
+|---|---:|---|---|
+| CLI surface | **42** command names, **41** distinct callbacks — `corpus` is the same callback as `assess` | the Typer command graph (`registered_names`) | ✅ CI-verified |
+| Source | **121** implementation modules in **26** packages, **≈26.7k** lines under `src/` | `src/neuralstrike/**/*.py`, `__init__.py` excluded from the module count | ✅ CI-verified |
+| Tests, local | **2,707** collected (**1,026** test functions; the rest parametrised) · **2,700** pass · **7** skip · **91.98 %** coverage | `scripts/ci_gate.sh` on macOS arm64 / CPython 3.12.14 | ⚠️ local observation |
+| Tests, CI | the same suite, with **7 additional skips** and **91.88–91.92 %** coverage | CI runs `43115588777` (red, 2026-11-11) and `43118096042` (green, all seven jobs). The extra skips are the tests that need the private evidence root or the pinned tau-bench checkout — neither is in the repository | ✅ CI-verified |
+| Target adapters | **5** — `openai_endpoint`, `langgraph`, `langgraph_server`, `mcp_http`, `a2a` | `adapters/`, `--adapter` choices | ✅ CI-verified |
+| Deterministic oracles | **5** families — canary, forbidden-tool, predicate, schema, system-prompt extraction | `oracles/`, plus the advisory judge and its ensemble | ✅ CI-verified |
+| Scenario corpus | **60** scenarios · **20** OWASP categories (ASI01–10, LLM01–10) · **5** delivery vectors · **4** YAML files | `load_corpus_dir()` over the shipped package data | ✅ CI-verified |
+| Adaptive strategies | **5** — PAIR, TAP, Crescendo, `trace`, `trace-pair`, plus an `auto` dispatcher | `--strategy` choices | ✅ CI-verified |
+| Evasion codecs | **18** registered transforms with a winnability guard | `list_transforms()` | ✅ CI-verified |
+| Defenses | **8** payload-transform defenses + **2** checkers (lethal trifecta, Rule of Two) | `defenses/defenses.py`, `defenses/checkers.py` | ✅ CI-verified |
+| Benchmark packs | **4** — HarmBench, JailbreakBench, CyberSecEval, local | `list_packs()`; none vendored | ✅ CI-verified |
+| Report formats | **5** — JSON, SARIF 2.1.0, JUnit, Markdown, PDF (pure standard library) | `reports/render.py` | ✅ CI-verified |
+| Compliance crosswalk | **8** frameworks — OWASP ASI, OWASP LLM, MITRE ATLAS, NIST AI RMF, EU AI Act, ISO/IEC 42001, SOC 2, CSA MAESTRO | `reports/compliance.py` `FrameworkID` | ✅ CI-verified |
+| Container | `linux/amd64` full offline smoke; `linux/arm64` built and started only | CI `container` job | ✅ CI-verified |
+
+**What the numbers do not mean.** They are a count of surface, not of effectiveness — and a row
+marked local is one machine speaking. A tool with 60 scenarios and a tool with 6,000 are equally
+silent about whether the scenarios are the right ones; `docs/implementation/PHASE3_ACCEPTANCE.md`
+is where that question is asked, and its answer today is **not accepted**.
+
+### Evidence marks used in this README
+
+| Mark | Means |
+|---|---|
+| ✅ | **CI-verified** — asserted by the automated suite on every push, on the runners |
+| ⚠️ | **Local observation** — measured on one machine, one model, one seed; a reviewer cannot reproduce it without that machine |
+| ❌ | **Not implemented** — named in a document but absent from the code |
 
 ---
 
@@ -484,48 +521,74 @@ npm run build     # outputs to dashboard/dist/ — open index.html, or npm run d
 
 ## Capability map
 
-| Capability | What you get | Status |
-|---|---|---|
-| Recon & tool enumeration | Endpoint scanning, capability mapping, real MCP `tools/list` introspection | Verified |
-| Target adapters | openai_endpoint / langgraph / langgraph_server / mcp_http / a2a — drive real SUTs, observe tool calls | Verified |
-| Adversarial loop | Attacker–Victim–Judge, fail-closed, async | Verified |
-| Adaptive attacks | PAIR, TAP (beam=1), Crescendo, trajectory-conditioned, attack memory, seed diversity | Verified |
-| Evasion & steganography | 18-codec pipeline with provenance, persona/mimicry/delimiter wrap, real invisible-Unicode hidden channels, ASCII-smuggling exfil probe | Verified |
-| Defense testing | 8 payload-transform defenses + lethal-trifecta / Rule-of-Two checkers + measured ASR delta | Verified |
-| Deterministic oracles | canary / forbidden_tool / predicate / schema / system-prompt extraction | Verified |
-| Advisory judge | Typed verdicts, never flips an oracle, fail-closed on malformed JSON, ensemble option | Verified |
-| Judge self-audit | Bias battery, manipulation family, blind-prompt judging, ensemble disagreement | Verified |
-| OWASP corpus & indirect injection | 60 scenarios, 5 delivery vectors, adapter-trace-verified channel injection | Verified |
-| Reports & compliance | SARIF 2.1.0 / JSON / JUnit / Markdown / PDF + NIST AI RMF / EU AI Act / ISO 42001 / SOC 2 / MAESTRO crosswalk | Verified |
-| MCP attack surface | Tool poisoning, implicit poisoning, shadow tools, TOFU pinning, rug-pull detection | Verified |
-| MINJA / RAG poisoning | Memory-injection sequences, retrieval-corpus poisoning | Verified |
-| A2A & agent identity | Agent Card JWS/JCS verification, delegation-chain analysis, RFC 9421 HTTP Message Signatures, `did:web` / `did:key` | Verified |
-| Real-incident replays | 10 named incident scenarios (EchoLeak/CVE-2025-32711, MCP shadow tools, rug-pulls, Copilot CVE-2025-53773, and more) | Verified |
-| Model fingerprinting | Raw-response probes + latency timing | Informational |
-| MCP stdio transport | Live stdio-server realism | Planned |
+Every row is marked with the evidence behind it, using the marks defined above. "✅" means the
+automated suite exercises the behaviour on every push — it does **not** mean the behaviour has
+been validated by anyone outside this repository.
 
-**Status legend** — *Verified*: implemented and covered by the automated test
-suite. *Informational*: diagnostic output, explicitly not a scoring signal.
-*Planned*: on the roadmap, not in the code. We do not advertise vaporware.
+| Capability | What you get | Evidence |
+|---|---|---|
+| Recon & tool enumeration | Endpoint scanning, capability mapping, real MCP `tools/list` introspection | ✅ |
+| Target adapters | openai_endpoint / langgraph / langgraph_server / mcp_http / a2a — drive real SUTs, observe tool calls | ✅ |
+| Adversarial loop | Attacker–Victim–Judge, fail-closed, genuinely async (`ollama.AsyncClient`, `litellm.acompletion`) | ✅ |
+| Adaptive attacks | PAIR, TAP (beam of one, 3 judge-ranked candidates per turn), Crescendo, trajectory-conditioned `trace` / `trace-pair`, attack memory, seed diversity | ✅ |
+| Evasion & steganography | 18-codec pipeline with provenance, persona/mimicry/delimiter wrap, real invisible-Unicode hidden channels, ASCII-smuggling exfil probe | ✅ |
+| Defense testing | **8** payload-transform defenses + **2** checkers (lethal trifecta, Rule of Two) + measured ASR delta | ✅ |
+| Deterministic oracles | canary / forbidden_tool / predicate / schema / system-prompt extraction | ✅ |
+| Advisory judge | Typed verdicts, never flips an oracle, fail-closed on malformed JSON, ensemble option | ✅ |
+| Judge self-audit | Bias battery, manipulation family, blind-prompt judging, ensemble disagreement | ✅ |
+| OWASP corpus & indirect injection | 60 scenarios, 5 delivery vectors, adapter-trace-verified channel injection | ✅ |
+| Reports & compliance | SARIF 2.1.0 / JSON / JUnit / Markdown / PDF + 8-framework crosswalk | ✅ |
+| MCP attack surface | Tool poisoning, implicit poisoning, shadow tools, TOFU pinning (`--pin-hash`), rug-pull detection (`--previous-url`) | ✅ |
+| MINJA / RAG poisoning | Memory-injection sequences, retrieval-corpus poisoning | ✅ |
+| Agent Card identity | A2A Agent Card JWS/JCS verification, tamper detection, RFC 9421 HTTP Message Signatures, `did:web` / `did:key` resolution — reachable from `a2a-scan` | ✅ |
+| Delegation-chain analysis | `DelegationAnalyzer` in `attacks/a2a/delegation.py` — a **library**, tested directly; no CLI command drives it, and it does not contact a live endpoint | ⚠️ library only |
+| Incident-modelled scenarios | 10 scenarios *modelled on* named 2025–2026 incidents (EchoLeak/CVE-2025-32711, MCP shadow tools, Supabase rug-pull, MCPoison/CVE-2025-54136, Amazon Q AWS-2025-015/-019, Copilot CVE-2025-53773, Cursor stdio poison, cross-session memory persistence). They are synthetic test cases in the declared taxonomy — not replays of the original evidence, and the CVE attributions are not verified by this repository | ⚠️ modelled, not replayed |
+| Model fingerprinting | Raw-response probes + latency timing | ⚠️ informational, not a scoring signal |
+| MCP bounded **stdio** discovery | `mcp-inspect --stdio-command` speaks the pinned 2026-07-28 profile over a bounded stdio transport (POSIX process groups; it executes trusted local code and is not a sandbox) | ✅ |
+| MCP stdio **scanning** | `mcp-scan` requires `--url`: poisoning, shadow-tool and rug-pull detection is HTTP-only today. A stdio server can be inspected and receipted, not scanned for poisoning | ❌ not implemented |
 
 ### Honest limitations
 
-- **TAP is simplified (beam=1).** The attacker interface returns one payload
-  per turn; branch-and-prune is demonstrated with the single best candidate
-  per turn.
-- **Pack verdicts require `--judge`.** Without it, every pack probe is
-  `Inconclusive` — by contract, not by accident.
-- **Calibration ships no built-in cohort.** Cohort-relative z-scores are
-  informational only; bring your own reference cohort.
-- **AgentC2 is a local JSON registry and dispatcher** for compromised-agent
-  simulations. It opens no network listeners and runs no daemon.
-- **`extract` / `timing` are informational.** Fingerprinting returns raw
-  responses; latency is not a model-identification signal.
-- **A2A identity is verification-only.** NeuralStrike consumes identity
-  standards to test identity-defended targets; it does not issue credentials.
-- **Prompt-level defenses are prompt-level surfaces.** StruQ/CaMeL enforce
-  policy in the runtime in production; NeuralStrike tests the surface a
-  red-team can actually reach.
+- **TAP keeps a beam of one.** Each turn generates three candidates, has the judge rank them and
+  continues with the best. There is no tree, no backtracking, no per-depth frontier — so this is
+  branch-and-prune in miniature, not search.
+- **Pack verdicts require `--judge`.** Pack probes ship no deterministic oracle, so without a
+  judge every probe is `Inconclusive` — by contract, not by accident. That also means a pack run
+  is the one place a verdict comes from a model rather than from state.
+- **The incident scenarios are models, not post-mortems.** They encode the reported *class* of each
+  incident as a deterministic test case. No original evidence, transcript or vendor advisory is
+  reproduced here, and the CVE identifiers are cited as published names, not verified.
+- **Calibration ships no built-in cohort.** Cohort-relative z-scores are informational only; bring
+  your own reference cohort.
+- **AgentC2 is a local JSON registry and dispatcher** for compromised-agent simulations. It opens
+  no network listeners and runs no daemon.
+- **`extract` / `timing` are informational.** Fingerprinting returns raw responses; latency is not
+  a model-identification signal.
+- **A2A identity is verification-only.** NeuralStrike consumes identity standards to test
+  identity-defended targets; it does not issue credentials, and the identity code has not been
+  exercised against an independent implementation.
+- **Prompt-level defenses are prompt-level surfaces.** StruQ/CaMeL enforce policy in the runtime in
+  production; NeuralStrike tests the surface a red-team can actually reach.
+- **The acceptance claims are narrow.** They cover the four profiles in
+  [the support matrix](docs/SUPPORT_MATRIX.md) and nothing else. The 15 legacy offensive commands
+  carry no acceptance claim, and neither does any incident-modelled scenario.
+
+### What NeuralStrike is not
+
+Said plainly, because a capability table invites the opposite reading:
+
+- **Not a certified or compliance-validated product.** The crosswalk maps findings to framework
+  identifiers so a human can file them. No framework has assessed this tool, and nothing here
+  constitutes a certification, an attestation or an audit opinion.
+- **Not independently accepted.** Every claim in this README is the author's. Phase 3 is
+  **NOT ACCEPTED** and unsigned ([definition](docs/implementation/PHASE3_ACCEPTANCE.md)); Phase 4
+  is **NOT RELEASED** ([plan](docs/implementation/PHASE4_PLAN.md)).
+- **Not a service, not multi-tenant, not distributed.** One CLI on one machine, local state, no
+  hosted control plane.
+- **Not a sandbox.** The scope file and the HITL gate are operator controls; they contain nothing.
+- **Not a guarantee that a green run means safe.** A `Resisted` verdict is evidence about a
+  declared probe on a declared configuration, and `Inconclusive` is a coverage gap — which is why
+  the tool refuses to turn one into a pass.
 
 ---
 
@@ -649,8 +712,10 @@ CI (`.github/workflows/ci.yml`) runs three jobs on every push and PR:
 | **supply-chain** | Installs the hash-pinned lock, runs `scripts/ci_gate.sh` (the gating install), `pip-audit`, a CycloneDX SBOM, and the fresh-clone smoke test |
 | **dashboard** | `npm ci`, report-parsing tests, production build |
 
-Current state: **1775 tests, 7 skipped, 92% measured coverage** (85% enforced), mypy strict on
-`src/`. Local measurement on macOS arm64 / CPython 3.12.14; CI is the authority.
+Current state, measured on this machine: **2,707** collected (**2,700** pass, **7** skip), **91.98 %**
+coverage (85 % enforced), mypy strict over 147 files. CI runs the same suite and skips seven more
+tests that need the private evidence root or the pinned tau-bench checkout. The breadth table above
+is derived from the same tree, and `tests/test_readme_claims.py` re-derives every number in it. Local measurement on macOS arm64 / CPython 3.12.14; CI is the authority.
 
 ### Project structure
 
@@ -673,7 +738,7 @@ NeuralStrike/
 │   └── reports/                # json, sarif, junit, markdown, pdf, compliance, readme_mapping
 ├── corpus/                     # OWASP-tagged scenario YAML (60 scenarios)
 ├── dashboard/                  # Vite + React report viewer (TypeScript)
-├── tests/                      # unit + CLI + exit-gate suites (1775 passing)
+├── tests/                      # 120 files, 1,026 test functions (2,707 collected cases)
 ├── docs/threat_model.md
 ├── .github/workflows/ci.yml
 ├── Dockerfile / docker-compose.yml
@@ -696,11 +761,14 @@ is real-world abuse. New probes need a deterministic oracle or an explicit
 
 ### Roadmap
 
-- MCP **stdio** transport for live-server realism (HTTP covers the dominant
-  descriptor-channel attack class today)
-- A2A delegation-chain attacks against live, identity-defended endpoints
-- Judge-audit gate thresholds once baseline numbers exist across common models
-- Wider benchmark-pack coverage
+- **MCP stdio poisoning scans.** Bounded stdio discovery shipped (`mcp-inspect`); `mcp-scan` is
+  still HTTP-only, so a stdio server can be inspected and receipted but not scanned.
+- **A2A delegation-chain attacks** against live, identity-defended endpoints. The analyzer exists
+  as a tested library; no command drives it.
+- Judge-audit gate thresholds once baseline numbers exist across common models.
+- Wider benchmark-pack coverage.
+- A second-person review of anything in this repository. That is the only item on this list that
+  no amount of code can close.
 
 ---
 
