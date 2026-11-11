@@ -25,6 +25,15 @@ RUNNER = CliRunner()
 SEED = 7
 
 
+def text(result) -> str:
+    """A CLI error lands on stdout or stderr depending on the click/typer version.
+
+    That is a presentation detail, so the assertion reads both streams instead of
+    pinning the test to whichever version resolved on the machine that wrote it.
+    """
+    return result.output + (getattr(result, "stderr", "") or "")
+
+
 def commands() -> dict[str, object]:
     names = {}
     for info in app.registered_commands:
@@ -49,10 +58,10 @@ def test_the_legacy_corpus_name_is_the_same_callback_as_assess() -> None:
 
 def test_corpus_prints_a_deprecation_notice_and_assess_does_not() -> None:
     legacy = RUNNER.invoke(app, ["corpus", "--adapter", "not-an-adapter"])
-    assert "deprecated" in legacy.output
-    assert "neuralstrike assess" in legacy.output
+    assert "deprecated" in text(legacy)
+    assert "neuralstrike assess" in text(legacy)
     current = RUNNER.invoke(app, ["assess", "--adapter", "not-an-adapter"])
-    assert "deprecated" not in current.output
+    assert "deprecated" not in text(current)
 
 
 def bundle(
@@ -100,16 +109,16 @@ def test_unchanged_assessment_passes(tmp_path) -> None:
     first, _ = bundle(tmp_path / "a")
     second, _ = bundle(tmp_path / "b")
     result = compare(first, second)
-    assert result.exit_code == 0, result.output
-    assert "pass" in result.output.lower()
+    assert result.exit_code == 0, text(result)
+    assert "pass" in text(result).lower()
 
 
 def test_a_newly_succeeded_scenario_is_a_regression(tmp_path) -> None:
     first, ids = bundle(tmp_path / "a")
     second, _ = bundle(tmp_path / "b", verdicts={ids[0]: Verdict.SUCCEEDED})
     result = compare(first, second)
-    assert result.exit_code == 4, result.output
-    assert "regression" in result.output.lower()
+    assert result.exit_code == 4, text(result)
+    assert "regression" in text(result).lower()
     # Under --fail-on vuln the same change is a vulnerability, not a regression.
     assert compare(first, second, "--fail-on", "vuln").exit_code == 1
 
@@ -119,13 +128,13 @@ def test_a_fix_requires_complete_current_evidence(tmp_path) -> None:
     first, _ = bundle(tmp_path / "a", verdicts={first_id: Verdict.SUCCEEDED})
     fixed, _ = bundle(tmp_path / "b")
     result = compare(first, fixed)
-    assert result.exit_code == 0, result.output
-    assert "1 fixed" in result.output
+    assert result.exit_code == 0, text(result)
+    assert "1 fixed" in text(result)
     # The same scenario omitted from the current assessment is not a fix.
     omitted, _ = bundle(tmp_path / "c", omit=(first_id,))
     withheld = compare(first, omitted)
-    assert withheld.exit_code == 3, withheld.output
-    assert "not_comparable" in withheld.output
+    assert withheld.exit_code == 3, text(withheld)
+    assert "not_comparable" in text(withheld)
 
 
 def test_an_inconclusive_current_scenario_is_not_a_fix(tmp_path) -> None:
@@ -133,9 +142,9 @@ def test_an_inconclusive_current_scenario_is_not_a_fix(tmp_path) -> None:
     first, _ = bundle(tmp_path / "a", verdicts={first_id: Verdict.SUCCEEDED})
     second, _ = bundle(tmp_path / "b", verdicts={first_id: Verdict.INCONCLUSIVE})
     result = compare(first, second)
-    assert result.exit_code == 3, result.output
-    assert "not_comparable" in result.output
-    assert "fixed" not in result.output.lower()
+    assert result.exit_code == 3, text(result)
+    assert "not_comparable" in text(result)
+    assert "fixed" not in text(result).lower()
 
 
 @pytest.mark.parametrize(
@@ -149,8 +158,8 @@ def test_a_different_run_is_refused_rather_than_scored(tmp_path, change, expecte
     first, _ = bundle(tmp_path / "a")
     second, _ = bundle(tmp_path / "b", **change)
     result = compare(first, second)
-    assert result.exit_code == 3, result.output
-    assert expected in result.output
+    assert result.exit_code == 3, text(result)
+    assert expected in text(result)
 
 
 def test_a_run_directory_is_not_an_assessment_bundle(tmp_path) -> None:
@@ -158,8 +167,8 @@ def test_a_run_directory_is_not_an_assessment_bundle(tmp_path) -> None:
     plain.mkdir()
     (plain / "manifest.json").write_text(json.dumps({"kind": "neuralstrike-run"}))
     result = compare(plain, plain)
-    assert result.exit_code == 3, result.output
-    assert "not a committed assessment bundle" in result.output
+    assert result.exit_code == 3, text(result)
+    assert "not a committed assessment bundle" in text(result)
 
 
 def test_the_comparison_record_binds_both_bundles(tmp_path) -> None:
@@ -167,7 +176,7 @@ def test_the_comparison_record_binds_both_bundles(tmp_path) -> None:
     second, _ = bundle(tmp_path / "b")
     out = tmp_path / "record.json"
     result = compare(first, second, "--out", str(out))
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0, text(result)
     document = json.loads(out.read_text())
     assert document["target_calls"] is False
     assert document["comparison"]["decision"] == "pass"
@@ -218,7 +227,7 @@ def test_scan_authenticates_with_an_environment_bearer(tmp_path, monkeypatch) ->
     finally:
         server.shutdown()
         server.server_close()
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0, text(result)
     assert seen == ["Bearer synthetic-phase4-token"]
 
 
@@ -240,8 +249,8 @@ def test_scan_refuses_a_missing_credential_before_any_request(tmp_path, monkeypa
             str(tmp_path / "runs"),
         ],
     )
-    assert result.exit_code == 2, result.output
-    assert "missing or empty" in result.output
+    assert result.exit_code == 2, text(result)
+    assert "missing or empty" in text(result)
 
 
 def test_a_credential_flag_on_a_non_openai_adapter_is_refused(tmp_path) -> None:
@@ -259,8 +268,8 @@ def test_a_credential_flag_on_a_non_openai_adapter_is_refused(tmp_path) -> None:
             str(tmp_path / "runs"),
         ],
     )
-    assert result.exit_code == 2, result.output
-    assert "requires --adapter openai" in result.output
+    assert result.exit_code == 2, text(result)
+    assert "requires --adapter openai" in text(result)
 
 
 def test_the_comparison_record_cannot_be_written_into_a_bundle(tmp_path) -> None:
@@ -269,5 +278,5 @@ def test_the_comparison_record_cannot_be_written_into_a_bundle(tmp_path) -> None
     second, _ = bundle(tmp_path / "b")
     for destination in (first / "report.json", second / "runs"):
         result = compare(first, second, "--out", str(destination))
-        assert result.exit_code == 3, result.output
-        assert "outside both bundles" in result.output
+        assert result.exit_code == 3, text(result)
+        assert "outside both bundles" in text(result)
