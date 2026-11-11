@@ -6,6 +6,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Phase 4 — the container is run in CI, P4-7 MET, 2026-11-10)
+- `.github/workflows/ci.yml` job `container` — builds the image, asserts it runs as uid 1000,
+  runs the full offline `smoke` inside `linux/amd64`, and checks the artifact is written mode 600.
+  The release workflow had always built and pushed an image that nothing executed.
+- Multi-architecture depth is declared, not assumed: `linux/arm64` is built under QEMU and
+  exercised for import and `--help` only. A full langgraph smoke under emulation would be a slow,
+  flaky gate, so it is **not** claimed; `docs/SUPPORT_MATRIX.md` states the split and a contract
+  fails if the document starts implying otherwise.
+- P4-7 **MET** on CI evidence: run `42937379076` at `9824c7a`, `arch: aarch64` printed from the
+  emulated image, smoke passed (3 scenarios, ASR 33.3 %, coverage 100 %), artifact 61843 bytes
+  mode 600. The first push of the job failed (`42936253073`) on a quoting bug in the arm64 step;
+  the gate cites the run that passed and the record keeps the run that did not.
+- P4-2 remains `PARTIAL` for one reason only: no release has been dispatched, so the image-digest
+  binding in `release-manifest.json` is written but unproven.
+
 ### Added (Phase 4 — artifact binding: wheel exercised outside the checkout, 2026-11-10)
 - `.github/workflows/ci.yml` job `artifact` — builds sdist+wheel **from outside the repository**
   (the checkout has a gitignored `build/` directory that shadows the `build` module), installs the

@@ -2826,3 +2826,28 @@ piece, and it is the same work as P4-7's platform gate.
 **Gates.** 1758 passed, 7 skipped (also with the model daemon blocked); coverage 91.88 %; `ruff` clean
 over `src tests examples scripts`; `mypy` 144 files.
 
+### 2026-11-10 — the container is finally run: P4-7 MET, P4-2 waiting only on a release
+
+The release workflow built and pushed an image that no job had ever executed. A CI `container`
+job now builds it, asserts it runs as uid 1000, runs the full offline smoke inside
+`linux/amd64` and checks the artifact is mode 600; then builds `linux/arm64` under QEMU and
+exercises import and `--help` only.
+
+That depth split is declared rather than implied: a full langgraph smoke under emulation would
+be a slow, flaky gate, so arm64 is claimed as **built and started**, not smoked. The support
+matrix states exactly that, and a contract fails if the document starts implying a full arm64
+smoke.
+
+**Verified by hand first** on this machine's arm64 runtime: image built, uid 1000, smoke passed,
+artifact 61843 bytes mode 600. **Then in CI:** the first push (`42936253073`) **failed** on a
+quoting bug in the arm64 step — my patch had collapsed the escaped quotes, so Python received
+`print(arch:, ...)`. Fixed at `9824c7a` and re-run as a shell script file locally before pushing
+again; run `42937379076` is green with `arch: aarch64` printed from the emulated image.
+
+**P4-7 is `MET`.** **P4-2 stays `PARTIAL`** for one honest reason: no release has been
+dispatched, so the image-digest binding in `release-manifest.json` is written and untested.
+Closing that needs a release decision — a tag, a PyPI push and a GHCR publish — not more code.
+
+**Gates.** 1760 passed, 7 skipped; coverage 91.88 %; ruff clean over `src tests examples
+scripts`; mypy 144 files; CI `42937379076` at `9824c7a` all seven jobs green.
+
