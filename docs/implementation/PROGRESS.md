@@ -3089,7 +3089,26 @@ It is not executed. `garak` is not installed and PyRIT's 2026-11-10 scratch envi
 installing either is a network fetch and needs approval. The plan says so in its own prerequisites
 table, and the contract fails if the document ever grows a result table without the run behind it.
 
-**Gates.** 2013 passed, 7 skipped; coverage 91.96 % (85 % enforced); `ruff` and `mypy` clean (147
+### 2026-11-12 — hardening, since the queue was green: the comparison table held to its properties
+
+The backlog's own instruction for spare time is "a test that would have caught the bug", not a
+coverage percentage. The Phase 0 audit's first release blocker was a transition table that let
+`Resisted → Succeeded` pass `fail_on=vuln`, called `Succeeded → Inconclusive` a fix, and let a
+missing scenario pass. Those are one property set nobody had written down, so
+`tests/test_comparison_properties.py` enumerates the whole input space — 4 previous verdicts
+(incl. absent) × 4 current × 3 policies × complete/incomplete — and asserts: incompleteness is
+never a pass under an armed policy and may exit 0 only for `never`; a fix exists only from a
+complete `Succeeded → Resisted`; `never` never fails a build; a regression outranks a vuln; every
+observed scenario lands in exactly one bucket and an inconclusive one lands in none; an unknown
+policy is refused rather than defaulted; and over 200 seeded random maps, adding a regression can
+never lower the exit code while fixing one can never raise it.
+
+**What it caught in the writing.** Two of my own assumptions: `incomplete` under `fail_on=never`
+exits 0 by design (my first assertion demanded 3), and fixing one scenario does not make a run
+pass when another scenario is still Succeeded — the mirror property is `<=`, not `== 0`. Both were
+wrong tests, not wrong code, and both were corrected in the test rather than in the function.
+
+**Gates.** 2616 passed, 7 skipped; coverage 91.98 % (85 % enforced); `ruff` and `mypy` clean (147
 files). Phase 3 is still **NOT ACCEPTED** and Phase 4 still **NOT RELEASED**: P4-2 is `PARTIAL` on
 purpose (no dispatched release) and P4-6 is `OPEN` (people). Nothing was pushed; every commit is
 local.

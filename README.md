@@ -285,8 +285,9 @@ neuralstrike doctor --url http://localhost:11434/v1 --model mistral:7b \
 #    hash-bound evidence bundle with an audit-grade SARIF report. No model, no network.
 neuralstrike assess --adapter langgraph --format sarif --out neuralstrike-report
 
-# 4. Diff it against a previous assessment offline (no target, no model):
-neuralstrike compare baseline-bundle/ current-bundle/
+# 4. Once you have two committed assessments, diff them offline — no target, no
+#    model, both bundles hash-verified (exit 3 = not comparable, 4 = regression):
+neuralstrike compare <baseline-bundle> <current-bundle>
 
 # 5. Gate your own target on a baseline (exit 4 = regression):
 neuralstrike evaluate --target mistral:7b --target-type local \

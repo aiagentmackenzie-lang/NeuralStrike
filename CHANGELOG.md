@@ -51,8 +51,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `tests/test_release_stability.py` (4), `tests/test_support_matrix.py` (65),
   `tests/test_quickstart.py` (20), `tests/test_report_destination.py` (21),
   `tests/test_evidence_paths.py` (8), `tests/test_phase3_residue_limits.py` (5),
-  `tests/test_tool_axis_plan.py` (7), `tests/test_engineering_backlog.py` (6). Suite: 1775 → 2013
-  passing, 7 skipped, coverage 91.96 %.
+  `tests/test_tool_axis_plan.py` (7), `tests/test_engineering_backlog.py` (6), and
+  `tests/test_comparison_properties.py` (603) — the comparison decision table held to its
+  properties over its whole input space, not by example. Suite: 1775 → 2616 passing, 7 skipped,
+  coverage 91.98 %.
 
 
 ### Added (Phase 4 — the command spine: `assess`, `compare`, and an authenticated `scan`, 2026-11-11)
