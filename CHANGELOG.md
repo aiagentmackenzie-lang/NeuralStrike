@@ -35,6 +35,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   measured-not-reproduced and the persistent-memory persistent effect stays falsified; P3-6 stays
   `PARTIAL`. **Released artifacts are unchanged — nothing was released.**
 
+### Fixed (2026-11-12)
+- The evidence-path contract asserted that the private durable root exists, which is true only
+  where the evidence was produced and can never be true on a CI runner. The `/tmp` citation rule
+  stays unconditional; the two existence assertions are now skipped where the root is absent, with
+  the reason in the marker. CI run `43115588777` at `d2bce5c` is retained as the red run.
+
 ### Added (Phase 3 measurement, 2026-11-12)
 - **Second declared seed** for the write-first matrix (E-7): plan kind
   `native-tau-bench-retail-write-first-seed-replication-plan-v1`, seed 11, own pre-registered plan,

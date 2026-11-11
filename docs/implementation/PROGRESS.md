@@ -3112,3 +3112,25 @@ wrong tests, not wrong code, and both were corrected in the test rather than in 
 files). Phase 3 is still **NOT ACCEPTED** and Phase 4 still **NOT RELEASED**: P4-2 is `PARTIAL` on
 purpose (no dispatched release) and P4-6 is `OPEN` (people). Nothing was pushed; every commit is
 local.
+
+### 2026-11-12 — pushed, red in CI on my own contract, fixed, green
+
+`df7701c..d2bce5c` pushed to `main` on approval. CI run `43115588777` at `d2bce5c` **failed all
+three quality jobs**, and the failure was mine: two E-9 assertions demanded that the private
+evidence root exist on disk. That is true on the machine that produced the evidence and can never
+be true on a runner — private raw evidence is deliberately not in the repository. Ruff, mypy and
+the other 2,614 tests passed there, including the pinned `typer 0.28.0` the E-12 work put on the
+runner, which is the half of the day's work that CI could have falsified and did not.
+
+**The fix is scope, not assertion strength.** The `/tmp` rule stays unconditional, because it is a
+statement about the documents and documents ship. The two existence assertions are now
+`skipif` the declared root is absent, with the reason in the marker, and they run wherever the
+evidence lives. Verified both shapes: root present → 8 passed (this machine); `HOME=/tmp/fakehome`
+→ 6 passed, 2 skipped with the reason. The marker mirrors the pattern `tests/test_tau_bench.py`
+already used for the private cycle packets — the convention existed and I did not follow it, which
+is the whole lesson.
+
+**CI run `43116626442` at `33ae8ff` is green on all seven jobs** (quality 3.11/3.12/3.14,
+supply-chain, artifact, container incl. arm64, dashboard). `main == origin/main == 33ae8ff`, tree
+clean. The gate script now runs on the runner as the same file a contributor runs, which is the
+point of E-12 and the one thing this push actually proved.
