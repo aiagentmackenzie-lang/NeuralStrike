@@ -220,44 +220,48 @@ def test_the_platform_claim_matches_the_depth_actually_exercised() -> None:
     assert all("not exercised" in line or "startup" in line for line in arm64), arm64
 
 
-def test_both_release_variants_are_written_and_neither_is_chosen() -> None:
-    """ENGINEERING_BACKLOG.md E-11: the decision is described, not taken."""
+def test_variant_a_is_recorded_as_chosen_and_variant_b_keeps_its_prerequisites() -> None:
+    """The decision was taken, so the document must say which one — and not pretend it was free.
+
+    Until 2026-11-17 this asserted "Neither variant is chosen", because none was. A contract that
+    freezes "not decided" after the decision becomes a lie of its own, so it moved to the invariant
+    behind it: the chosen variant is named with the run that executed it, the unchosen one keeps its
+    real prerequisites, and no artifact is described as signed.
+    """
     plan = PLAN.read_text()
-    assert "## P4-2 variants — written down, not decided" in plan
+    assert "## P4-2 variants — Variant A chosen and executed" in plan
     section = plan[plan.index("## P4-2 variants") : plan.index("## Signing policy")]
-    assert "Variant A" in section and "Variant B" in section
-    assert "PYPI_API_TOKEN" in section, "the PyPI prerequisite must be named"
-    assert "Neither variant is chosen" in section
-    # No decision language: the gate may not be closed by prose.
-    for phrase in ("we will release to", "decided to release", "the release scope is chosen"):
-        assert phrase not in plan.lower(), phrase
+    assert "Neither variant is chosen" not in section, "the decision has been taken; say so"
+    assert "Variant A was chosen" in section
+    assert "43996734469" in section, "the run that executed the choice must be cited"
+    assert "Variant B" in section and "trusted publisher" in section, (
+        "the unchosen variant must keep its measured prerequisites"
+    )
+    for phrase in ("is signed", "signed artifacts", "we signed"):
+        assert phrase not in section.lower(), phrase
 
 
-def test_the_partial_state_names_the_shortfall_and_cites_the_dispatch_that_was_run() -> None:
-    """A dispatch is evidence; its absence must not be written up as a decision.
+def test_p4_2_is_met_by_a_published_binding_and_the_phase_still_is_not_released() -> None:
+    """P4-2 is evidence; "released" is a signature. The row may not blur them.
 
-    Before 2026-11-16 this contract required the phrase "no dispatched release exists", because
-    none had ever run. One has now run — non-publishing, run 43988912835 — so that phrase became
-    false and the contract had to move with the evidence rather than freeze a stale claim. What
-    P4-2 is still short of is a *publishing* release: the image digest, the manifest binding, the
-    tag and the GitHub release are unexercised, so PARTIAL is still the honest state.
+    Before 2026-11-17 this contract required the row to name its shortfall ("no publishing release
+    exists"). The publishing run closed the shortfall, so the contract moved to the two things that
+    must now be true: the row is MET with the bound digests, and the document as a whole still says
+    NOT RELEASED, because every row is unsigned and P4-6 has no pilot.
     """
     for gate, cells in gate_rows().items():
         if gate != "P4-2":
             continue
         joined = " ".join(cells)
-        assert "PARTIAL" in joined, (
-            "P4-2 may only leave PARTIAL when a publishing release exists; see E-10/E-11"
-        )
-        assert "no *publishing* release exists" in joined, (
-            "P4-2 is PARTIAL for one reason: no publishing release. Say so in the row."
-        )
-        assert "43988912835" in joined, (
-            "the non-publishing dispatch that was reviewed must be cited by run id in the row"
-        )
-        assert "has never executed" not in joined, (
-            "the workflow has executed twice; a row that says otherwise is a false claim"
-        )
+        assert "**MET**" in joined, "P4-2 is MET by the published release; state it"
+        assert "43996734469" in joined, "the publishing run must be cited by id"
+        assert "sha256:12cf55a9" in joined, "the image digest bound in the manifest must be named"
+        assert "607d4f5" in joined, "the source commit the release bound must be named"
+        assert "signed: false" in joined, "an unsigned release must say so in the row"
+
+    assert "Status: **NOT RELEASED." in PLAN.read_text(), (
+        "six MET rows do not make a release: no gate is signed and P4-6 is OPEN"
+    )
 
 
 def test_the_release_workflow_defects_were_tested_and_did_not_reproduce() -> None:

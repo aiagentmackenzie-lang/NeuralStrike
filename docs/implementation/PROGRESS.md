@@ -3343,3 +3343,42 @@ refuse, and it did.
 **Gates.** ruff clean, mypy clean (147 files), **2,711 passed / 7 skipped** of 2,718 collected,
 91.98 %. The README claims contract caught the count drift again (2,714 → 2,718, files 121 → 122).
 Committed locally; push and re-dispatch follow the owner's standing approval for this release.
+
+### 2026-11-17 — v0.9.0 is published, and P4-2 is MET on verified evidence
+
+The publishing run the phase had been waiting for: **`43996734469`** at `607d4f5`, dispatched with
+`publish: true, publish_pypi: false, sign: false, version: 0.9.0`. Every step success — PyPI
+skipped by the split scope, gate at step 5 before `Build Python distribution` at step 7 (NS-14
+proven on the runner for the second time), GHCR login and multi-arch push success, manifest bound,
+GitHub release created.
+
+**The binding was verified by hand, which is the whole point of P4-2.** The public release carries
+the wheel (396,857 B), sdist (593,216 B), SBOM (186,739 B) and `release-manifest.json` (1,295 B);
+all three artifact hashes were re-computed locally and match the manifest **3/3**; the manifest
+names version `0.9.0`, tag `v0.9.0`, `source_commit` `607d4f5…` and image digest
+`sha256:12cf55a9…`.
+
+**Both halves were then exercised outside the editable checkout**, which is what the gate actually
+asks for:
+
+- **Image:** pulled anonymously from `ghcr.io/aiagentmackenzie-lang/neuralstrike:0.9.0`; the
+  registry digest matched the manifest **exactly**; runs as uid 1000; **full offline smoke passed on
+  arm64** — 3 scenarios, ASR 33.3 %, coverage 100 %, artifact 61,843 B mode 600. That is the first
+  full smoke on arm64 (CI had only exercised import and `--help` there), so P4-7's depth statement
+  is now conservative rather than generous.
+- **Wheel:** installed into a fresh venv with its dependencies resolved from PyPI, the way a
+  stranger would install it, imported from `site-packages`, same smoke, identical 61,843 B mode-600
+  artifact.
+
+**Nothing is signed and no document says otherwise:** `signed: false`, `signatures: []`, and the
+signing policy states that a signature is named only when one is recorded.
+
+**P4-2 `PARTIAL` → `MET`. Phase 4 stays `NOT RELEASED`.** Six MET rows and a public artifact do not
+make a release: every row is unsigned, and P4-6 has no pilot. The contracts moved with the evidence
+again — the two that asserted "no publishing release exists" and "neither variant is chosen" were
+rewritten to the invariants they stood for: P4-2 must cite the bound digests and the run, the
+document must still say NOT RELEASED, the chosen variant is named with its run, and the unchosen one
+keeps its measured prerequisites. E-11 closed, with the honest note that the scope was recorded
+*after* the dispatch rather than before, which is a deviation from its own "done when".
+
+**Gates.** ruff clean, mypy clean (147 files), 2,711 passed / 7 skipped of 2,718, 91.98 %.

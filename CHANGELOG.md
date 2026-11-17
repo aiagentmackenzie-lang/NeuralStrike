@@ -6,6 +6,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Released (v0.9.0 — first published artifact, 2026-11-17)
+- **v0.9.0 published** by run `43996734469` at `607d4f5`: GitHub release + GHCR image, no PyPI.
+  Gate ran before the build (NS-14), multi-arch image pushed, manifest bound, release created.
+- `release-manifest.json` binds version, tag, source commit, wheel, sdist, SBOM and image digest;
+  all three artifact hashes re-verified **3/3** by hand against the published assets.
+- **Both halves exercised outside the checkout:** the image pulled anonymously from GHCR with its
+  registry digest matching the manifest, running as uid 1000 with the **full offline smoke passing
+  on arm64** for the first time; the wheel installed into a fresh venv from the release and passing
+  the same smoke (61,843 B, mode 600).
+- **Nothing is signed** (`signed: false`, `signatures: []`). **P4-2 is `MET`. Phase 4 is still
+  `NOT RELEASED`** — no row is signed and P4-6 has no pilot.
+- `publish_pypi` is now a separate input; the first attempt (`43995731534`) failed at the PyPI step
+  because one flag meant three destinations.
+
 ### Fixed (release scope — the first publishing run could not express Variant A, 2026-11-17)
 - First publishing dispatch (run `43995731534` at `10a998c`) passed the new gate step (proving
   NS-14 on the runner, gate before build) and then **failed at `Publish to PyPI`** with

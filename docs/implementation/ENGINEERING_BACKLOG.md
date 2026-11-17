@@ -15,10 +15,11 @@ close it, so "done" cannot be a feeling.
 | **CLOSED** | E-1, E-2, E-3, E-4, E-5, E-7, E-8, E-9, E-10, E-11, E-12, E-13 |
 | **BLOCKED** | E-6 (needs approval to install `garak` and PyRIT into an isolated env) |
 
-One item is *not* closed and cannot be closed by engineering, and neither can the two gate
-states it sits under. They stay exactly where the audit put them, and the gate documents still say
-so: Phase 3 is **NOT ACCEPTED**, Phase 4 is **NOT RELEASED** with P4-2 `PARTIAL` on purpose (no
-**publishing** release exists — a non-publishing dispatch does not close it).
+One item is *not* closed and cannot be closed by engineering, and neither can the two gate states
+it sits under. They stay exactly where the audit put them, and the gate documents still say so:
+Phase 3 is **NOT ACCEPTED**; Phase 4 is **NOT RELEASED** — P4-2 is now `MET` by a published,
+digest-bound, **unsigned** release (v0.9.0, run `43996734469`), P4-6 is `OPEN`, and six MET rows do
+not make a release because no row carries a signature from a second person.
 
 ## A. Integrity — fix before this is shown to anyone
 
@@ -45,7 +46,7 @@ so: Phase 3 is **NOT ACCEPTED**, Phase 4 is **NOT RELEASED** with P4-2 `PARTIAL`
 | ID | Item | Why it matters | Done when | State |
 |---|---|---|---|---|
 | E-10 | The release workflow had never been dispatched **with its output reviewed**, and `PYPI_API_TOKEN` does not exist on the repository (zero secrets configured). **Correction 2026-11-16: the premise "never dispatched" was false** — run `28883512027` on 2026-07-07 at `d7f14ad` dispatched successfully and no document recorded it | P4-2 is `PARTIAL` for exactly this. A decision was assumed to be one click; it is not, and nobody knows what else is missing. Half of that sentence was wrong, which is why the review — not the dispatch — was the missing evidence | One non-publishing dispatch recorded, and its output reviewed — then the release decision is taken on evidence rather than on hope | **CLOSED** — `e44ebb0`, `tests/test_phase4_plan.py`. Run `43988912835` at `6e1f01a` (`publish: false`, `sign: false`, `version: 0.9.0`), every step success, publishing steps skipped; `release-artifacts` 986,895 B with wheel + sdist named `0.9.0` and a CycloneDX 1.6 SBOM of 109 components, and the wheel installed into a clean venv outside the checkout. Both candidate defects were falsified by the run and are recorded as hypotheses that did not reproduce. **P4-2 stays `PARTIAL`** — a dry run is not a publishing release |
-| E-11 | The decision itself: release to GitHub + GHCR only, or also PyPI (which needs an account and token) | The gate criterion names version/tag/commit/wheel/image/SBOM/provenance — not PyPI. Choosing the narrower release closes P4-2 without inventing a distribution channel | The chosen scope is written into `PHASE4_PLAN.md` §P4-2 before the dispatch, and the dispatch is recorded after | **CLOSED as written-not-decided** — `d247df3`, `tests/test_phase4_plan.py`. Both variants and their prerequisites are in §P4-2 variants; no decision is taken, nothing is published, and P4-2 stays `PARTIAL` |
+| E-11 | The decision itself: release to GitHub + GHCR only, or also PyPI | The gate criterion names version/tag/commit/wheel/image/SBOM/provenance — not PyPI. Choosing the narrower release closes P4-2 without inventing a distribution channel | The chosen scope is written into `PHASE4_PLAN.md` §P4-2, and the dispatch is recorded after | **CLOSED** — `607d4f5`, `tests/test_release_scope.py`, `tests/test_phase4_plan.py`. **Variant A chosen and executed 2026-11-17** (run `43996734469`): GitHub release + GHCR image, no Python index. Variant B stays described and unbuilt, with its prerequisite corrected by measurement — the PyPI step uses OIDC trusted publishing, so it needs a PyPI project and a registered publisher, not a repository secret. The scope was recorded *after* the dispatch rather than before, which is a deviation from this row's own "done when" and is stated rather than glossed |
 
 ## D. Environment — the cost of two red CI runs on 2026-11-11
 
