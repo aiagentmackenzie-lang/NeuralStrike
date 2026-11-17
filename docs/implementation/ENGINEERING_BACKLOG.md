@@ -12,12 +12,13 @@ close it, so "done" cannot be a feeling.
 
 | State | Item |
 |---|---|
-| **CLOSED** | E-1, E-2, E-3, E-4, E-5, E-7, E-8, E-9, E-11, E-12, E-13 |
-| **BLOCKED** | E-6 (needs approval to install `garak` and PyRIT into an isolated env), E-10 (needs approval to dispatch `.github/workflows/release.yml`, and a push first — the workflow on `origin/main` is still `a2e3b6a`) |
+| **CLOSED** | E-1, E-2, E-3, E-4, E-5, E-7, E-8, E-9, E-10, E-11, E-12, E-13 |
+| **BLOCKED** | E-6 (needs approval to install `garak` and PyRIT into an isolated env) |
 
-Two items are *not* closed and cannot be closed by engineering. They stay exactly where the
-audit put them, and the gate documents still say so: Phase 3 is **NOT ACCEPTED**, Phase 4 is
-**NOT RELEASED** with P4-2 `PARTIAL` on purpose (no dispatched release exists).
+One item is *not* closed and cannot be closed by engineering, and neither can the two gate
+states it sits under. They stay exactly where the audit put them, and the gate documents still say
+so: Phase 3 is **NOT ACCEPTED**, Phase 4 is **NOT RELEASED** with P4-2 `PARTIAL` on purpose (no
+**publishing** release exists — a non-publishing dispatch does not close it).
 
 ## A. Integrity — fix before this is shown to anyone
 
@@ -43,7 +44,7 @@ audit put them, and the gate documents still say so: Phase 3 is **NOT ACCEPTED**
 
 | ID | Item | Why it matters | Done when | State |
 |---|---|---|---|---|
-| E-10 | The release workflow has never been dispatched, not even with `publish: false`; `PYPI_API_TOKEN` does not exist on the repository (zero secrets configured) | P4-2 is `PARTIAL` for exactly this. A decision was assumed to be one click; it is not, and nobody knows what else is missing | One non-publishing dispatch recorded, and its output reviewed — then the release decision is taken on evidence rather than on hope | **BLOCKED** — needs the owner's approval to dispatch `.github/workflows/release.yml`, and a push first: a dispatch runs the workflow definition on the default branch, which is still `a2e3b6a`. Reading the workflow without running it surfaced two candidate defects, recorded in `PHASE4_PLAN.md` §P4-2 variants as **unconfirmed** — a multi-platform `push: false` buildx combination, and `python -m build` running from the repo root |
+| E-10 | The release workflow had never been dispatched **with its output reviewed**, and `PYPI_API_TOKEN` does not exist on the repository (zero secrets configured). **Correction 2026-11-16: the premise "never dispatched" was false** — run `28883512027` on 2026-07-07 at `d7f14ad` dispatched successfully and no document recorded it | P4-2 is `PARTIAL` for exactly this. A decision was assumed to be one click; it is not, and nobody knows what else is missing. Half of that sentence was wrong, which is why the review — not the dispatch — was the missing evidence | One non-publishing dispatch recorded, and its output reviewed — then the release decision is taken on evidence rather than on hope | **CLOSED** — `e44ebb0`, `tests/test_phase4_plan.py`. Run `43988912835` at `6e1f01a` (`publish: false`, `sign: false`, `version: 0.9.0`), every step success, publishing steps skipped; `release-artifacts` 986,895 B with wheel + sdist named `0.9.0` and a CycloneDX 1.6 SBOM of 109 components, and the wheel installed into a clean venv outside the checkout. Both candidate defects were falsified by the run and are recorded as hypotheses that did not reproduce. **P4-2 stays `PARTIAL`** — a dry run is not a publishing release |
 | E-11 | The decision itself: release to GitHub + GHCR only, or also PyPI (which needs an account and token) | The gate criterion names version/tag/commit/wheel/image/SBOM/provenance — not PyPI. Choosing the narrower release closes P4-2 without inventing a distribution channel | The chosen scope is written into `PHASE4_PLAN.md` §P4-2 before the dispatch, and the dispatch is recorded after | **CLOSED as written-not-decided** — `d247df3`, `tests/test_phase4_plan.py`. Both variants and their prerequisites are in §P4-2 variants; no decision is taken, nothing is published, and P4-2 stays `PARTIAL` |
 
 ## D. Environment — the cost of two red CI runs on 2026-11-11
