@@ -4,7 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "neuralstrike"
-version = "1.0.0"
+# 0.9.0, not 1.0.0. A major version of 1 declares the public API stable, and the release plan
+# says NOT RELEASED (docs/implementation/PHASE4_PLAN.md): P4-2 has no dispatched release and
+# P4-6 has no pilot. 1.0.0 is reserved for the artifact that closes them.
+# tests/test_release_stability.py fails if this line and the gate documents ever disagree.
+version = "0.9.0"
 description = "Adversarial AI orchestration framework — red-team toolkit for the autonomous-agent era."
 readme = "README.md"
 requires-python = ">=3.11,<3.15"

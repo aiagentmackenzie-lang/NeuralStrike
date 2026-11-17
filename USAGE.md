@@ -1,6 +1,8 @@
 # NeuralStrike — Operator's Guide
 
-> Thorough, end-to-end usage reference for NeuralStrike v1.0.0.
+> Thorough, end-to-end usage reference for NeuralStrike v0.9.0. The version is 0.9.0,
+> not 1.0.0: a 1.0.0 major declares a stable public API, and Phase 4 is NOT RELEASED
+> (`docs/implementation/PHASE4_PLAN.md`). 1.0.0 is reserved for the released artifact.
 > For install/stack details see [README.md](README.md); for per-version changes see
 > [CHANGELOG.md](CHANGELOG.md); for responsible use see [SECURITY.md](SECURITY.md).
 
@@ -76,7 +78,7 @@ git clone https://github.com/aiagentmackenzie-lang/NeuralStrike.git
 cd NeuralStrike
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev,mcp]"          # [mcp] needed only for `intercept`
-neuralstrike --version                # → NeuralStrike v1.0.0
+neuralstrike --version                # → NeuralStrike v0.9.0
 ```
 
 Pull the local brains (the Judge default is the D1 model; fallbacks resolve

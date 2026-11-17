@@ -3199,3 +3199,44 @@ own drift twice as I added the contracts in this pass, which is the behaviour I 
 
 **Gates.** 2,700 passed, 7 skipped of 2,707 collected; coverage 91.98 % (85 % enforced); `ruff` and
 `mypy` clean over 147 files. No gate moved: Phase 3 **NOT ACCEPTED**, Phase 4 **NOT RELEASED**.
+
+### 2026-11-16 — E-13: the version number was claiming a stability the gates deny
+
+Found while picking the project back up and re-deriving the state instead of reading it back: the
+package declared **1.0.0** in `pyproject.toml` and `neuralstrike.__version__`, and `USAGE.md`
+repeated it, while `PHASE4_PLAN.md` says **NOT RELEASED**, `PHASE3_ACCEPTANCE.md` says **NOT
+ACCEPTED**, the classifier is `4 - Beta`, the repository has **no tags** and **no published
+package**. E-1 closed exactly this defect one field over — the classifier — and its contract
+(`tests/test_release_stability.py`) binds only the classifier, so the version string kept the
+claim.
+
+**Why it matters, stated precisely.** SemVer reserves a 1.x major for a stable public API. This
+CLI has 42 registered names, one of them a deprecation alias, and its own plan says the command
+spine is the part that just stabilised. On a page nobody has published yet the number is
+invisible; the moment `release.yml` runs — the one step P4-2 waits on — it becomes the first
+stability claim inside the wheel metadata and the release manifest. Fixing it before the dispatch
+is cheaper than fixing it after.
+
+**Fail-before-fix.** Two contracts appended to `tests/test_release_stability.py` *before* any edit:
+one that `neuralstrike.__version__` and `pyproject.toml` name the same build (they did — that is
+how the drift stayed invisible), and one that a non-zero major requires both gate documents to
+say RELEASED / ACCEPTED. Red run captured on the unchanged tree: **2 failed, 5 passed**, both from
+`test_version_does_not_declare_a_stable_api_the_gates_deny` — `version is '1.0.0' but
+PHASE4_PLAN.md says 'NOT RELEASED.'`.
+
+**Fix.** `1.0.0` → **`0.9.0`** in `pyproject.toml` (with the reason in a comment) and
+`src/neuralstrike/__init__.py`; `USAGE.md` header and the `--version` transcript corrected, with
+the reservation stated: **1.0.0 is the version of the artifact that closes P4-2 and P4-6**, not of
+the tree that is still waiting. `neuralstrike --version` now reports `NeuralStrike v0.9.0`
+(single-sourced through `core/config.py`, so the CLI, the wheel metadata and the release manifest
+cannot disagree).
+
+**The README contract caught the increment, as designed.** Adding three test cases moved the
+collected count 2,707 → 2,710 and the function count 1,026 → 1,028, and
+`test_the_stated_collected_count_matches_a_fresh_collection` failed the first full gate with
+`stated 2707, fresh 2710`. Counts updated in all three README places; that failure is the contract
+working, not a regression, and it is recorded rather than quietly fixed.
+
+**Gates.** `scripts/ci_gate.sh`: ruff clean, mypy clean (147 files), **2,703 passed / 7 skipped**
+of 2,710 collected, coverage **91.98 %** (85 % enforced). No gate state moved: Phase 3 **NOT
+ACCEPTED**, Phase 4 **NOT RELEASED**. Committed locally; **push not performed, awaiting approval**.

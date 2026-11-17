@@ -1,6 +1,6 @@
 """Contracts for the release binder (Phase 4 gate P4-2).
 
-The manifest is the artifact that makes "version 1.0.0" mean one build. These tests are about
+The manifest is the artifact that makes a version string mean one build. These tests are about
 its refusals as much as its output: a binder that silently drops a missing artifact, accepts a
 stale wheel or claims a signature would be worse than no manifest at all.
 """

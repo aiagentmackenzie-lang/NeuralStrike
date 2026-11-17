@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (version honesty — 0.9.0, 2026-11-16)
+- **The package no longer declares 1.0.0.** `pyproject.toml` and `neuralstrike.__version__` said
+  `1.0.0` while `PHASE4_PLAN.md` says **NOT RELEASED**, the classifier is `4 - Beta`, the repo has
+  no tags and the package has never been published. SemVer reserves a 1.x major for a stable
+  public API, so the number was the same overclaim E-1 fixed in the classifier, one field over.
+  Now **`0.9.0`**; `1.0.0` is reserved for the artifact that closes P4-2 and P4-6.
+- Two contracts added to `tests/test_release_stability.py`: `__version__` and `pyproject.toml`
+  must name one build, and a non-zero major requires both gate documents to say RELEASED /
+  ACCEPTED. Both were run red against the unfixed tree (2 failed / 5 passed) before the change.
+- `USAGE.md` header and `--version` transcript corrected. Test counts re-derived after the
+  additions: 2,710 collected / 2,703 pass / 7 skip (the README contract failed the first gate on
+  the stale 2,707 and was updated).
+
 ### Changed (README honesty pass — every claim re-derived from the tree, 2026-11-12)
 - **New §Breadth, measured.** 14 dimensions counted from the code by re-runnable commands: 42
   command names / 41 distinct callbacks, 121 implementation modules in 26 packages (≈26.7k lines),

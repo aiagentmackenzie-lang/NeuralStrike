@@ -170,7 +170,7 @@ Everything in this section is counted from the tree by a command you can re-run,
 |---|---:|---|---|
 | CLI surface | **42** command names, **41** distinct callbacks — `corpus` is the same callback as `assess` | the Typer command graph (`registered_names`) | ✅ CI-verified |
 | Source | **121** implementation modules in **26** packages, **≈26.7k** lines under `src/` | `src/neuralstrike/**/*.py`, `__init__.py` excluded from the module count | ✅ CI-verified |
-| Tests, local | **2,707** collected (**1,026** test functions; the rest parametrised) · **2,700** pass · **7** skip · **91.98 %** coverage | `scripts/ci_gate.sh` on macOS arm64 / CPython 3.12.14 | ⚠️ local observation |
+| Tests, local | **2,710** collected (**1,028** test functions; the rest parametrised) · **2,703** pass · **7** skip · **91.98 %** coverage | `scripts/ci_gate.sh` on macOS arm64 / CPython 3.12.14 | ⚠️ local observation |
 | Tests, CI | the same suite, with **7 additional skips** and **91.88–91.92 %** coverage | CI run `43122299019` at `1664f73`: **2,693 pass, 14 skip, 91.88–91.90 %**, all seven jobs. The seven extra skips need the private evidence root or the pinned tau-bench checkout — neither is in the repository. An earlier run, `43115588777`, is kept as the red one: it failed on a test that demanded this machine's evidence root exist on a runner | ✅ CI-verified |
 | Target adapters | **5** — `openai_endpoint`, `langgraph`, `langgraph_server`, `mcp_http`, `a2a` | `adapters/`, `--adapter` choices | ✅ CI-verified |
 | Deterministic oracles | **5** families — canary, forbidden-tool, predicate, schema, system-prompt extraction | `oracles/`, plus the advisory judge and its ensemble | ✅ CI-verified |
@@ -712,7 +712,7 @@ CI (`.github/workflows/ci.yml`) runs three jobs on every push and PR:
 | **supply-chain** | Installs the hash-pinned lock, runs `scripts/ci_gate.sh` (the gating install), `pip-audit`, a CycloneDX SBOM, and the fresh-clone smoke test |
 | **dashboard** | `npm ci`, report-parsing tests, production build |
 
-Current state, measured on this machine: **2,707** collected (**2,700** pass, **7** skip), **91.98 %**
+Current state, measured on this machine: **2,710** collected (**2,703** pass, **7** skip), **91.98 %**
 coverage (85 % enforced), mypy strict over 147 files. CI runs the same suite and skips seven more
 tests that need the private evidence root or the pinned tau-bench checkout. The breadth table above
 is derived from the same tree, and `tests/test_readme_claims.py` re-derives every number in it. Local measurement on macOS arm64 / CPython 3.12.14; CI is the authority.
@@ -738,7 +738,7 @@ NeuralStrike/
 │   └── reports/                # json, sarif, junit, markdown, pdf, compliance, readme_mapping
 ├── corpus/                     # OWASP-tagged scenario YAML (60 scenarios)
 ├── dashboard/                  # Vite + React report viewer (TypeScript)
-├── tests/                      # 120 files, 1,026 test functions (2,707 collected cases)
+├── tests/                      # 120 files, 1,028 test functions (2,710 collected cases)
 ├── docs/threat_model.md
 ├── .github/workflows/ci.yml
 ├── Dockerfile / docker-compose.yml

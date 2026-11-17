@@ -84,3 +84,38 @@ def test_classifier_does_not_outrun_the_release_plan() -> None:
 def test_status_documents_are_present_and_parseable(path: Path) -> None:
     assert path.is_file()
     assert status_claim(path)
+
+
+def declared_version() -> str:
+    data = tomllib.loads(PYPROJECT.read_text())
+    version = data["project"]["version"]
+    assert isinstance(version, str) and version
+    return version
+
+
+def test_runtime_version_is_single_sourced_from_pyproject() -> None:
+    """Two version strings are two claims. `neuralstrike --version` must report the packaged one."""
+    from neuralstrike import __version__
+
+    assert __version__ == declared_version(), (
+        "neuralstrike.__version__ and pyproject.toml disagree; the CLI, the wheel metadata and "
+        "the release manifest would name different builds"
+    )
+
+
+@pytest.mark.parametrize("path", [PHASE3, PHASE4])
+def test_version_does_not_declare_a_stable_api_the_gates_deny(path: Path) -> None:
+    """SemVer: a 1.0.0 major claims the public API is stable.
+
+    A package that has never been tagged, never been published, and whose own release plan says
+    NOT RELEASED is making a stability claim in its version number that it cannot support — the
+    same defect the classifier contract closes, one field over.
+    """
+    status = status_claim(path).upper()
+    if status.startswith(("RELEASED", "ACCEPTED")):
+        return
+    major = declared_version().split(".", 1)[0]
+    assert major == "0", (
+        f"version is {declared_version()!r} but {path.name} says {status!r}: a 1.0.0+ version "
+        "claims a stable public API, which an unreleased artifact has not earned"
+    )
