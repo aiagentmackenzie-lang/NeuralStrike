@@ -3344,7 +3344,11 @@ refuse, and it did.
 91.98 %. The README claims contract caught the count drift again (2,714 → 2,718, files 121 → 122).
 Committed locally; push and re-dispatch follow the owner's standing approval for this release.
 
-### 2026-11-17 — v0.9.0 is published, and P4-2 is MET on verified evidence
+### 2026-11-17 (UTC) — v0.9.0 is published, and P4-2 is MET on verified evidence
+
+Everything in this entry happened on the operator's **2026-11-16**; the run and release
+timestamps are UTC (`43996734469` published at `2026-11-17T01:44:08Z`). The earlier entries of
+the same day are dated 2026-11-16, so this heading is the clock, not a second day.
 
 The publishing run the phase had been waiting for: **`43996734469`** at `607d4f5`, dispatched with
 `publish: true, publish_pypi: false, sign: false, version: 0.9.0`. Every step success — PyPI
