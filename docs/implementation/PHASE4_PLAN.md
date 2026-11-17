@@ -34,7 +34,7 @@ A tag, a wheel or a green workflow is not a release.
 | ID | Gate | Binary criterion | State | Evidence | Required signer | Signed |
 |---|---|---|---|---|---|---|
 | P4-1 | Command spine | one assessment command, one compare command and one replay command exist, and every command a document names resolves to a registered command | **MET** — `assess` is the single assessment command: the legacy `corpus` name is the **same callback** registered under a second name, so the alias cannot drift, and it prints a deprecation notice at runtime. `compare BASELINE CURRENT` is the single comparison command: offline, both bundles hash-verified, and it calls the live gate's own decision function (`decide_comparison`) so the two surfaces cannot disagree about a regression. `replay` already existed. `scan --adapter openai` now accepts `--target-api-key-env` and attaches the resolved bearer, closing the asymmetry the live-target guide exposed. The documentation contract now reads the registered commands from the Typer app instead of parsing decorators, so a command registered under two names cannot hide from it | `src/neuralstrike/main.py`, `src/neuralstrike/evaluation/compare.py`, `src/neuralstrike/evaluation/baseline.py`, `tests/test_command_spine.py`, `tests/test_phase4_plan.py`, `docs/LIVE_TARGET_GUIDE.md` | release engineer | — |
-| P4-2 | Artifact binding | one release binds version, tag, source commit, wheel, image digest, SBOM and provenance; the wheel and the container are installed and exercised **independently of the editable checkout** | **PARTIAL** — the wheel half is implemented: a CI `artifact` job builds sdist+wheel, installs the wheel into a clean venv outside the checkout, asserts the import resolves to `site-packages` and not the repository, runs the offline smoke from outside, generates the SBOM of that installed environment and binds all three digests with tag and commit into `release-manifest.json` via `scripts/release_manifest.py`; `release.yml` binds the image digest into the same manifest and attaches it to the release. The wheel half is CI-verified: run `42934094480` at `d2acde5`, job `artifact` green through all nine steps, and the downloaded `release-manifest.json` re-verifies **3/3 digests** against the uploaded wheel, sdist and SBOM, with `signed: false` and `image: null`. Container half CI-verified at `9824c7a` (run `42937379076`). **Shortfall: no dispatched release exists, so the image-digest binding in the release manifest is written but unproven.** The decision has not been taken and no publish has occurred; both variants and their prerequisites are written out in §P4-2 variants below, and `.github/workflows/release.yml` has never executed | `.github/workflows/ci.yml` job `artifact`, `.github/workflows/release.yml`, `scripts/release_manifest.py`, `tests/test_release_manifest.py` | release engineer | — |
+| P4-2 | Artifact binding | one release binds version, tag, source commit, wheel, image digest, SBOM and provenance; the wheel and the container are installed and exercised **independently of the editable checkout** | **PARTIAL** — the wheel half is implemented: a CI `artifact` job builds sdist+wheel, installs the wheel into a clean venv outside the checkout, asserts the import resolves to `site-packages` and not the repository, runs the offline smoke from outside, generates the SBOM of that installed environment and binds all three digests with tag and commit into `release-manifest.json` via `scripts/release_manifest.py`; `release.yml` binds the image digest into the same manifest and attaches it to the release. The wheel half is CI-verified: run `42934094480` at `d2acde5`, job `artifact` green through all nine steps, and the downloaded `release-manifest.json` re-verifies **3/3 digests** against the uploaded wheel, sdist and SBOM, with `signed: false` and `image: null`. Container half CI-verified at `9824c7a` (run `42937379076`). **A non-publishing dispatch now exists (2026-11-16):** run `43988912835` at `6e1f01a` (dispatched 2026-11-17T00:35Z) completed with **every step success** — PyPI, GHCR login, cosign, the manifest binding and the GitHub release all skipped as intended; `release-artifacts` (986,895 B) contains `neuralstrike-0.9.0-py3-none-any.whl`, `neuralstrike-0.9.0.tar.gz` and a CycloneDX 1.6 SBOM of **109 components**; the wheel was installed into a clean venv **outside the checkout**, imported from `site-packages`, and reports `__version__ 0.9.0` with classifier `4 - Beta`. **Correction, same date:** the earlier claim that this workflow had **never executed** was wrong — run `28883512027` (2026-07-07, `d7f14ad`) dispatched successfully and no document recorded it. **Shortfall: no *publishing* release exists, so the image-digest binding in the release manifest is written but unproven.** The decision has not been taken and no publish has occurred; both variants and their prerequisites are written out in §P4-2 variants below | `.github/workflows/ci.yml` job `artifact`, `.github/workflows/release.yml`, `scripts/release_manifest.py`, `tests/test_release_manifest.py`, `tests/test_phase4_plan.py` | release engineer | — |
 | P4-3 | Signing policy explicit | the documentation states whether signing is performed, on which artifacts, and that unsigned artifacts are not claimed as signed | **MET** — §Signing policy below states optional-and-off-by-default, names the image digest and SBOM attestation as the only signed objects, and forbids calling any artifact signed without a recorded signature; the README repeats that nothing is signed, and a contract asserts the cosign steps stay conditional on `inputs.sign` | `.github/workflows/release.yml`, this document §Signing policy, `README.md`, `tests/test_phase4_plan.py` | release engineer | — |
 | P4-4 | Scheduled dependency health | a scheduled job audits the pinned locks on a fixed cadence, independently of commits, and its result is readable as an artifact | **MET** — `.github/workflows/dependency-check.yml` runs Mondays 06:17 UTC and on demand, audits both hashed locks, uploads JSON with `if: always()`, and holds `contents: read`; dispatched run `42931775244` at `41670a7` completed **success** with the audit artifact attached. The cron trigger itself has not yet fired on a Monday; the scheduled *mechanism* is what this gate claims | `.github/workflows/dependency-check.yml`, run `42931775244` | release engineer | — |
 | P4-5 | Pilot-facing docs | an offline example, an authenticated live-target guide, and a supported-versus-experimental matrix with measured limits | **MET** — [SUPPORT_MATRIX.md](../SUPPORT_MATRIX.md) partitions supported / experimental / excluded from the Phase 2 acceptance record and states measured limits; [LIVE_TARGET_GUIDE.md](../LIVE_TARGET_GUIDE.md) documents the credentialed path and names the `scan` authentication gap; [OFFLINE_EXAMPLE.md](../OFFLINE_EXAMPLE.md) is a verified no-model, no-network run. Contracts assert the documents exist, are linked, and name only registered commands | `docs/SUPPORT_MATRIX.md`, `docs/LIVE_TARGET_GUIDE.md`, `docs/OFFLINE_EXAMPLE.md` | release engineer | — |
@@ -87,30 +87,35 @@ release URL. It is also the only one with an account, a token, a name reservatio
 supply-chain surface that this repository does not currently have. P4-2's criterion does not name
 PyPI, so choosing A does not weaken the gate; choosing B adds unproven infrastructure to it.
 
-### What a non-publishing dispatch would and would not establish
+### What a non-publishing dispatch established, measured on 2026-11-16
 
 `workflow_dispatch` with `publish: false` skips PyPI, GHCR login, cosign, the manifest binding and
-the GitHub release — every step that writes outside the runner. What it exercises is the part that
-has never been executed at all: checkout, build, SBOM generation, and a **multi-platform Docker
-build with `push: false`**. That is worth one dispatch precisely because it is the part that can
-fail on a runner and does not need a secret.
+the GitHub release — every step that writes outside the runner. Run `43988912835` at `6e1f01a`
+exercised the rest: checkout, `python -m build`, SBOM generation and a **multi-platform Docker build
+with `push: false`** — and the review of its output was done, not assumed:
 
-Two defects are already visible by reading `release.yml`, and neither is confirmed, because a
-reading is not a run:
+| Step | Result |
+|---|---|
+| Build Python distribution (`python -m build` from the repo root) | success — `neuralstrike-0.9.0-py3-none-any.whl` + `neuralstrike-0.9.0.tar.gz` |
+| Generate CycloneDX SBOM | success — CycloneDX 1.6, 109 components |
+| Upload `release-artifacts` | success — 986,895 B |
+| Multi-arch build, `push: false`, `sbom: true`, `provenance: true` | success — no exporter error |
+| Publish / GHCR login / cosign / manifest / GitHub release | skipped, as designed |
+| Wheel installed in a clean venv outside the checkout | `site-packages`, `__version__ 0.9.0`, classifier `4 - Beta` |
 
-1. `docker/build-push-action` is called with `platforms: linux/amd64,linux/arm64`, `push: false`,
-   and `sbom: true` / `provenance: true`. A multi-platform build has no local load target, and
-   attestations are only produced for a pushed image; buildx commonly fails this combination with
-   an exporter error. If it does, a non-publishing dispatch fails at the build step and the fix is
-   a separate single-platform `push: false` build for the non-publishing path.
-2. `Build Python distribution` runs `python -m build` with the repository root as the working
-   directory. The CI `artifact` job deliberately builds from outside the checkout because a
-   gitignored `build/` directory in the tree shadows the `build` module. A fresh runner checkout
-   has no `build/` directory, so this is likely fine — but it is the same trap that already cost a
-   red run once, and it is unverified.
+**Both candidate defects were falsified by the run, not confirmed:** the multi-platform `push:
+false` build with attestations did **not** fail, and `python -m build` from the repository root did
+**not** collide with the gitignored `build/` directory (a fresh runner checkout has none). They stay
+recorded as hypotheses that were tested and did not reproduce, because "it did not fail today" is
+not the same claim as "it cannot fail".
 
-Neither defect can be recorded as a finding without the dispatch. They are written here so that
-the first run can confirm or falsify them rather than being greeted as a surprise.
+**What it does not establish.** Nothing about the publishing path: the image digest, the manifest
+binding, the tag and the GitHub release are all unexercised, so P4-2 remains `PARTIAL`. The
+publishing run also still does not execute the quality gate (NS-14) — that is a defect of the
+workflow, named in the master plan and untouched by this dispatch.
+
+Both hypotheses were tested by run `43988912835` on 2026-11-16 and neither reproduced. They are kept
+here so that a later failure is recognised as a recurrence rather than greeted as a surprise.
 
 ## Signing policy
 

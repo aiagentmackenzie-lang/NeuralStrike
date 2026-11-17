@@ -3240,3 +3240,40 @@ working, not a regression, and it is recorded rather than quietly fixed.
 **Gates.** `scripts/ci_gate.sh`: ruff clean, mypy clean (147 files), **2,703 passed / 7 skipped**
 of 2,710 collected, coverage **91.98 %** (85 % enforced). No gate state moved: Phase 3 **NOT
 ACCEPTED**, Phase 4 **NOT RELEASED**. Committed locally; **push not performed, awaiting approval**.
+
+### 2026-11-16 — E-10: the release workflow has now been dispatched, and the backlog was wrong about it
+
+The item said the workflow had "never been dispatched, not even with `publish: false`", and that
+"nobody knows what else is missing". Both halves were false: `gh run list --workflow=release.yml`
+shows run **`28883512027`** on **2026-07-07** at `d7f14ad`, `workflow_dispatch`, **success**. No
+document in the repository recorded it, which is the same failure mode as the "911 tests" line —
+a claim about absence that nothing re-derived.
+
+**The dispatch that was actually missing is a *reviewed* one.** Dispatched `43988912835` at
+`6e1f01a` with `publish=false, sign=false, version=0.9.0` after CI `43987424466` went green on that
+exact commit (all seven jobs). Every step success; PyPI, GHCR login, cosign, the manifest binding
+and the GitHub release skipped as designed. Output reviewed rather than assumed:
+
+- `release-artifacts` 986,895 B: `neuralstrike-0.9.0-py3-none-any.whl`, `neuralstrike-0.9.0.tar.gz`,
+  `neuralstrike-sbom.json` (CycloneDX 1.6, **109** components)
+- wheel metadata: `Version: 0.9.0`, classifier `4 - Beta` — the E-13 change flowed into the artifact
+- wheel installed into a **clean venv outside the checkout** (no `--deps` from the tree): imports
+  from `site-packages`, `__version__ 0.9.0`
+- the machine's default `python3` is 3.15.2, which the wheel correctly **refuses** (`<3.15`) — a
+  support boundary behaving as declared, not a defect
+
+**The two candidate defects were falsified by the run, not confirmed.** The multi-platform
+`push: false` build with `sbom: true`/`provenance: true` did **not** fail, and `python -m build`
+from the repository root did **not** collide with the gitignored `build/` directory. Recorded as
+hypotheses that were tested and did not reproduce — "it did not fail today" is not "it cannot fail".
+
+**The contract moved with the evidence, and that is the point.** `test_release_dispatch_is_recorded_
+as_absent_until_a_run_exists` required the phrase "no dispatched release exists" while P4-2 was
+PARTIAL. That phrase became false the moment a dispatch ran, so it was replaced by the invariant it
+was standing in for: PARTIAL must name the exact shortfall — now **no *publishing* release exists**,
+which keeps the image digest, the manifest binding, the tag and the GitHub release unexercised — and
+must cite the reviewed run id. The row may not say the workflow never executed. The defects
+contract likewise now requires them recorded as tested-and-not-reproduced.
+
+**No gate moved.** P4-2 stays **PARTIAL** (a dry run is not a release), Phase 3 **NOT ACCEPTED**,
+Phase 4 **NOT RELEASED**. The publishing run still does not execute the quality gate (NS-14).

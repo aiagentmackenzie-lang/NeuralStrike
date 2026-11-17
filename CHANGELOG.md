@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Verified (release dry run — first dispatched release workflow since 2026-07-07, 2026-11-16)
+- `release.yml` dispatched with `publish: false, sign: false, version: 0.9.0` at `6e1f01a`
+  (run `43988912835`, every step success). Built wheel + sdist + a CycloneDX 1.6 SBOM (109
+  components) as `release-artifacts`, and the wheel installs into a clean venv outside the checkout
+  reporting `0.9.0` / `4 - Beta`. Publishing steps skipped by design, so **P4-2 remains PARTIAL**.
+- **Correction:** the backlog and `PHASE4_PLAN.md` claimed the workflow had never been dispatched.
+  It had: run `28883512027` on 2026-07-07 at `d7f14ad`, success, unrecorded by any document.
+- Both candidate workflow defects recorded as unconfirmed were tested by this run and did not
+  reproduce (multi-arch `push: false` with attestations; `python -m build` from the repo root).
+  They stay recorded as hypotheses, because a passing run is not a proof they cannot fail.
+
 ### Changed (version honesty — 0.9.0, 2026-11-16)
 - **The package no longer declares 1.0.0.** `pyproject.toml` and `neuralstrike.__version__` said
   `1.0.0` while `PHASE4_PLAN.md` says **NOT RELEASED**, the classifier is `4 - Beta`, the repo has

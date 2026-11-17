@@ -233,27 +233,50 @@ def test_both_release_variants_are_written_and_neither_is_chosen() -> None:
         assert phrase not in plan.lower(), phrase
 
 
-def test_release_dispatch_is_recorded_as_absent_until_a_run_exists() -> None:
-    """A dispatch is evidence; its absence must not be written up as a decision."""
+def test_the_partial_state_names_the_shortfall_and_cites_the_dispatch_that_was_run() -> None:
+    """A dispatch is evidence; its absence must not be written up as a decision.
+
+    Before 2026-11-16 this contract required the phrase "no dispatched release exists", because
+    none had ever run. One has now run — non-publishing, run 43988912835 — so that phrase became
+    false and the contract had to move with the evidence rather than freeze a stale claim. What
+    P4-2 is still short of is a *publishing* release: the image digest, the manifest binding, the
+    tag and the GitHub release are unexercised, so PARTIAL is still the honest state.
+    """
     for gate, cells in gate_rows().items():
         if gate != "P4-2":
             continue
         joined = " ".join(cells)
-        if "PARTIAL" in joined:
-            assert "no dispatched release exists" in joined, (
-                "P4-2 is PARTIAL for one reason: no dispatched release. Say so in the row."
-            )
-        else:
-            pytest.fail("P4-2 changed state without a dispatch; see ENGINEERING_BACKLOG.md E-10")
+        assert "PARTIAL" in joined, (
+            "P4-2 may only leave PARTIAL when a publishing release exists; see E-10/E-11"
+        )
+        assert "no *publishing* release exists" in joined, (
+            "P4-2 is PARTIAL for one reason: no publishing release. Say so in the row."
+        )
+        assert "43988912835" in joined, (
+            "the non-publishing dispatch that was reviewed must be cited by run id in the row"
+        )
+        assert "has never executed" not in joined, (
+            "the workflow has executed twice; a row that says otherwise is a false claim"
+        )
 
 
-def test_the_release_workflow_defects_are_recorded_as_unconfirmed() -> None:
-    """Two defects are visible by reading release.yml; neither may be stated as a finding."""
+def test_the_release_workflow_defects_were_tested_and_did_not_reproduce() -> None:
+    """Two hypotheses were visible by reading release.yml. The dispatch tested both.
+
+    They may be recorded as falsified-by-run or as still open, but never as confirmed findings —
+    nothing in the run produced either failure.
+    """
     section = PLAN.read_text()
     section = section[section.index("## P4-2 variants") : section.index("## Signing policy")]
-    assert "neither is confirmed" in section
-    assert "push: false" in section
-    assert "shadowing" in section or "shadows the `build` module" in section
+    flat_section = " ".join(section.split())  # prose wraps; the claim does not
+    assert "falsified by the run" in flat_section
+    assert "push: false" in flat_section
+    # The two hypotheses, by the wording of their outcome rather than a claim about them.
+    assert "did **not** fail" in flat_section, "the multi-arch push:false hypothesis is unrecorded"
+    assert "did **not** collide with the gitignored `build/` directory" in flat_section, (
+        "the python -m build hypothesis is unrecorded"
+    )
+    assert "43988912835" in flat_section, "the run that tested them must be named"
 
 
 def test_release_workflow_still_gates_publishing_on_the_input() -> None:
