@@ -3277,3 +3277,36 @@ contract likewise now requires them recorded as tested-and-not-reproduced.
 
 **No gate moved.** P4-2 stays **PARTIAL** (a dry run is not a release), Phase 3 **NOT ACCEPTED**,
 Phase 4 **NOT RELEASED**. The publishing run still does not execute the quality gate (NS-14).
+
+### 2026-11-16 — NS-14: the release job now runs the gate, before it builds anything
+
+The master plan named this a release blocker and it had survived every sprint because the gate
+lived in the one place a release does not go through. `ci.yml` gated pushes; `release.yml` ran
+checkout → `python -m build` → SBOM → publish, with **no gate at all**. A `workflow_dispatch` can be
+aimed at any commit on the default branch, so the publishing run I was about to recommend could
+have shipped a wheel and an image from a red commit, and nothing in the repo would have said so.
+
+**Fail-before-fix.** `tests/test_release_gate.py` written first, four contracts, run against the
+unchanged workflow: **4 failed** (`release.yml` never runs `scripts/ci_gate.sh`; no gate before the
+build or the publish steps; no gate step to check for conditionality; no locked install before it).
+Two of the four were weak on the first draft and were strengthened before the fix: the
+unconditionality test passed vacuously when no gate step existed, and the publish-step matcher
+compared a step name for equality against a name that carries a suffix. Both are in the ledger
+because a contract that passes for the wrong reason is the defect it was written to prevent.
+
+**Fix.** `release.yml` installs the pinned dev lock (`--require-hashes -r requirements-dev.txt`,
+`--no-deps -e .`) and runs `PYTHON=python bash scripts/ci_gate.sh` **before** `Install build tools`
+and `python -m build`. Deliberately the shared script, not an inlined `ruff`/`mypy`/`pytest` — the
+E-12 rule (`test_dev_environment.py` fails on an inlined gate tool) and this contract point in the
+same direction, so the release gate is the same file CI and contributors execute. The step is
+unconditional: publishing is already conditional on `inputs.publish`, and the gate is what makes
+that safe.
+
+**What this does and does not prove.** It is a structural contract: it proves the release path
+*cannot* build before gating, not that the gate passes on the runner. The first publishing dispatch
+is what confirms it end to end, and that is now a precondition rather than an afterthought.
+
+**Gates.** ruff clean, mypy clean (147 files), **2,707 passed / 7 skipped** of 2,714 collected,
+91.98 % coverage. The README claims contract caught the count drift again (2,710 → 2,714) and the
+test-file count (120 → 121) with it. No gate state moved: Phase 3 **NOT ACCEPTED**, Phase 4
+**NOT RELEASED**, P4-2 still `PARTIAL`. Committed locally; **push not performed, awaiting approval**.

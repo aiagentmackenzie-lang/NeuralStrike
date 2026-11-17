@@ -38,6 +38,20 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      - name: Install (pinned dev lock)
+        run: |
+          python -m pip install --upgrade pip
+          pip install --require-hashes -r requirements-dev.txt
+          pip install --no-deps -e .
+
+      # NS-14: the release may not build an artifact from a commit whose gate has not run. This is
+      # the same file the gating CI jobs and contributors execute, never an inlined copy of the
+      # tools — `tests/test_dev_environment.py` fails if a workflow inlines ruff/mypy/pytest, and
+      # `tests/test_release_gate.py` fails if this step moves after the build or gains an `if:`.
+      - name: Gate (scripts/ci_gate.sh)
+        run: |
+          PYTHON=python bash scripts/ci_gate.sh
+
       - name: Install build tools
         run: |
           python -m pip install --upgrade pip

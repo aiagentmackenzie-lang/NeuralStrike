@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (NS-14 — the release job can no longer ship an ungated commit, 2026-11-16)
+- `release.yml` built, tagged and published without ever running the quality gate: `ci.yml` gated
+  pushes, and the release path went checkout → build → SBOM → publish. A `workflow_dispatch` can be
+  aimed at any commit on the default branch, so a publishing run could have shipped a wheel and an
+  image from a red commit with nothing in the repository saying so.
+- It now installs the pinned dev lock and runs `scripts/ci_gate.sh` **before** `python -m build`,
+  unconditionally — the shared script, never an inlined copy of the tools (E-12's rule).
+- `tests/test_release_gate.py` written first and run red against the unchanged workflow (4 failed):
+  the gate exists, precedes the build and every publishing step, is not conditional, and runs in the
+  locked environment.
+
 ### Verified (release dry run — first dispatched release workflow since 2026-07-07, 2026-11-16)
 - `release.yml` dispatched with `publish: false, sign: false, version: 0.9.0` at `6e1f01a`
   (run `43988912835`, every step success). Built wheel + sdist + a CycloneDX 1.6 SBOM (109
