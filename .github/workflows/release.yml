@@ -8,8 +8,13 @@ on:
         required: true
         type: string
       publish:
-        description: "Push GHCR image, create GitHub release, publish to PyPI"
+        description: "Push the GHCR image and create the GitHub release (Variant A)"
         required: true
+        type: boolean
+        default: false
+      publish_pypi:
+        description: "Also publish to PyPI (Variant B). Off by default: it needs a PyPI project and a trusted publisher this repository does not have"
+        required: false
         type: boolean
         default: false
       sign:
@@ -74,8 +79,11 @@ jobs:
             dist/
             neuralstrike-sbom.json
 
+      # Variant A (GitHub + GHCR) and Variant B (+ PyPI) are separate decisions with different
+      # prerequisites. They were one flag until run 43995731534: `publish: true` ran this step
+      # first, failed with `invalid-publisher`, and skipped every GHCR and release step after it.
       - name: Publish to PyPI
-        if: inputs.publish
+        if: inputs.publish && inputs.publish_pypi
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}

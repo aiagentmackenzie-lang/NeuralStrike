@@ -6,6 +6,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (release scope — the first publishing run could not express Variant A, 2026-11-17)
+- First publishing dispatch (run `43995731534` at `10a998c`) passed the new gate step (proving
+  NS-14 on the runner, gate before build) and then **failed at `Publish to PyPI`** with
+  `invalid-publisher`; every GHCR, manifest and GitHub-release step after it was skipped. Nothing
+  was published.
+- Cause 1: `publish` was one flag for three destinations, so the GitHub+GHCR variant could not be
+  dispatched without also attempting PyPI. A dry run cannot reveal this — the PyPI step is skipped
+  when `publish` is false.
+- Cause 2: the PyPI step uses **OIDC Trusted Publishing** (empty token), so Variant B's prerequisite
+  is a PyPI project plus a registered trusted publisher, not a repository secret.
+- Fix: `publish_pypi` is its own input, default `false`; PyPI runs on
+  `inputs.publish && inputs.publish_pypi`; image and release stay on `inputs.publish`.
+  `tests/test_release_scope.py` (written red first, 3 failed) fails if the destinations are ever
+  conflated again or if a GitHub release is made conditional on PyPI.
+
 ### Fixed (NS-14 — the release job can no longer ship an ungated commit, 2026-11-16)
 - `release.yml` built, tagged and published without ever running the quality gate: `ci.yml` gated
   pushes, and the release path went checkout → build → SBOM → publish. A `workflow_dispatch` can be

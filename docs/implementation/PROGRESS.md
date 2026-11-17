@@ -3310,3 +3310,36 @@ is what confirms it end to end, and that is now a precondition rather than an af
 91.98 % coverage. The README claims contract caught the count drift again (2,710 → 2,714) and the
 test-file count (120 → 121) with it. No gate state moved: Phase 3 **NOT ACCEPTED**, Phase 4
 **NOT RELEASED**, P4-2 still `PARTIAL`. Committed locally; **push not performed, awaiting approval**.
+
+### 2026-11-17 — the first publishing run failed at the first publishing step, and the scope was the defect
+
+Dispatching `43995731534` at `10a998c` with `publish: true, sign: false, version: 0.9.0` is the
+first time this workflow has meant to publish anything. It confirms NS-14 on the runner — **step 5
+`Gate (scripts/ci_gate.sh)` success, before step 7 `Build Python distribution`** — and then it
+failed, at **step 10, `Publish to PyPI`**: `invalid-publisher`, a valid OIDC token with no matching
+publisher on PyPI. Every GHCR, cosign, manifest and GitHub-release step after it was skipped.
+
+**Two findings, and only one was in the Variant table.** (1) `publish` was one flag for three
+destinations, so **Variant A could not be dispatched**: choosing GitHub + GHCR necessarily ran the
+PyPI step. A dry run cannot find this, because the PyPI step is skipped when `publish` is false —
+the defect is only observable on a run that means to publish something. (2) The PyPI step does not
+use a token: `pypa/gh-action-pypi-publish` with an empty `PYPI_API_TOKEN` falls back to **OIDC
+Trusted Publishing**, so Variant B's prerequisite is a PyPI project and a registered trusted
+publisher, not primarily a secret. The table said "token absent"; the real gate is different, and it
+was measured rather than argued.
+
+**Fail-before-fix.** `tests/test_release_scope.py` written first, four contracts, run against the
+unchanged workflow: **3 failed** — no separate PyPI input, the PyPI step still on the image flag, and
+no measured failure recorded in the plan. The fourth (image and release must not require PyPI)
+passed, which is the half that was already right.
+
+**Fix.** `publish_pypi` is a separate boolean input, default **false**; the PyPI step runs on
+`inputs.publish && inputs.publish_pypi`; GHCR login, the manifest binding and the GitHub release
+stay on `inputs.publish` alone. The plan's Variant B prerequisites were corrected in place with the
+measured reason. **Nothing was published by the failed run** — no tag, no image, no release — which
+is the fail-closed behaviour the ordering gives us: the first publishing step is the one that can
+refuse, and it did.
+
+**Gates.** ruff clean, mypy clean (147 files), **2,711 passed / 7 skipped** of 2,718 collected,
+91.98 %. The README claims contract caught the count drift again (2,714 → 2,718, files 121 → 122).
+Committed locally; push and re-dispatch follow the owner's standing approval for this release.

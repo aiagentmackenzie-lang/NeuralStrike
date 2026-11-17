@@ -71,6 +71,31 @@ Closes P4-2 without inventing a distribution channel: a wheel and an image are p
 GitHub release and to GHCR, and every digest is bound in the manifest. Nothing is installed from
 an index, so nothing about index availability is claimed.
 
+### Measured 2026-11-17: Variant A was not expressible, and the first publishing run proved it
+
+The first publishing dispatch (run **`43995731534`** at `10a998c`, `publish: true`, `sign: false`)
+passed the gate step and the build, then **failed at the first publishing step**: `Publish to PyPI`
+returned `invalid-publisher` — a valid OIDC token with no matching publisher registered on PyPI —
+and every GHCR, cosign, manifest and GitHub-release step after it was **skipped**.
+
+Two things were wrong, and only one was in the table below:
+
+1. **The workflow had one flag for three destinations.** `publish` meant "GHCR + GitHub release +
+   PyPI", so choosing Variant A necessarily ran the PyPI step. Variant A — the variant P4-2's
+   criterion actually names — **could not be dispatched at all**. A dry run could not find this,
+   because the PyPI step is skipped when `publish` is false; the defect only becomes observable on
+   the first run that means to publish something.
+2. **The PyPI step does not use a token.** It calls `pypa/gh-action-pypi-publish` with an empty
+   `PYPI_API_TOKEN`, which falls back to **OIDC Trusted Publishing** — so Variant B's prerequisite
+   is not primarily a secret (as the table below says) but a **PyPI project plus a registered
+   trusted publisher**. The secret's absence is real but incidental.
+
+**Fix:** `publish_pypi` is now its own boolean input, default **false**; the PyPI step runs on
+`inputs.publish && inputs.publish_pypi`, and the GHCR, manifest and GitHub-release steps stay on
+`inputs.publish` alone. `tests/test_release_scope.py` fails if the three destinations are ever
+conflated again, or if a GitHub release is made conditional on PyPI. Nothing was published by the
+failed run: no tag, no GHCR image, no GitHub release.
+
 ### Variant B — GitHub release + GHCR **and** PyPI
 
 Everything in Variant A, plus:
