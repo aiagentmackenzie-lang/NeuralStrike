@@ -3,7 +3,7 @@
 `ENGINEERING_BACKLOG.md` is the work list, and after the 2026-11-12 sprint it carries a state per
 item. This contract makes the state machine real:
 
-* every item `E-1`…`E-12` appears exactly once, in a row with a state;
+* every item `E-1`…`E-13` appears exactly once, in a row with a state;
 * a `CLOSED` row names a commit and at least one test path, and that test file exists — a closure
   that cites a test nobody can run is a claim, not a closure;
 * a `BLOCKED` row names the exact dependency that is missing, so "blocked" cannot mean "I stopped";
@@ -20,7 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BACKLOG = ROOT / "docs/implementation/ENGINEERING_BACKLOG.md"
 
-ITEMS = tuple(f"E-{number}" for number in range(1, 13))
+ITEMS = tuple(f"E-{number}" for number in range(1, 14))
 ROW = re.compile(r"^\|\s*(E-\d+)\s*\|")
 COMMIT = re.compile(r"`([0-9a-f]{7,40})`")
 TEST_PATH = re.compile(r"`(tests/[\w/]+\.py)`")
@@ -40,7 +40,9 @@ def rows() -> dict[str, str]:
 
 
 def test_every_item_is_present_exactly_once() -> None:
-    assert tuple(rows()) == ITEMS, tuple(rows())
+    # Order in the document is presentational; membership is not. `rows()` already fails on a
+    # duplicate, so set equality plus that check is "exactly once".
+    assert set(rows()) == set(ITEMS), tuple(rows())
 
 
 def test_every_item_carries_a_state() -> None:
